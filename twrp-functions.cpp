@@ -356,6 +356,14 @@ bool TWFunc::Wait_For_File(const string& path, std::chrono::nanoseconds timeout)
 	return false;
 }
 
+static bool _useTmpfsCache = false;
+
+void TWFunc::Use_Tmpfs_Cache() {
+	_useTmpfsCache = true;
+	remove("/cache");
+	mkdir("/cache", 0777);
+}
+
 #ifndef BUILD_TWRPTAR_MAIN
 
 // Returns "/path" from a full /path/to/file.name
@@ -1202,6 +1210,7 @@ int TWFunc::stream_adb_backup(string &Restore_Name) {
 }
 
 std::string TWFunc::get_log_dir() {
+	if (_useTmpfsCache) return CACHE_LOGS_DIR;
 	if (PartitionManager.Find_Partition_By_Path(CACHE_LOGS_DIR) == NULL) {
 		if (PartitionManager.Find_Partition_By_Path(DATA_LOGS_DIR) == NULL) {
 			LOGINFO("Unable to find a directory to store TWRP logs.");
