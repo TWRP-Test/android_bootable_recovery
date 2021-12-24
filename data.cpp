@@ -886,7 +886,6 @@ int DataManager::GetMagicValue(const string& varName, string& value)
 
 void DataManager::Output_Version(void)
 {
-	string Path;
 	char version[255];
 
 	std::string logDir = TWFunc::get_log_dir();
@@ -898,8 +897,8 @@ void DataManager::Output_Version(void)
 	std::string recoveryLogDir = logDir + "recovery/";
 
 	if (logDir == CACHE_LOGS_DIR) {
-		if (!PartitionManager.Mount_By_Path(CACHE_LOGS_DIR, false)) {
-			LOGINFO("Unable to mount '%s' to write version number.\n", Path.c_str());
+		if (!PartitionManager.Mount_By_Path(CACHE_LOGS_DIR, false) && !TWFunc::Path_Exists(CACHE_LOGS_DIR)) {
+			LOGINFO("Unable to mount '%s' to write version number.\n", CACHE_LOGS_DIR);
 			return;
 		}
 

@@ -297,6 +297,11 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 
 	bool _isUpdatePkg = isUpdatePkg(Zip);
 
+	if (_isUpdatePkg) {
+		if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))
+			TWFunc::Use_Tmpfs_Cache();
+	}
+
 	if (unmount_system) {
 		gui_msg("unmount_system=Unmounting System...");
 		if(!PartitionManager.UnMount_By_Path(PartitionManager.Get_Android_Root_Path(), true)) {

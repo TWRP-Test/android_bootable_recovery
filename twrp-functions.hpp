@@ -28,8 +28,8 @@
 
 using namespace std;
 
-#define CACHE_LOGS_DIR "/cache/" // For devices with a dedicated cache partition
-#define DATA_LOGS_DIR "/data/"	 // For devices that do not have a dedicated cache partition
+#define CACHE_LOGS_DIR "/cache/"         // For devices with a dedicated cache partition
+#define DATA_LOGS_DIR "/data/cache/"	 // For devices that do not have a dedicated cache partition
 
 typedef enum
 {

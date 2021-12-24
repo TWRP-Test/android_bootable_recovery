@@ -228,10 +228,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	//DataManager::ReadSettingsFile();
 
 	// Run any outstanding OpenRecoveryScript
-	std::string cacheDir = TWFunc::get_log_dir();
-	if (cacheDir == DATA_LOGS_DIR)
-		cacheDir = "/data/cache";
-	std::string orsFile = cacheDir + "/recovery/openrecoveryscript";
+	std::string orsFile = TWFunc::get_log_dir() + "recovery/openrecoveryscript";
 	if ((DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0 || skip_decryption) && (TWFunc::Path_Exists(SCRIPT_FILE_TMP) || TWFunc::Path_Exists(orsFile))) {
 		OpenRecoveryScript::Run_OpenRecoveryScript();
 	}
@@ -267,7 +264,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 #ifdef TW_INCLUDE_CRYPTO
 			std::string recoveryLogDir(DATA_LOGS_DIR);
 			recoveryLogDir += "/recovery";
-			if (!TWFunc::Path_Exists(recoveryLogDir)) {
+			if (TWFunc::get_log_dir() != CACHE_LOGS_DIR && !TWFunc::Path_Exists(recoveryLogDir)) {
 				bool created = PartitionManager.Recreate_Logs_Dir();
 				if (!created)
 					LOGERR("Unable to create log directory for TWRP\n");
@@ -401,6 +398,9 @@ int main(int argc, char **argv) {
 	gui_init();
 
 	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
+
+	if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))
+		TWFunc::Use_Tmpfs_Cache();
 
 	// Load up all the resources
 	gui_loadResources();

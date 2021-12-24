@@ -493,13 +493,20 @@ void TWFunc::Copy_Log(string Source, string Destination) {
 }
 
 void TWFunc::Update_Log_File(void) {
-	std::string recoveryDir = get_log_dir() + "recovery/";
+	std::string logDir = get_log_dir();
 
-	if (get_log_dir() == CACHE_LOGS_DIR) {
+	if (logDir == CACHE_LOGS_DIR) {
 		if (!PartitionManager.Mount_By_Path(CACHE_LOGS_DIR, false)) {
 			LOGINFO("Failed to mount %s for TWFunc::Update_Log_File\n", CACHE_LOGS_DIR);
 		}
 	}
+
+	if (logDir == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR)) {
+		Use_Tmpfs_Cache();
+		logDir = CACHE_LOGS_DIR;
+	}
+
+	std::string recoveryDir = logDir + "recovery/";
 
 	if (!TWFunc::Path_Exists(recoveryDir)) {
 		LOGINFO("Recreating %s folder.\n", recoveryDir.c_str());
