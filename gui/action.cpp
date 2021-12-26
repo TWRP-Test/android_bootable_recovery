@@ -530,8 +530,11 @@ void GUIAction::operation_start(const string operation_name)
 	DataManager::SetValue("tw_operation", operation_name);
 	DataManager::SetValue("tw_operation_state", 0);
 	DataManager::SetValue("tw_operation_status", 0);
-	bool tw_ab_device = TWFunc::get_log_dir() != CACHE_LOGS_DIR;
-	DataManager::SetValue("tw_ab_device", tw_ab_device);
+#ifdef AB_OTA_UPDATER
+	DataManager::SetValue("tw_ab_device", 1);
+#else
+	DataManager::SetValue("tw_ab_device", 0);
+#endif
 }
 
 void GUIAction::operation_end(const int operation_status)
