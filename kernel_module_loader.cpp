@@ -104,10 +104,15 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 
 	Try_And_Load_Modules(vendor_dlkm_base_dir, true);
 
-	if (ven)
-		ven->UnMount(false);
 	if (ven_dlkm)
 		ven_dlkm->UnMount(false, MNT_DETACH);
+
+	if (ven) {
+		if (!ven->UnMount(false)) {
+			TWFunc::killForUseTargetProcess(ven->Get_Mount_Point());
+			ven->UnMount(false);
+		}
+	}
 
 	android::base::SetProperty(TW_MODULES_MOUNTED_PROP, "true");
 	LOGINFO("Finished attempting to load requested kernel modules; unavailable modules are optional for this device\n");

@@ -558,7 +558,10 @@ int TWFunc::tw_reboot(RebootCommand command)
 	TWPartition *dataPart = PartitionManager.Find_Partition_By_Path("/data");
 	if (dataPart) {
 		if (dataPart->Is_Mounted()) {
-			dataPart->UnMount(false);
+			if (!dataPart->UnMount(false)) {
+				killForUseTargetProcess(dataPart->Get_Mount_Point());
+				dataPart->UnMount(false);
+			}
 		}
 	}
 
