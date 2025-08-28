@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Full" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 72 96">
+  <!-- Generator: Adobe Illustrator 29.5.0, SVG Export Plug-In . SVG Version: 2.1.0 Build 137)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #fff;
+      }
+
+      .st1 {
+        opacity: 0;
+      }
+
+      .st2 {
+        fill: #616161;
+      }
+    </style>
+  </defs>
+  <g id="BG" class="st1">
+    <rect class="st0" width="72" height="96"/>
+  </g>
+  <path id="Button" class="st2" d="M34,21h-14C8.95,21,0,29.95,0,41v14c0,11.05,8.95,20,20,20h14c11.05,0,20-8.95,20-20v-14c0-11.05-8.95-20-20-20ZM48,55c0,7.73-6.27,14-14,14h-14c-7.73,0-14-6.27-14-14v-14c0-7.73,6.27-14,14-14h14c7.73,0,14,6.27,14,14v14Z"/>
+</svg>

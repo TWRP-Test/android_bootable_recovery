@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Full" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 312 128">
+  <!-- Generator: Adobe Illustrator 29.5.0, SVG Export Plug-In . SVG Version: 2.1.0 Build 137)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #616161;
+      }
+    </style>
+  </defs>
+  <path id="Button" class="st0" d="M32,32h248c17.67,0,32,14.33,32,32h0c0,17.67-14.33,32-32,32H32C14.33,96,0,81.67,0,64h0c0-17.67,14.33-32,32-32Z"/>
+</svg>

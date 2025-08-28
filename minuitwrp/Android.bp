@@ -21,7 +21,8 @@ cc_library_shared {
     name: "libminuitwrp",
     defaults: ["libminuitwrp_defaults", "twrp_defaults"],
     cflags: [
-        "-DTWRES=\"/twres/\""
+        "-DTWRES=\"/twres/\"",
+        "-DTW_INCLUDE_SVG"
     ],
     export_include_dirs: [
         "include",
@@ -30,7 +31,11 @@ cc_library_shared {
         "bootable/recovery",
         "bootable/recovery/twrpinstall/include",
         "bootable/recovery/libpixelflinger/include",
-        "bootable/recovery/gui/include"
+        "bootable/recovery/gui/include",
+        "external/lunasvg/include",
+        "external/lunasvg/source",
+        "external/lunasvg/plutovg/include",
+        "external/lunasvg/plutovg/source",
     ],
     srcs: [
         "graphics.cpp",
@@ -54,5 +59,9 @@ cc_library_shared {
         "libsync",
 	"libbinder_ndk"
     ],
-    static_libs: ["libpixelflinger_twrp"]
+    static_libs: [
+        "libpixelflinger_twrp",
+        "liblunasvg", 
+        "libplutovg"
+        ]
 }

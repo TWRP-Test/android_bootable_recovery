@@ -38,6 +38,12 @@ extern "C" {
 #endif
 #include "minuitwrp/minui.h"
 
+#ifdef TW_INCLUDE_SVG
+#include <lunasvg.h>
+#include <string>
+#include <vector>
+#endif
+
 #define SURFACE_DATA_ALIGNMENT 8
 
 static GGLSurface* malloc_surface(size_t data_size) {
@@ -353,6 +359,104 @@ exit:
 }
 #endif
 
+#ifdef TW_INCLUDE_SVG
+
+// Helper: read entire file into string. returns true on success.
+static bool read_file_to_string(const char* path, std::string& out) {
+    FILE* fp = fopen(path, "rb");
+    if (!fp) return false;
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return false; }
+    long len = ftell(fp);
+    if (len < 0) { fclose(fp); return false; }
+    rewind(fp);
+    out.resize((size_t)len);
+    size_t read = fread(&out[0], 1, (size_t)len, fp);
+    fclose(fp);
+    return read == (size_t)len;
+}
+
+// Try to find SVG file for given name. Search order:
+// 1) TWRES "images/%s.svg"
+// 2) name (if name contains extension and exists)
+// 3) name + ".svg"
+static bool find_svg_path(const char* name, std::string& out_path) {
+    char buf[512];
+    // 1)
+    snprintf(buf, sizeof(buf)-1, TWRES "images/%s.svg", name);
+    buf[sizeof(buf)-1] = '\0';
+    if (access(buf, R_OK) == 0) { out_path = buf; return true; }
+
+    // 2) try name as given
+    if (access(name, R_OK) == 0) { out_path = name; return true; }
+
+    // 3) try name + .svg
+    snprintf(buf, sizeof(buf)-1, "%s.svg", name);
+    buf[sizeof(buf)-1] = '\0';
+    if (access(buf, R_OK) == 0) { out_path = buf; return true; }
+
+    return false;
+}
+
+// Create a GGLSurface from SVG file (using lunasvg)
+static int res_create_surface_svg(const char* name, gr_surface* pSurface) {
+    *pSurface = NULL;
+
+    std::string svg_path;
+    if (!find_svg_path(name, svg_path)) {
+    return -1;
+    }
+
+    std::string svgdata;
+    if (!read_file_to_string(svg_path.c_str(), svgdata)) {
+        return -2;
+    }
+
+    // load document from data
+    std::shared_ptr<lunasvg::Document> doc = lunasvg::Document::loadFromData(svgdata);
+    if (!doc) {
+        return -3;
+    }
+
+    unsigned int w = static_cast<unsigned int>(doc->width());
+    unsigned int h = static_cast<unsigned int>(doc->height());
+    if (w == 0 || h == 0) {
+        w = 512;
+        h = 512;
+    }
+
+    printf("Rendering svg file: '%s' size: %u x %u\n", svg_path.c_str(), w, h);
+
+    // Render to bitmap
+    lunasvg::Bitmap bmp = doc->renderToBitmap((int)w, (int)h);
+    if (!bmp.data() || bmp.width() == 0 || bmp.height() == 0) {
+        return -4;
+    }
+
+    // Allocate GGLSurface
+    GGLSurface* surface = init_display_surface(bmp.width(), bmp.height());
+    if (!surface) {
+        return -5;
+    }
+
+    // Copy pixel data
+    unsigned int row_bytes = bmp.stride();
+    unsigned int row_pixels = bmp.width();
+    if (row_bytes == row_pixels * 4) {
+        memcpy(surface->data, bmp.data(), (size_t)row_bytes * bmp.height());
+    } else {
+        for (unsigned int y = 0; y < bmp.height(); ++y) {
+            unsigned char* src = bmp.data() + (size_t)y * row_bytes;
+            unsigned char* dst = surface->data + (size_t)y * row_pixels * 4;
+            memcpy(dst, src, row_pixels * 4);
+        }
+    }
+
+    surface->format = GGL_PIXEL_FORMAT_RGBA_8888;
+    *pSurface = (gr_surface) surface;
+    return 0;
+}
+#endif // TW_INCLUDE_SVG
+
 int res_create_surface(const char* name, gr_surface* pSurface) {
     int ret;
     if (!name)      return -1;
@@ -360,6 +464,11 @@ int res_create_surface(const char* name, gr_surface* pSurface) {
 #ifdef TW_INCLUDE_JPEG
     if (strlen(name) > 4 && strcmp(name + strlen(name) - 4, ".jpg") == 0)
         return res_create_surface_jpg(name,pSurface);
+#endif
+
+#ifdef TW_INCLUDE_SVG
+    ret = res_create_surface_svg(name, pSurface);
+    if (ret == 0) return 0;
 #endif
 
     ret = res_create_surface_png(name, pSurface);
