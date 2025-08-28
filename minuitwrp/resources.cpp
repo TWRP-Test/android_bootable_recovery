@@ -361,6 +361,17 @@ exit:
 
 #ifdef TW_INCLUDE_SVG
 
+// RGBA -> BGRA conversion helper
+static void convertRGBAtoBGRA(unsigned char* pixels, unsigned int width, unsigned int height) {
+    unsigned int count = width * height;
+    for (unsigned int i = 0; i < count; i++) {
+        unsigned char* p = pixels + i * 4;
+        unsigned char r = p[0];
+        p[0] = p[2]; // B
+        p[2] = r;    // R
+    }
+}
+
 // Helper: read entire file into string. returns true on success.
 static bool read_file_to_string(const char* path, std::string& out) {
     FILE* fp = fopen(path, "rb");
@@ -450,6 +461,9 @@ static int res_create_surface_svg(const char* name, gr_surface* pSurface) {
             memcpy(dst, src, row_pixels * 4);
         }
     }
+
+    // Convert RGBA -> BGRA for framebuffer
+    convertRGBAtoBGRA((unsigned char*)surface->data, surface->width, surface->height);
 
     surface->format = GGL_PIXEL_FORMAT_RGBA_8888;
     *pSurface = (gr_surface) surface;
