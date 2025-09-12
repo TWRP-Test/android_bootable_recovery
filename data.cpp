@@ -985,6 +985,12 @@ void DataManager::SetDefaultValues()
 	else
 		mConst.SetValue("tw_has_repack_tools", "0");
 
+#ifdef TW_USE_MEIZU_TOUCH_MAPPING
+	mData.SetValue("tw_use_meizu_touch_mapping", "1");
+#else
+	mData.SetValue("tw_use_meizu_touch_mapping", "0");
+#endif
+
 	pthread_mutex_unlock(&m_valuesLock);
 }
 

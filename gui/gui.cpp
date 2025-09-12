@@ -272,6 +272,13 @@ void InputHandler::process_EV_ABS(input_event& ev)
 	x = ev.value >> 16;
 	y = ev.value & 0xFFFF;
 
+	if (DataManager::GetStrValue("tw_use_meizu_touch_mapping") == "1") {
+		if (x > gr_fb_width() || y > gr_fb_height()) {
+			x /= 10;
+			y /= 10;
+		}
+	}
+
 	if (ev.code == 0)
 	{
 #ifndef TW_USE_KEY_CODE_TOUCH_SYNC
