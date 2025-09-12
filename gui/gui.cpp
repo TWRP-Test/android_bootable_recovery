@@ -272,6 +272,13 @@ void InputHandler::process_EV_ABS(input_event& ev)
 	x = ev.value >> 16;
 	y = ev.value & 0xFFFF;
 
+#ifdef TW_USE_MEIZU_TOUCH_MAPPING
+	if (x > gr_fb_width() || y > gr_fb_height()) {
+		x /= 10;
+		y /= 10;
+	}
+#endif
+
 	if (ev.code == 0)
 	{
 #ifndef TW_USE_KEY_CODE_TOUCH_SYNC
