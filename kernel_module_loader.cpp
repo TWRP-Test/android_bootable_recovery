@@ -85,6 +85,13 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 			break;
 	}
 
+#ifdef TW_LOAD_PREBUILT_MODULES_AT_FIRST
+	for (auto&& module_dir:vendor_module_dirs) {
+		modules_loaded += Try_And_Load_Modules(module_dir, true);
+		if (modules_loaded >= expected_module_count) goto exit;
+	}
+#endif
+
 	if (ven) {
 		LOGINFO("Checking mounted /vendor\n");
 		ven->Mount(true);
@@ -133,6 +140,7 @@ int KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendor
 			PartitionManager.UnMount_By_Path(module_dir.c_str(), false, MNT_DETACH);
 			LOGINFO("Modules Loaded: %d\n", modules_loaded);
 		}
+		LOGINFO("Loaded %d modules from %s\n", modules_loaded, module_dir.c_str());
 		return modules_loaded;
 }
 
