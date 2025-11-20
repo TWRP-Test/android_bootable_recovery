@@ -379,6 +379,13 @@ ifeq ($(TW_INCLUDE_7ZA), true)
     TWRP_REQUIRED_MODULES += \
         7za
 endif
+# backup/restore bug - temporary workaround
+# activate the workaround by default
+TW_WORKAROUND_BACKUP_BUG := 1
+ifeq ($(TW_WORKAROUND_BACKUP_BUG),1)
+     LOCAL_CFLAGS += -DTW_WORKAROUND_BACKUP_BUG
+endif
+
 WITH_CRYPTO_UTILS := \
     $(if $(wildcard system/core/libcrypto_utils/android_pubkey.c),true)
 ifeq ($(TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID), true)

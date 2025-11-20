@@ -1300,6 +1300,9 @@ void TWPartition::Setup_Data_Media() {
 		backup_exclusions.add_absolute_dir("/data/adb/ksu/modules.img"); //After ksu 0.8.x the modules.img file became 1tb, which is inhibiting the execution of backups
 		wipe_exclusions.add_absolute_dir(Mount_Point + "/misc/vold"); // adopted storage keys
 		ExcludeAll(Mount_Point + "/system/storage.xml");
+		#ifdef TW_WORKAROUND_BACKUP_BUG
+		backup_exclusions.add_absolute_dir("/data/data"); // temporary workaround for error 255 when restoring data backups in 16 branch builds
+		#endif
 
 		backup_exclusions.add_absolute_dir("/data/system/users/0/package-restrictions.xml");
 
@@ -2696,6 +2699,11 @@ bool TWPartition::Wipe_Data_Without_Wiping_Media_Func(const string& parent __unu
 					closedir(d);
 					return false;
 				}
+				#ifdef TW_WORKAROUND_BACKUP_BUG
+				if (dir == "/data/data/") // temporary workaround for error 255 when restoring data backups in 16 branch builds
+					LOGINFO("DEBUG: TWRP: skipped /data/data/\n");
+				else
+				#endif
 				rmdir(dir.c_str());
 			} else if (de->d_type == DT_REG || de->d_type == DT_LNK || de->d_type == DT_FIFO || de->d_type == DT_SOCK) {
 				if (unlink(dir.c_str()) != 0)
@@ -2786,7 +2794,12 @@ bool TWPartition::Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_p
 	Backup_FileName = Backup_Name + "." + Current_File_System + ".win";
 	Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
 	if (Has_Data_Media)
+		#ifdef TW_WORKAROUND_BACKUP_BUG
 		gui_msg(Msg(msg::kWarning, "backup_storage_warning=Backups of {1} do not include any files in internal storage such as pictures or downloads.")(Display_Name));
+		#else
+		LOGERR("Backups of %s are currently BROKEN in the 16 branch. There is little point in making backups of %s\n\n", Display_Name.c_str(), Display_Name.c_str());
+		#endif
+
 	if (Mount_Point == "/data" && DataManager::GetIntValue(TW_IS_FBE)) {
 		std::vector<users_struct>::iterator iter;
 		std::vector<users_struct>* userList = PartitionManager.Get_Users_List();
