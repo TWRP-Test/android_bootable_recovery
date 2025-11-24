@@ -60,7 +60,14 @@ extern "C" {
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
+#include "pages.hpp"
 #include "tw_atomic.hpp"
+#include <cstring>
+#include <vector>
+#include <stdint.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
 
 GUIAction::mapFunc GUIAction::mf;
 std::set<string> GUIAction::setActionsRunningInCallerThread;
@@ -247,6 +254,12 @@ GUIAction::GUIAction(xml_node<>* node)
 		ADD_ACTION(editfile);
 #endif
 		ADD_ACTION(mergesnapshots);
+		ADD_ACTION(wlanstart);
+		ADD_ACTION(wlanstop);
+		ADD_ACTION(wlanscan);
+		ADD_ACTION(wlanconnect);
+		ADD_ACTION(wlangetstatus);
+		ADD_ACTION(wlantest);
 		ADD_ACTION(disableAVB2);
 	}
 
@@ -2377,4 +2390,674 @@ int GUIAction::disableAVB2(string arg __unused) {
 	}
 	operation_end(op_status);
 	return 0;
+}
+
+// Global pointer to WLAN log box (set when page loads)
+static GUIBorderedLogBox* s_wlanLogBox = NULL;
+
+// Set the log box pointer (called from pages.cpp when processing borderedlogbox)
+void SetWlanLogBox(GUIBorderedLogBox* logBox) {
+	s_wlanLogBox = logBox;
+}
+
+// Helper function to find GUIBorderedLogBox in the current page
+static GUIBorderedLogBox* FindWlanLogBox() {
+	return s_wlanLogBox;
+}
+
+// WLAN function implementations
+int GUIAction::wlanstart(string arg __unused) {
+	GUIBorderedLogBox* logBox = FindWlanLogBox();
+	if (logBox) {
+		logBox->AddLogLine("[INFO] Starting WLAN service...", "normal");
+		logBox->AddLogLine("[INFO] Initializing network interface...", "normal");
+		logBox->AddLogLine("[INFO] WLAN service started successfully", "normal");
+		logBox->AddLogLine("[INFO] Interface: wlan0", "normal");
+		logBox->AddLogLine("[INFO] Status: UP", "normal");
+		gui_forceRender();
+	} else {
+		LOGERR("WLAN log box not found\n");
+	}
+	return 0;
+}
+
+int GUIAction::wlanstop(string arg __unused) {
+	GUIBorderedLogBox* logBox = FindWlanLogBox();
+	if (logBox) {
+		logBox->AddLogLine("[INFO] Stopping WLAN service...", "normal");
+		logBox->AddLogLine("[INFO] WLAN service stopped", "normal");
+		logBox->AddLogLine("[INFO] Interface: wlan0 - DOWN", "normal");
+		gui_forceRender();
+	} else {
+		LOGERR("WLAN log box not found\n");
+	}
+	return 0;
+}
+
+int GUIAction::wlanscan(std::string arg __unused) {
+    GUIBorderedLogBox* logBox = FindWlanLogBox();
+    if (!logBox) {
+        LOGERR("WLAN log box not found\n");
+        return -1;
+    }
+
+    logBox->AddLogLine("[INFO] Scanning for networks...", "normal");
+    gui_forceRender();
+
+    const char* IFACE    = "wlan0";
+    const char* CTRL_DIR = "/tmp/recovery/sockets";
+    const char* WPACLI   = "wpa_cli"; // 不在 PATH 的话改成绝对路径
+
+    // ========= 1. 先执行 scan =========
+    {
+        std::string command = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " scan";
+        FILE* fp = popen(command.c_str(), "r");
+        if (!fp) {
+            logBox->AddLogLine("[ERROR] Failed to run wpa_cli scan", "error");
+            gui_forceRender();
+            return -1;
+        }
+
+        char buf[256];
+        std::string reply;
+        while (fgets(buf, sizeof(buf), fp) != nullptr) {
+            reply += buf;
+        }
+        pclose(fp);
+
+        if (reply.find("OK") == std::string::npos) {
+            logBox->AddLogLine("[ERROR] wpa_cli scan failed", "error");
+            logBox->AddLogLine("        Reply: " + reply, "error");
+            gui_forceRender();
+            return -1;
+        }
+    }
+
+    // 给扫描一点时间（0.5 秒）
+    usleep(500 * 1000);
+
+    // ========= 2. 执行 scan_results =========
+    std::vector<std::string> lines;
+    {
+        std::string command = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " scan_results";
+        FILE* fp = popen(command.c_str(), "r");
+        if (!fp) {
+            logBox->AddLogLine("[ERROR] Failed to run wpa_cli scan_results", "error");
+            gui_forceRender();
+            return -1;
+        }
+
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), fp) != nullptr) {
+            std::string line(buf);
+            while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+                line.pop_back();
+            }
+            if (!line.empty())
+                lines.push_back(line);
+        }
+        pclose(fp);
+    }
+
+    if (lines.size() <= 1) {
+        logBox->AddLogLine("[INFO] No networks found", "normal");
+        gui_forceRender();
+        return 0;
+    }
+
+    // ========= 3. 辅助函数 =========
+    auto decode_hex_escaped = [](const std::string& s) -> std::string {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size(); ) {
+            if (i + 3 < s.size() && s[i] == '\\' && s[i+1] == 'x') {
+                char hi = s[i+2];
+                char lo = s[i+3];
+                auto hexVal = [](char c) -> int {
+                    if (c >= '0' && c <= '9') return c - '0';
+                    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+                    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+                    return -1;
+                };
+                int hv = hexVal(hi);
+                int lv = hexVal(lo);
+                if (hv >= 0 && lv >= 0) {
+                    unsigned char v = (unsigned char)((hv << 4) | lv);
+                    out.push_back((char)v);
+                    i += 4;
+                    continue;
+                }
+            }
+            out.push_back(s[i]);
+            i++;
+        }
+        return out;
+    };
+
+    auto trim = [](std::string& s) {
+        size_t start = 0;
+        while (start < s.size() && isspace((unsigned char)s[start])) start++;
+        size_t end = s.size();
+        while (end > start && isspace((unsigned char)s[end - 1])) end--;
+        s = s.substr(start, end - start);
+    };
+
+    std::vector<GUIWlanList::WlanItem> wlanList;
+    int count = 0;
+
+    // ========= 4. 解析每一行 =========
+    for (size_t li = 1; li < lines.size(); ++li) { // 跳过第一行表头
+        const std::string& line = lines[li];
+
+        // 按空格切成 token：bssid freq signal flags ssid(可能含空格)
+        std::vector<std::string> parts;
+        {
+            std::istringstream iss(line);
+            std::string token;
+            while (iss >> token) {
+                parts.push_back(token);
+            }
+        }
+        if (parts.size() < 4) {
+            continue;
+        }
+
+        std::string bssid  = parts[0];
+        std::string freq   = parts[1];
+        std::string signal = parts[2];
+        std::string flags  = parts[3];
+
+        // 剩下部分合并为一个 SSID 字符串
+        std::string raw_ssid;
+        if (parts.size() > 4) {
+            raw_ssid = parts[4];
+            for (size_t i = 5; i < parts.size(); ++i) {
+                raw_ssid += " ";
+                raw_ssid += parts[i];
+            }
+        }
+
+        // 把 \x.. 形式解码成真正的 UTF-8 字节
+        std::string ssid = decode_hex_escaped(raw_ssid);
+        trim(ssid);
+
+        // 忽略 SSID 为空的网络
+        if (ssid.empty()) {
+            continue;
+        }
+
+        // 简单判断加密类型（留给 GUIWlanList 用）
+        std::string encryption = "Open";
+        if (flags.find("WPA3") != std::string::npos) {
+            encryption = "WPA3";
+        } else if (flags.find("WPA2") != std::string::npos) {
+            encryption = "WPA2";
+        } else if (flags.find("WPA-PSK") != std::string::npos || flags.find("WPA") != std::string::npos) {
+            encryption = "WPA";
+        }
+
+        // 日志输出：格式固定为
+        //   1. MyHomeWiFi (Signal: -45 dBm)
+        ++count;
+        std::ostringstream oss;
+        oss << "  " << count << ". " << ssid
+            << " (Signal: " << signal << " dBm)";
+        logBox->AddLogLine(oss.str(), "normal");
+
+		// 添加空行，提高可读性
+		logBox->AddLogLine("", "normal");
+
+        // 列表项（保留 encryption，供后续用）
+        GUIWlanList::WlanItem item;
+        item.ssid       = ssid;
+        item.signal     = signal + " dBm";
+        item.encryption = encryption;
+        item.selected   = false;
+        wlanList.push_back(item);
+    }
+
+    // ========= 5. 汇总 & 通知 UI =========
+    {
+        std::ostringstream oss;
+        oss << "[INFO] Found " << count << " networks";
+        logBox->AddLogLine(oss.str(), "normal");
+        logBox->AddLogLine("[INFO] Scan completed", "normal");
+    }
+    gui_forceRender();
+
+    SetWlanList(wlanList);
+    DataManager::SetValue("tw_wlan_list_update", "1");
+
+    return 0;
+}
+
+// ===== SHA1 实现 =====
+struct SHA1_CTX {
+    uint32_t state[5];
+    uint32_t count[2];
+    uint8_t buffer[64];
+};
+
+static uint32_t rol(uint32_t value, size_t bits) {
+    return (value << bits) | (value >> (32 - bits));
+}
+
+static void SHA1Transform(uint32_t state[5], const uint8_t buffer[64]) {
+    uint32_t a,b,c,d,e,W[80];
+    for (int t=0;t<16;t++) {
+        W[t] = (buffer[t*4]<<24)|(buffer[t*4+1]<<16)|(buffer[t*4+2]<<8)|buffer[t*4+3];
+    }
+    for (int t=16;t<80;t++) W[t] = rol(W[t-3]^W[t-8]^W[t-14]^W[t-16],1);
+
+    a=state[0]; b=state[1]; c=state[2]; d=state[3]; e=state[4];
+    for(int t=0;t<80;t++){
+        uint32_t f,k;
+        if(t<20){f=(b&c)|((~b)&d);k=0x5A827999;}
+        else if(t<40){f=b^c^d;k=0x6ED9EBA1;}
+        else if(t<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
+        else {f=b^c^d;k=0xCA62C1D6;}
+        uint32_t temp = rol(a,5)+f+e+k+W[t];
+        e=d; d=c; c=rol(b,30); b=a; a=temp;
+    }
+    state[0]+=a; state[1]+=b; state[2]+=c; state[3]+=d; state[4]+=e;
+}
+
+static void SHA1Init(SHA1_CTX *ctx){
+    ctx->state[0]=0x67452301; ctx->state[1]=0xEFCDAB89;
+    ctx->state[2]=0x98BADCFE; ctx->state[3]=0x10325476;
+    ctx->state[4]=0xC3D2E1F0; ctx->count[0]=ctx->count[1]=0;
+}
+
+static void SHA1Update(SHA1_CTX *ctx, const uint8_t *data, size_t len){
+    size_t i,j;
+    j=(ctx->count[0]>>3)&63;
+    if((ctx->count[0]+=len<<3)<(len<<3)) ctx->count[1]++;
+    ctx->count[1]+=(len>>29);
+    size_t partlen=64-j;
+    if(len>=partlen){
+        memcpy(&ctx->buffer[j], data, partlen);
+        SHA1Transform(ctx->state, ctx->buffer);
+        for(i=partlen;i+63<len;i+=64) SHA1Transform(ctx->state,&data[i]);
+        j=0;
+    }else i=0;
+    memcpy(&ctx->buffer[j], &data[i], len-i);
+}
+
+static void SHA1Final(uint8_t digest[20], SHA1_CTX *ctx){
+    uint8_t finalcount[8];
+    for(int i=0;i<4;i++){
+        finalcount[i] = (ctx->count[1]>>(24-i*8))&0xFF;
+        finalcount[i+4] = (ctx->count[0]>>(24-i*8))&0xFF;
+    }
+    uint8_t c=0x80; SHA1Update(ctx,&c,1);
+    uint8_t zero[64]={0};
+    while((ctx->count[0]&0x1F8)!=448) SHA1Update(ctx, zero, 1);
+    SHA1Update(ctx, finalcount, 8);
+    for(int i=0;i<5;i++){
+        digest[i*4]=(ctx->state[i]>>24)&0xFF;
+        digest[i*4+1]=(ctx->state[i]>>16)&0xFF;
+        digest[i*4+2]=(ctx->state[i]>>8)&0xFF;
+        digest[i*4+3]=ctx->state[i]&0xFF;
+    }
+}
+
+// ===== HMAC-SHA1 =====
+static void hmac_sha1(const uint8_t *key, size_t key_len,
+                      const uint8_t *data, size_t data_len,
+                      uint8_t out[20])
+{
+    uint8_t k_ipad[64]={0}, k_opad[64]={0}, tk[20];
+    if(key_len>64){ SHA1_CTX tctx; SHA1Init(&tctx); SHA1Update(&tctx,key,key_len); SHA1Final(tk,&tctx); key=tk; key_len=20; }
+    memcpy(k_ipad,key,key_len); memcpy(k_opad,key,key_len);
+    for(int i=0;i<64;i++){ k_ipad[i]^=0x36; k_opad[i]^=0x5c; }
+    SHA1_CTX ctx; uint8_t temp[20];
+    SHA1Init(&ctx); SHA1Update(&ctx,k_ipad,64); SHA1Update(&ctx,data,data_len); SHA1Final(temp,&ctx);
+    SHA1Init(&ctx); SHA1Update(&ctx,k_opad,64); SHA1Update(&ctx,temp,20); SHA1Final(out,&ctx);
+}
+
+// ===== PBKDF2-HMAC-SHA1 =====
+static void pbkdf2_hmac_sha1(const std::string &password, const std::string &ssid, int iter, uint8_t out[32]){
+    uint8_t U[20], T[20];
+    for(int i=1;i<=2;i++){
+        uint8_t block[ssid.size()+4];
+        memcpy(block, ssid.c_str(), ssid.size());
+        block[ssid.size()]=(i>>24)&0xFF; block[ssid.size()+1]=(i>>16)&0xFF;
+        block[ssid.size()+2]=(i>>8)&0xFF; block[ssid.size()+3]=i&0xFF;
+        hmac_sha1((const uint8_t*)password.c_str(), password.size(), block, ssid.size()+4, U);
+        memcpy(T,U,20);
+        for(int j=1;j<iter;j++){
+            hmac_sha1((const uint8_t*)password.c_str(), password.size(), U, 20, U);
+            for(int k=0;k<20;k++) T[k]^=U[k];
+        }
+        if(i==1) memcpy(out,T,20); else memcpy(out+20,T,12);
+    }
+}
+
+static std::string psk_to_hex(const uint8_t psk[32]){
+    static const char hex_chars[]="0123456789abcdef";
+    std::string hex; hex.reserve(64);
+    for(int i=0;i<32;i++){
+        hex.push_back(hex_chars[(psk[i]>>4)&0xF]);
+        hex.push_back(hex_chars[psk[i]&0xF]);
+    }
+    return hex;
+}
+
+static std::string ssid_to_hex(const std::string& ssid){
+    static const char hex_chars[]="0123456789abcdef";
+    std::string hex; hex.reserve(ssid.size()*2);
+    for(unsigned char c: ssid){
+        hex.push_back(hex_chars[(c>>4)&0xF]);
+        hex.push_back(hex_chars[c&0xF]);
+    }
+    return hex;
+}
+
+static std::string run_command_get_output(const std::string &cmd){
+    FILE *fp=popen(cmd.c_str(),"r");
+    if(!fp) return "";
+    std::string out; char buf[512];
+    while(fgets(buf,sizeof(buf),fp)) out+=buf;
+    pclose(fp);
+    return out;
+}
+
+static std::string run_command_get_output_debug(GUIBorderedLogBox* logBox, const std::string &cmd) {
+    if (logBox) {
+        logBox->AddLogLine("[DEBUG] Executing: " + cmd, "normal");
+    }
+
+    // 同时输出到 logcat/dmesg
+    LOGINFO("[DEBUG] Executing: %s\n", cmd.c_str());
+    FILE* dmesg_fp = popen(("echo '[DEBUG] Executing: " + cmd + "' > /dev/kmsg").c_str(), "r");
+    if (dmesg_fp) pclose(dmesg_fp);
+
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) {
+        if (logBox) logBox->AddLogLine("[DEBUG] Failed to run command", "error");
+        LOGERR("[DEBUG] Failed to run command: %s\n", cmd.c_str());
+        return "";
+    }
+
+    std::string out;
+    char buf[512];
+    while (fgets(buf, sizeof(buf), fp)) {
+        out += buf;
+    }
+
+    int ret = pclose(fp);
+
+    std::ostringstream oss_ret;
+    oss_ret << "[DEBUG] Command return: " << ret;
+    if (logBox) logBox->AddLogLine(oss_ret.str(), "normal");
+    LOGINFO("%s\n", oss_ret.str().c_str());
+    FILE* dmesg_fp2 = popen(("echo '" + oss_ret.str() + "' > /dev/kmsg").c_str(), "r");
+    if (dmesg_fp2) pclose(dmesg_fp2);
+
+    if (!out.empty()) {
+        std::ostringstream oss_out;
+        oss_out << "[DEBUG] Output: " << out;
+        if (logBox) logBox->AddLogLine(oss_out.str(), "normal");
+        LOGINFO("%s\n", oss_out.str().c_str());
+        FILE* dmesg_fp3 = popen(("echo '" + oss_out.str() + "' > /dev/kmsg").c_str(), "r");
+        if (dmesg_fp3) pclose(dmesg_fp3);
+    }
+
+    return out;
+}
+
+// ===== GUIAction::wlanconnect =====
+int GUIAction::wlanconnect(std::string arg __unused) {
+    GUIBorderedLogBox* logBox = FindWlanLogBox();
+    if (!logBox) {
+        LOGERR("WLAN log box not found\n");
+        return -1;
+    }
+
+    // 读取选中的 WLAN
+    std::string selectedWlan = DataManager::GetStrValue("tw_selected_wlan");
+    if (selectedWlan.empty()) {
+        selectedWlan = "MyHomeWiFi";
+        LOGINFO("[DEBUG] SelectedWlan empty, using fallback MyHomeWiFi\n");
+    }
+
+    // 获取密码
+    std::string password;
+    DataManager::GetValue("tw_wlan_password", password);
+
+    logBox->AddLogLine("[INFO] Connecting to network...", "normal");
+    logBox->AddLogLine("[INFO] SSID: " + selectedWlan, "normal");
+    if (!password.empty()) {
+        logBox->AddLogLine("[INFO] Using password authentication", "normal");
+    } else {
+        logBox->AddLogLine("[INFO] No password provided (open network)", "normal");
+    }
+    gui_forceRender();
+
+    const char* IFACE = "wlan0";
+    const char* CTRL_DIR = "/tmp/recovery/sockets";
+    const char* WPACLI = "wpa_cli";
+
+    // 先移除 network 0，保证干净
+    run_command_get_output(std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " remove_network 0");
+    run_command_get_output(std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " add_network");
+
+    // 设置 SSID
+    std::string cmd_set_ssid = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 ssid " + ssid_to_hex(selectedWlan);
+    run_command_get_output(cmd_set_ssid);
+
+    // 设置 key_mgmt
+    std::string cmd_set_key_mgmt = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 key_mgmt WPA-PSK";
+    run_command_get_output(cmd_set_key_mgmt);
+
+    // 设置 PSK
+    if (!password.empty()) {
+        uint8_t psk[32];
+        pbkdf2_hmac_sha1(password, selectedWlan, 4096, psk);
+        std::string psk_hex = psk_to_hex(psk);
+        std::string cmd_set_psk = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 psk " + psk_hex;
+        run_command_get_output(cmd_set_psk);
+    }
+
+    // 启用 network 0
+    run_command_get_output(std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " enable_network 0");
+
+    logBox->AddLogLine("[INFO] Authenticating...", "normal");
+    gui_forceRender();
+
+    // 等待连接完成
+    bool connected = false;
+    for (int i = 0; i < 20; i++) {
+        std::string status = run_command_get_output(std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " status");
+        if (status.find("wpa_state=COMPLETED") != std::string::npos) {
+            connected = true;
+            break;
+        }
+        ::sleep(1);
+    }
+
+    if (!connected) {
+        logBox->AddLogLine("[ERROR] Failed to connect (timeout or authentication error)", "error");
+        gui_forceRender();
+        return -1;
+    }
+
+    // 请求 IP
+    logBox->AddLogLine("[INFO] Wi-Fi link established, requesting IP with dhcpcd...", "normal");
+    gui_forceRender();
+    run_command_get_output("dhcpcd wlan0");
+    ::sleep(5); // 等 dhcpcd 配置完成
+
+    // 获取 IP 地址
+    std::string ip_address = run_command_get_output("ifconfig wlan0 | grep 'inet ' | awk -F'[: ]+' '{print $4}'");
+    while (!ip_address.empty() && (ip_address.back() == '\n' || ip_address.back() == '\r'))
+        ip_address.pop_back();
+
+    // 获取网关
+    std::string gateway = run_command_get_output("netstat -rn | grep wlan0 | grep UG | awk '{print $2}'");
+    while (!gateway.empty() && (gateway.back() == '\n' || gateway.back() == '\r'))
+        gateway.pop_back();
+
+    // 获取 DNS
+    std::vector<std::string> dns_servers;
+    FILE* fp = fopen("/etc/resolv.conf", "r");
+    if (fp) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), fp)) {
+            std::string line(buf);
+            if (line.find("nameserver") == 0) {
+                std::istringstream ls(line);
+                std::string key, value;
+                ls >> key >> value;
+                if (!value.empty()) {
+                    while (!value.empty() && (value.back() == '\n' || value.back() == '\r')) value.pop_back();
+                    dns_servers.push_back(value);
+                }
+            }
+        }
+        fclose(fp);
+    }
+
+    logBox->AddLogLine("[INFO] Connected successfully", "normal");
+    logBox->AddLogLine("[INFO] IP Address: " + (ip_address.empty() ? "(unknown)" : ip_address), "normal");
+    logBox->AddLogLine("[INFO] Gateway: " + (gateway.empty() ? "(unknown)" : gateway), "normal");
+
+    if (!dns_servers.empty()) {
+        std::string dns_line = "[INFO] DNS: ";
+        for (size_t i = 0; i < dns_servers.size(); i++) {
+            if (i > 0) dns_line += ", ";
+            dns_line += dns_servers[i];
+        }
+        logBox->AddLogLine(dns_line, "normal");
+    } else {
+        logBox->AddLogLine("[INFO] DNS: (unknown)", "normal");
+    }
+
+    gui_forceRender();
+    return 0;
+}
+
+int GUIAction::wlangetstatus(std::string arg __unused) {
+    GUIBorderedLogBox* logBox = FindWlanLogBox();
+    if (!logBox) {
+        LOGERR("WLAN log box not found\n");
+        return -1;
+    }
+
+    logBox->AddLogLine("[INFO] Getting WLAN status...", "normal");
+    logBox->AddLogLine("=== WLAN Status ===", "normal");
+    logBox->AddLogLine("Interface: wlan0", "normal");
+
+    // 获取 wpa_supplicant 状态
+    std::string status = run_command_get_output("wpa_cli -iwlan0 -p/tmp/recovery/sockets status");
+
+    std::string state = "UNKNOWN";
+    std::string ssid = "UNKNOWN";
+    std::string ip = "UNKNOWN";
+    std::string mac = "UNKNOWN";
+
+    std::istringstream iss(status);
+    std::string line;
+    while (std::getline(iss, line)) {
+        if (line.find("wpa_state=") == 0) {
+            state = line.substr(10);  // 去掉 wpa_state=
+        } else if (line.find("ssid=") == 0) {
+            ssid = line.substr(5);
+        } else if (line.find("ip_address=") == 0) {
+            ip = line.substr(11);
+        }
+    }
+
+    // 获取 MAC 地址
+    std::string mac_out = run_command_get_output("ifconfig wlan0 | grep 'ether ' | awk '{print $2}'");
+    while (!mac_out.empty() && (mac_out.back() == '\n' || mac_out.back() == '\r')) mac_out.pop_back();
+    if (!mac_out.empty()) mac = mac_out;
+
+    // 输出到 logBox
+    logBox->AddLogLine("State: " + state, "normal");
+    logBox->AddLogLine("SSID: " + ssid, "normal");
+    logBox->AddLogLine("IP: " + ip, "normal");
+    logBox->AddLogLine("MAC: " + mac, "normal");
+    logBox->AddLogLine("===================", "normal");
+    gui_forceRender();
+
+    return 0;
+}
+
+int GUIAction::wlantest(std::string arg __unused) {
+    GUIBorderedLogBox* logBox = FindWlanLogBox();
+    if (!logBox) {
+        LOGERR("WLAN log box not found\n");
+        return -1;
+    }
+
+    logBox->AddLogLine("[INFO] Testing network connectivity...", "normal");
+    gui_forceRender();
+
+    const char* ping_bin = "/system/bin/busybox";
+    const char* iface = "wlan0";
+
+    auto run_ping = [&](const std::string& target, int count = 4) -> std::string {
+        std::string cmd = std::string(ping_bin) + " ping -I " + iface + " -c " + std::to_string(count) + " " + target;
+        FILE* fp = popen(cmd.c_str(), "r");
+        if (!fp) return "";
+        char buf[256];
+        std::string output;
+        while (fgets(buf, sizeof(buf), fp)) output += buf;
+        pclose(fp);
+        return output;
+    };
+
+    // 自动获取网关
+    std::string gateway = "unknown";
+    FILE* fp = popen("netstat -rn | grep '^0.0.0.0' | awk '{print $2}'", "r");
+    if (fp) {
+        char buf[64];
+        if (fgets(buf, sizeof(buf), fp)) {
+            gateway = buf;
+            while (!gateway.empty() && (gateway.back() == '\n' || gateway.back() == '\r'))
+                gateway.pop_back();
+        }
+        pclose(fp);
+    }
+
+    // ping 网关
+    if (!gateway.empty() && gateway != "unknown") {
+        logBox->AddLogLine("[INFO] Pinging gateway (" + gateway + ")...", "normal");
+        gui_forceRender();
+        std::string gw_result = run_ping(gateway, 1);
+        if (!gw_result.empty() && gw_result.find("0% packet loss") != std::string::npos)
+            logBox->AddLogLine("[INFO] Gateway ping: OK", "normal");
+        else
+            logBox->AddLogLine("[ERROR] Gateway ping failed", "error");
+        gui_forceRender();
+    } else {
+        logBox->AddLogLine("[ERROR] Could not determine gateway", "error");
+    }
+
+    // ping DNS
+    std::string dns = "8.8.8.8";
+    logBox->AddLogLine("[INFO] Testing DNS (" + dns + ")...", "normal");
+    gui_forceRender();
+    std::string dns_result = run_ping(dns, 1);
+    if (!dns_result.empty() && dns_result.find("0% packet loss") != std::string::npos)
+        logBox->AddLogLine("[INFO] DNS ping: OK", "normal");
+    else
+        logBox->AddLogLine("[ERROR] DNS ping failed", "error");
+    gui_forceRender();
+
+    // ping Internet
+    std::string internet = "bing.com";
+    logBox->AddLogLine("[INFO] Testing internet connectivity (" + internet + ")...", "normal");
+    gui_forceRender();
+    std::string internet_result = run_ping(internet, 1);
+    if (!internet_result.empty() && internet_result.find("0% packet loss") != std::string::npos)
+        logBox->AddLogLine("[INFO] Internet: OK", "normal");
+    else
+        logBox->AddLogLine("[ERROR] Internet ping failed", "error");
+    gui_forceRender();
+
+    logBox->AddLogLine("[INFO] Network test completed", "normal");
+    gui_forceRender();
+    return 0;
 }

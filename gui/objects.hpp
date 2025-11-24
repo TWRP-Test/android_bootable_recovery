@@ -380,6 +380,12 @@ protected:
 	int changeterminal(std::string arg);
 	int applycustomtwrpfolder(std::string arg);
 	int mergesnapshots(std::string arg);
+	int wlanstart(std::string arg);
+	int wlanstop(std::string arg);
+	int wlanscan(std::string arg);
+	int wlanconnect(std::string arg);
+	int wlangetstatus(std::string arg);
+	int wlantest(std::string arg);
 	int disableAVB2(std::string arg);
 #ifndef TW_EXCLUDE_NANO
 	int editfile(std::string arg);
@@ -711,6 +717,48 @@ protected:
 	bool updateList;
 };
 
+class GUIWlanList : public GUIScrollList
+{
+public:
+	GUIWlanList(xml_node<>* node);
+	virtual ~GUIWlanList();
+
+public:
+	// Update - Update any UI component animations (called <= 30 FPS)
+	//  Return 0 if nothing to update, 1 on success and contiue, >1 if full render required, and <0 on error
+	virtual int Update();
+
+	// NotifyVarChange - Notify of a variable change
+	virtual int NotifyVarChange(const std::string& varName, const std::string& value);
+
+	// SetPageFocus - Notify when a page gains or loses focus
+	virtual void SetPageFocus(int inFocus);
+
+	virtual size_t GetItemCount();
+	virtual void RenderItem(size_t itemindex, int yPos, bool selected);
+	virtual void NotifySelect(size_t item_selected);
+
+public:
+	struct WlanItem {
+		std::string ssid;
+		std::string signal;
+		std::string encryption;
+		bool selected;
+	};
+
+protected:
+	std::vector<WlanItem> mList;
+	std::string mVariable;
+	std::string currentValue;
+	ImageResource* mIconSelected;
+	ImageResource* mIconUnselected;
+	bool updateList;
+};
+
+// Global functions for managing WLAN list
+void SetWlanList(const std::vector<GUIWlanList::WlanItem>& list);
+std::vector<GUIWlanList::WlanItem> GetWlanList();
+
 class GUITextBox : public GUIScrollList
 {
 public:
@@ -788,6 +836,58 @@ protected:
 protected:
 	int RenderSlideout(void);
 	int RenderConsole(void);
+};
+
+// GUIBorderedLogBox - Custom log output box with border and customizable top/bottom row positions
+class GUIBorderedLogBox : public GUIScrollList
+{
+public:
+	GUIBorderedLogBox(xml_node<>* node);
+
+public:
+	// Render - Render the full object to the GL surface
+	//  Return 0 on success, <0 on error
+	virtual int Render(void);
+
+	// Update - Update any UI component animations (called <= 30 FPS)
+	//  Return 0 if nothing to update, 1 on success and continue, >1 if full render required, and <0 on error
+	virtual int Update(void);
+
+	// NotifyVarChange - Notify of a variable change
+	virtual int NotifyVarChange(const std::string& varName, const std::string& value);
+
+	// NotifyTouch - Notify of a touch event
+	virtual int NotifyTouch(TOUCH_STATE state, int x, int y);
+
+	// Add log line to this box's buffer
+	void AddLogLine(const std::string& line, const std::string& color = "normal");
+
+	// Clear all logs
+	void ClearLogs();
+
+	// ScrollList interface
+	virtual size_t GetItemCount();
+	virtual void RenderItem(size_t itemindex, int yPos, bool selected);
+	virtual void NotifySelect(size_t item_selected __unused) {}
+
+protected:
+	// Calculate actual render position based on top_row and bottom_row
+	void CalculateRenderPosition();
+
+protected:
+	COLOR mBorderColor;
+	int mBorderWidth;
+	int mLeftMargin;             // Left margin from screen edge
+	int mRightMargin;            // Right margin from screen edge
+	std::string mTopRowVar;      // Top row variable name (e.g., "%row5_y%")
+	std::string mBottomRowVar;   // Bottom row variable name (e.g., "%row15a_y%")
+	int mTopRowValue;            // Cached top row value (calculated in constructor)
+	int mBottomRowValue;         // Cached bottom row value (calculated in constructor)
+	std::vector<std::string> mLogLines;      // Log lines buffer
+	std::vector<std::string> mLogColors;     // Color for each line
+	size_t mLastRenderedCount;
+	xml_node<>* mXMLNode;        // Save XML node for recalculation
+	bool scrollToEnd;            // Auto-scroll to end when new lines added
 };
 
 class TerminalEngine;

@@ -1289,6 +1289,87 @@
 			</action>
 		</page>
 
+		<page name="wlan_password">
+			<template name="page"/>
+
+			<text style="text_l">
+				<placement x="%col1_x_header%" y="%row3_header_y%"/>
+				<text>{@wlan_hdr=WLAN}</text>
+			</text>
+
+			<text style="text_m">
+				<placement x="%col1_x_header%" y="%row4_header_y%"/>
+				<text>{@wlan_password_hdr=Enter Password}</text>
+			</text>
+
+			<text style="text_m">
+				<placement x="%center_x%" y="%row6_y%" placement="5"/>
+				<text>{@wlan_password_prompt=Enter password for network:}</text>
+			</text>
+
+			<text style="text_m_accent">
+				<placement x="%center_x%" y="%row7_y%" placement="5"/>
+				<text>%tw_selected_wlan%</text>
+			</text>
+
+			<text style="text_m">
+				<placement x="%center_x%" y="%row8_y%" placement="5"/>
+				<text>{@wlan_encryption_hdr=Encryption:}</text>
+			</text>
+
+			<text style="text_m_accent">
+				<placement x="%center_x%" y="%row9_y%" placement="5"/>
+				<text>%tw_selected_wlan_encryption%</text>
+			</text>
+
+			<text style="text_m">
+				<placement x="%center_x%" y="%row11_y%" placement="5"/>
+				<text>{@wlan_password_hint=Press back to cancel.}</text>
+			</text>
+
+			<input>
+				<placement x="%indent%" y="%row13_y%" w="%content_width%" h="%input_height%"/>
+				<text>%tw_wlan_password%</text>
+				<data name="tw_wlan_password"/>
+				<action function="page">wlan_password_confirm</action>
+			</input>
+
+			<fill color="%accent_color%">
+				<placement x="%indent%" y="row14_y" w="%content_width%" h="input_line_width"/>
+			</fill>
+
+			<template name="keyboardtemplate"/>
+
+			<action>
+				<touch key="home"/>
+				<action function="page">main</action>
+			</action>
+
+			<action>
+				<touch key="back"/>
+				<action function="page">wlan</action>
+			</action>
+		</page>
+
+		<page name="wlan_password_confirm">
+			<action>
+				<condition var1="tw_wlan_password" op="!=" var2=""/>
+				<actions>					
+					<action function="set">tw_wlan_password=</action>
+					<action function="page">wlan</action>
+					<action function="wlanconnect"/>
+				</actions>
+			</action>
+
+			<action>
+				<condition var1="tw_wlan_password" op="=" var2=""/>
+				<actions>
+					<action function="page">wlan</action>
+					<action function="wlanconnect"/>
+    			</actions>
+			</action>
+		</page>
+
 		<page name="checkpartitionlist">
 			<action>
 				<condition var1="tw_check_partition_list" op="=" var2="1"/>
@@ -3832,6 +3913,106 @@
 			</action>
 		</page>
 
+		<page name="extension">
+			<template name="page"/>
+
+			<text style="text_l">
+				<placement x="%col1_x_header%" y="%row3_header_y%"/>
+				<text>{@extension_hdr=Extension}</text>
+			</text>
+
+			<text style="text_m_accent">
+				<placement x="%center_x%" y="%row10_y%" placement="5"/>
+				<text>This page is under development, please stay tuned</text>
+			</text>
+
+			<action>
+				<touch key="home"/>
+				<action function="page">main</action>
+			</action>
+
+			<action>
+				<touch key="back"/>
+				<actions>
+					<action function="page">advanced</action>
+				</actions>
+			</action>
+		</page>
+
+		<page name="wlan">
+			<template name="page"/>
+
+			<text style="text_l">
+				<placement x="%col1_x_header%" y="%row3_header_y%"/>
+				<text>{@wlan_hdr=WLAN}</text>
+			</text>
+
+		<text style="text_m">
+			<placement x="%col1_x_header%" y="%row4_header_y%"/>
+			<text>{@wlan_log_hdr=This page is building by Jason}</text>
+		</text>
+
+		<borderedlogbox toprow="%row3_y%" bottomrow="%row16a_y%" borderwidth="2" leftmargin="75" rightmargin="75">
+			<placement x="%indent%" w="%content_width%"/>
+			<color foreground="%text_color%" background="%background_color%" border="%accent_color%"/>
+			<font resource="fixed" color="%text_color%" spacing="0"/>
+			<fastscroll rectcolor="%accent_color%" w="%fastscroll_w%" rectw="%fastscroll_rectw%" recth="%fastscroll_recth%"/>
+		</borderedlogbox>
+
+			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row15a_y%"/>
+				<text>{@wlan_get_status_btn=Get Status}</text>
+				<action function="wlangetstatus"/>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%center_x%" y="%row15a_y%"/>
+				<text>{@wlan_test_network_btn=Test Network}</text>
+				<action function="wlantest"/>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row18a_y%"/>
+				<text>{@wlan_scan_btn=Scan}</text>
+				<action function="wlanscan"/>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%center_x%" y="%row18a_y%"/>
+				<text>{@wlan_connect_btn=Connect}</text>
+				<actions>
+					<action function="set">tw_back=wlan</action>
+					<action function="wlanscan"/>
+					<action function="overlay">select_wlan</action>
+				</actions>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row21a_y%"/>
+				<text>{@wlan_stop_service_btn=Stop Service}</text>
+				<action function="wlanstop"/>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%center_x%" y="%row21a_y%"/>
+				<text>{@wlan_start_service_btn=Start Service}</text>
+				<action function="cmd">wpa_cli -iwlan0 -p/tmp/recovery/sockets add_network</action>
+				<action function="wlanstart"/>
+			</button>
+
+			<action>
+				<touch key="home"/>
+				<action function="page">main</action>
+			</action>
+
+			<action>
+				<touch key="back"/>
+				<actions>
+					<action function="page">advanced</action>
+				</actions>
+			</action>
+		</page>
+
 		<page name="advanced">
 			<template name="page"/>
 
@@ -3840,33 +4021,45 @@
 				<text>{@advanced_hdr=Advanced}</text>
 			</text>
 
-			<button style="main_button">
+			<button style="main_button_half_height">
 				<placement x="%indent%" y="%row2a_y%"/>
 				<text>{@copy_log_btn=Copy Log}</text>
 				<action function="page">copylog</action>
 			</button>
 
-			<button style="main_button">
+			<button style="main_button_half_height">
 				<condition var1="tw_has_data_media" var2="1"/>
 				<placement x="%center_x%" y="%row2a_y%"/>
 				<text>{@adb_sideload_btn=ADB Sideload}</text>
 				<action function="page">sideload</action>
 			</button>
 
-			<button style="main_button">
-				<placement x="%indent%" y="%row8_y%"/>
+			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row5a_y%"/>
 				<text>{@terminal_btn=Terminal}</text>
 				<action function="page">terminalcommand</action>
 			</button>
 
-			<button style="main_button">
-				<placement x="%center_x%" y="%row8_y%"/>
+			<button style="main_button_half_height">
+				<placement x="%center_x%" y="%row5a_y%"/>
 				<text>{@file_manager_btn=File Manager}</text>
 				<action function="page">filemanagerlist</action>
 			</button>
 
+			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row8a_y%"/>
+				<text>{@wlan_btn=WLAN}</text>
+				<action function="page">wlan</action>
+			</button>
+
+			<button style="main_button_half_height">
+				<placement x="%center_x%" y="%row8a_y%"/>
+				<text>{@extension_btn=Extension}</text>
+				<action function="page">extension</action>
+			</button>
+
 			<listbox style="advanced_listbox">
-				<placement x="%indent%" y="%row13a_y%" w="%content_width%" h="%listbox_advanced_height%"/>
+				<placement x="%indent%" y="%row12a_y%" w="%content_width%" h="%listbox_advanced_height%"/>
 				<listitem name="{@change_twrp_folder_btn=Change TWRP folder}">
 					<condition var1="tw_is_decrypted" var2="1"/>
 					<action function="page">changeTwrpFolder</action>
@@ -5500,6 +5693,89 @@
 					<action function="set">tw_clear_destination=%tw_back%</action>
 					<action function="overlay"/>
 					<action function="page">clear_vars</action>
+				</actions>
+			</button>
+
+			<fill color="#000000">
+				<placement x="0" y="row25_y" w="%screen_width%" h="%navbar_height"/>
+			</fill>
+
+			<button>
+				<condition var1="tw_samsung_navbar" op="!=" var2="1"/>
+				<placement x="%back_button_x%" y="%navbar_btn_y%" placement="4"/>
+				<image resource="back"/>
+				<condition var1="tw_busy" var2="0"/>
+				<actions>
+					<action function="overlay"/>
+					<action function="key">%tw_back%</action>
+				</actions>
+			</button>
+
+			<button>
+				<condition var1="tw_samsung_navbar" op="=" var2="1"/>
+				<placement x="%back_button_x%" y="%navbar_btn_y%" placement="4"/>
+				<image resource="console"/>
+				<condition var1="tw_busy" var2="0"/>
+				<action function="overlay">slideout</action>
+			</button>
+
+			<button>
+				<placement x="%center_x%" y="%navbar_btn_y%" placement="4"/>
+				<image resource="home"/>
+				<condition var1="tw_busy" var2="0"/>
+				<actions>
+					<action function="overlay"/>
+					<action function="key">home</action>
+				</actions>
+			</button>
+
+			<button>
+				<condition var1="tw_samsung_navbar" op="!=" var2="1"/>
+				<placement x="%console_button_x%" y="%navbar_btn_y%" placement="4"/>
+				<image resource="console"/>
+				<condition var1="tw_busy" var2="0"/>
+				<action function="overlay">slideout</action>
+			</button>
+
+			<button>
+				<condition var1="tw_samsung_navbar" op="=" var2="1"/>
+				<placement x="%console_button_x%" y="%navbar_btn_y%" placement="4"/>
+				<image resource="back"/>
+				<condition var1="tw_busy" var2="0"/>
+				<actions>
+					<action function="overlay"/>
+					<action function="key">%tw_back%</action>
+				</actions>
+			</button>
+
+			<action>
+				<touch key="power+voldown"/>
+				<action function="screenshot"/>
+			</action>
+		</page>
+
+		<page name="select_wlan">
+			<fill color="%semi_transparent%">
+				<placement x="0" y="0" w="%screen_width%" h="%screen_height%"/>
+			</fill>
+
+			<fill color="%background_color%">
+				<placement x="%indent%" y="row5_y" w="%content_width%" h="%dialog_height%"/>
+			</fill>
+
+			<wlanlist style="partitionlist_storage">
+				<text>{@select_wlan_hdr=Select WLAN to Connect}</text>
+				<icon selected="radio_true" unselected="radio_false"/>
+				<data name="tw_selected_wlan"/>
+			</wlanlist>
+
+			<button style="button_third_width">
+				<placement x="%dialog_button_x%" y="%row14_y%"/>
+				<text>{@next_btn=Next}</text>
+				<actions>
+					<action function="set">tw_back=wlan</action>
+					<action function="overlay"/>
+					<action function="page">wlan_password</action>
 				</actions>
 			</button>
 
