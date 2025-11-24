@@ -73,6 +73,8 @@ cc_library_static {
         "patternpassword.cpp",
         "textbox.cpp",
         "terminal.cpp",
+        "borderedlogbox.cpp",
+        "wlanlist.cpp",
         "twmsg.cpp"
     ],
     shared_libs: [

@@ -249,12 +249,12 @@
 			<image>
 				<condition var1="tw_busy" var2="1"/>
 				<image resource="logo"/>
-				<placement x="0" y="0"/>
+				<placement x="0" y="%status_height%"/>
 			</image>
 
 			<button>
 				<condition var1="tw_busy" var2="0"/>
-				<placement x="0" y="0"/>
+				<placement x="0" y="%status_height%"/>
 				<image resource="logo"/>
 				<action function="key">home</action>
 			</button>
