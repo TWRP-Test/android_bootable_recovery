@@ -793,5 +793,7 @@
 		<string name="wlan_connect_btn">Connect</string>
 		<string name="wlan_stop_service_btn">Stop Service</string>
 		<string name="wlan_start_service_btn">Start Service</string>
+		<string name="select_wlan_hdr">Select WLAN to Connect</string>
+		<string name="next_btn">Next</string>
 	</resources>
 </language>

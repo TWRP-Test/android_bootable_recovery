@@ -785,5 +785,7 @@
 		<string name="wlan_connect_btn">连接</string>
 		<string name="wlan_stop_service_btn">停止服务</string>
 		<string name="wlan_start_service_btn">启动服务</string>
+		<string name="select_wlan_hdr">选择需要连接的WiFi</string>
+		<string name="next_btn">下一步</string>
 	</resources>
 </language>
