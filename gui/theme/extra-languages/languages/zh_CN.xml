@@ -772,5 +772,20 @@
 		<string name="disabling_AVB2_complete">禁用 AVB2.0 完成！</string>
 		<string name="disable_avb2_success_msg">禁用 AVB2.0: 处理 '{1}' 成功。</string>
 		<string name="disable_avb2_fail_msg">禁用 AVB2.0: 处理 '{1}' 失败！</string>
+		<string name="wlan_btn">WLAN</string>
+		<string name="extension_btn">扩展</string>
+		<string name="wlan_password_hdr">请输入密码</string>
+		<string name="wlan_password_prompt">请输入当前网络密码:</string>
+		<string name="wlan_encryption_hdr">安全性:</string>
+		<string name="wlan_password_hint">按返回按钮取消。</string>
+		<string name="wlan_log_hdr">此界面由 Jason 构建</string>
+		<string name="wlan_get_status_btn">获取状态</string>
+		<string name="wlan_test_network_btn">测试网络</string>
+		<string name="wlan_scan_btn">扫描</string>
+		<string name="wlan_connect_btn">连接</string>
+		<string name="wlan_stop_service_btn">停止服务</string>
+		<string name="wlan_start_service_btn">启动服务</string>
+		<string name="select_wlan_hdr">选择需要连接的WiFi</string>
+		<string name="next_btn">下一步</string>
 	</resources>
 </language>

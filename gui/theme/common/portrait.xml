@@ -1294,7 +1294,7 @@
 
 			<text style="text_l">
 				<placement x="%col1_x_header%" y="%row3_header_y%"/>
-				<text>{@wlan_hdr=WLAN}</text>
+				<text>{@wlan_btn=WLAN}</text>
 			</text>
 
 			<text style="text_m">
@@ -3918,7 +3918,7 @@
 
 			<text style="text_l">
 				<placement x="%col1_x_header%" y="%row3_header_y%"/>
-				<text>{@extension_hdr=Extension}</text>
+				<text>{@extension_btn=Extension}</text>
 			</text>
 
 			<text style="text_m_accent">
@@ -3944,7 +3944,7 @@
 
 			<text style="text_l">
 				<placement x="%col1_x_header%" y="%row3_header_y%"/>
-				<text>{@wlan_hdr=WLAN}</text>
+				<text>{@wlan_btn=WLAN}</text>
 			</text>
 
 		<text style="text_m">
