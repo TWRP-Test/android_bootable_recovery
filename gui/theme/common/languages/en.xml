@@ -786,7 +786,7 @@
 		<string name="wlan_password_prompt">Enter password for network:</string>
 		<string name="wlan_encryption_hdr">Encryption:</string>
 		<string name="wlan_password_hint">Press back to cancel.</string>
-		<string name="wlan_log_hdr">This page is building by Jason</string>
+		<string name="wlan_log_hdr">This page is built by Jason</string>
 		<string name="wlan_get_status_btn">Get Status</string>
 		<string name="wlan_test_network_btn">Test Network</string>
 		<string name="wlan_scan_btn">Scan</string>
