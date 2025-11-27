@@ -271,24 +271,31 @@ func copyTheme(ctx android.BaseContext) bool {
 }
 
 func globalFlags(ctx android.BaseContext) []string {
-	var cflags []string
+    var cflags []string
 
 
-	if getMakeVars(ctx, "AB_OTA_UPDATER") == "true" {
-		cflags = append(cflags, "-DAB_OTA_UPDATER=1")
-	}
-	return cflags
+    if getMakeVars(ctx, "AB_OTA_UPDATER") == "true" {
+        cflags = append(cflags, "-DAB_OTA_UPDATER=1")
+    }
+    if getMakeVars(ctx, "TW_NO_NETWORK") == "true" {
+        cflags = append(cflags, "-DTW_NO_NETWORK")
+    }
+    return cflags
 }
 
 func globalSrcs(ctx android.BaseContext) []string {
-	var srcs []string
+    var srcs []string
 
-	if getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD") != "" {
-		srcs = append(srcs, getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD"))
-	} else {
-		srcs = append(srcs, "hardwarekeyboard.cpp")
-	}
-	return srcs
+    if getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD") != "" {
+        srcs = append(srcs, getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD"))
+    } else {
+        srcs = append(srcs, "hardwarekeyboard.cpp")
+    }
+    if getMakeVars(ctx, "TW_NO_NETWORK") != "true" {
+        srcs = append(srcs, "borderedlogbox.cpp")
+        srcs = append(srcs, "wlanlist.cpp")
+    }
+    return srcs
 }
 
 func libGuiDefaults(ctx android.LoadHookContext) {

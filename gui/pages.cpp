@@ -460,13 +460,15 @@ bool Page::ProcessNode(xml_node<>* page, std::vector<xml_node<>*> *templates, in
 			mRenders.push_back(element);
 			mActions.push_back(element);
 		}
-		else if (type == "wlanlist")
-		{
-			GUIWlanList* element = new GUIWlanList(child);
-			mObjects.push_back(element);
-			mRenders.push_back(element);
-			mActions.push_back(element);
-		}
+        else if (type == "wlanlist")
+        {
+#ifndef TW_NO_NETWORK
+            GUIWlanList* element = new GUIWlanList(child);
+            mObjects.push_back(element);
+            mRenders.push_back(element);
+            mActions.push_back(element);
+#endif
+        }
 		else if (type == "patternpassword")
 		{
 			GUIPatternPassword* element = new GUIPatternPassword(child);
@@ -481,18 +483,19 @@ bool Page::ProcessNode(xml_node<>* page, std::vector<xml_node<>*> *templates, in
 			mRenders.push_back(element);
 			mActions.push_back(element);
 		}
-		else if (type == "borderedlogbox")
-		{
-			GUIBorderedLogBox* element = new GUIBorderedLogBox(child);
-			mObjects.push_back(element);
-			mRenders.push_back(element);
-			mActions.push_back(element);
-			// Store pointer for WLAN page
-			if (mName == "wlan") {
-				extern void SetWlanLogBox(GUIBorderedLogBox*);
-				SetWlanLogBox(element);
-			}
-		}
+        else if (type == "borderedlogbox")
+        {
+#ifndef TW_NO_NETWORK
+            GUIBorderedLogBox* element = new GUIBorderedLogBox(child);
+            mObjects.push_back(element);
+            mRenders.push_back(element);
+            mActions.push_back(element);
+            if (mName == "wlan") {
+                extern void SetWlanLogBox(GUIBorderedLogBox*);
+                SetWlanLogBox(element);
+            }
+#endif
+        }
 		else if (type == "template")
 		{
 			if (!templates || !child->first_attribute("name"))

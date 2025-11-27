@@ -254,13 +254,15 @@ GUIAction::GUIAction(xml_node<>* node)
 		ADD_ACTION(editfile);
 #endif
 		ADD_ACTION(mergesnapshots);
-		ADD_ACTION(wlanstart);
-		ADD_ACTION(wlanstop);
-		ADD_ACTION(wlanscan);
-		ADD_ACTION(wlanconnect);
-		ADD_ACTION(wlangetstatus);
-		ADD_ACTION(wlantest);
-		ADD_ACTION(disableAVB2);
+#ifndef TW_NO_NETWORK
+        ADD_ACTION(wlanstart);
+        ADD_ACTION(wlanstop);
+        ADD_ACTION(wlanscan);
+        ADD_ACTION(wlanconnect);
+        ADD_ACTION(wlangetstatus);
+        ADD_ACTION(wlantest);
+#endif
+        ADD_ACTION(disableAVB2);
 	}
 
 	// First, get the action
@@ -2392,20 +2394,17 @@ int GUIAction::disableAVB2(string arg __unused) {
 	return 0;
 }
 
-// Global pointer to WLAN log box (set when page loads)
+#ifndef TW_NO_NETWORK
 static GUIBorderedLogBox* s_wlanLogBox = NULL;
 
-// Set the log box pointer (called from pages.cpp when processing borderedlogbox)
 void SetWlanLogBox(GUIBorderedLogBox* logBox) {
-	s_wlanLogBox = logBox;
+    s_wlanLogBox = logBox;
 }
 
-// Helper function to find GUIBorderedLogBox in the current page
 static GUIBorderedLogBox* FindWlanLogBox() {
-	return s_wlanLogBox;
+    return s_wlanLogBox;
 }
 
-// WLAN function implementations
 int GUIAction::wlanstart(string arg __unused) {
 	GUIBorderedLogBox* logBox = FindWlanLogBox();
 	if (logBox) {
@@ -3061,3 +3060,4 @@ int GUIAction::wlantest(std::string arg __unused) {
     gui_forceRender();
     return 0;
 }
+#endif
