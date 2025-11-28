@@ -372,14 +372,14 @@ int main(int argc, char **argv) {
 #endif
 
 	property_set("ro.twrp.boot", "1");
-	property_set("ro.twrp.version", TW_VERSION_STR);
+    property_set("ro.twrp.version", TWFunc::Get_TWRP_Version_Str().c_str());
 
 #ifdef TARGET_OTA_ASSERT_DEVICE
 	property_set("ro.twrp.target.devices", TARGET_OTA_ASSERT_DEVICE);
 #endif
 
 	time_t StartupTime = time(NULL);
-	printf("Starting TWRP %s-%s on %s (pid %d)\n", TW_VERSION_STR, TW_GIT_REVISION, ctime(&StartupTime), getpid());
+    printf("Starting TWRP %s-%s on %s (pid %d)\n", TWFunc::Get_TWRP_Version_Str().c_str(), TW_GIT_REVISION, ctime(&StartupTime), getpid());
 
 	// Load default values to set DataManager constants and handle ifdefs
 	DataManager::SetDefaultValues();

@@ -43,6 +43,7 @@
 
 #include <android-base/strings.h>
 #include <android-base/chrono_utils.h>
+#include <android-base/properties.h>
 
 #include "twrp-functions.hpp"
 #include "abx-functions.hpp"
@@ -74,6 +75,12 @@ extern "C" {
 #endif
 
 struct selabel_handle *selinux_handle;
+
+std::string TWFunc::Get_TWRP_Version_Str() {
+    std::string dev = android::base::GetProperty("ro.twrp.device_version", "");
+    if (!dev.empty()) return std::string(TW_MAIN_VERSION_STR) + std::string("-") + dev;
+    return std::string(TW_VERSION_STR);
+}
 
 /* Execute a command */
 int TWFunc::Exec_Cmd(const string& cmd, string &result, bool combine_stderr) {

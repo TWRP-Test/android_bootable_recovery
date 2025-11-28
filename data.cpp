@@ -580,7 +580,7 @@ void DataManager::SetDefaultValues()
 	mConst.SetValue("true", "1");
 	mConst.SetValue("false", "0");
 
-	mConst.SetValue(TW_VERSION_VAR, TW_VERSION_STR);
+    mConst.SetValue(TW_VERSION_VAR, TWFunc::Get_TWRP_Version_Str());
 
 #ifndef TW_NO_HAPTICS
     mPersist.SetValue("tw_button_vibrate", "80");
@@ -1101,7 +1101,11 @@ void DataManager::Output_Version(void)
 		LOGINFO("Unable to open: %s. Data may be unmounted. Error: %s\n", verPath.c_str(), strerror(errno));
 		return;
 	}
-	strcpy(version, TW_VERSION_STR);
+    {
+        std::string ver = TWFunc::Get_TWRP_Version_Str();
+        strncpy(version, ver.c_str(), sizeof(version) - 1);
+        version[sizeof(version) - 1] = '\0';
+    }
 	fwrite(version, sizeof(version[0]), strlen(version) / sizeof(version[0]), fp);
 	fclose(fp);
 	TWFunc::copy_file("/etc/recovery.fstab", recoveryLogDir + "recovery.fstab", 0644);
