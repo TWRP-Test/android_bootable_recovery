@@ -54,6 +54,7 @@ extern "C" {
 #include "blanktimer.hpp"
 
 #include "../variables.h"
+#include <android-base/properties.h>
 
 #define TW_THEME_VER_ERR -2
 
@@ -72,6 +73,18 @@ int tw_x_offset = 0;
 int tw_y_offset = 0;
 int tw_w_offset = 0;
 int tw_h_offset = 0;
+static void apply_offset_properties()
+{
+    std::string s;
+    s = android::base::GetProperty("ro.twrp.x_offset", "");
+    if (!s.empty()) tw_x_offset = atoi(s.c_str());
+    s = android::base::GetProperty("ro.twrp.y_offset", "");
+    if (!s.empty()) tw_y_offset = atoi(s.c_str());
+    s = android::base::GetProperty("ro.twrp.w_offset", "");
+    if (!s.empty()) tw_w_offset = atoi(s.c_str());
+    s = android::base::GetProperty("ro.twrp.h_offset", "");
+    if (!s.empty()) tw_h_offset = atoi(s.c_str());
+}
 
 // Helper routine to convert a string to a color declaration
 int ConvertStrToColor(std::string str, COLOR* color)
@@ -1378,6 +1391,7 @@ int PageManager::LoadPackage(std::string name, std::string package, std::string 
 		tw_y_offset = TW_Y_OFFSET;
 		tw_w_offset = TW_W_OFFSET;
 		tw_h_offset = TW_H_OFFSET;
+		apply_offset_properties();
 		if (name != "splash") {
 			LoadLanguageList(NULL);
 			languageFile = LoadFileToBuffer(TWRES "languages/en.xml", NULL);
@@ -1391,6 +1405,7 @@ int PageManager::LoadPackage(std::string name, std::string package, std::string 
 		tw_y_offset = 0;
 		tw_w_offset = 0;
 		tw_h_offset = 0;
+		apply_offset_properties();
 		if (!TWFunc::Path_Exists(package)) {
 			return -1;
 		}
