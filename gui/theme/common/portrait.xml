@@ -1353,16 +1353,6 @@
 
 		<page name="wlan_password_confirm">
 			<action>
-				<condition var1="tw_wlan_password" op="!=" var2=""/>
-				<actions>
-					<action function="set">tw_wlan_password=</action>
-					<action function="page">wlan</action>
-					<action function="wlanconnect"/>
-				</actions>
-			</action>
-
-			<action>
-				<condition var1="tw_wlan_password" op="=" var2=""/>
 				<actions>
 					<action function="page">wlan</action>
 					<action function="wlanconnect"/>
