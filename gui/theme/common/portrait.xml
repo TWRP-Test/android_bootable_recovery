@@ -1290,84 +1290,75 @@
 		</page>
 
 		<page name="wlan_password">
-			<template name="page"/>
+		    <template name="page"/>
+		
+		    <action>
+		        <condition var1="tw_selected_wlan_encryption" op="=" var2="Open"/>
+		        <actions>
+		            <action function="set">tw_wlan_password=</action>
+					<action function="page">wlan</action>
+					<action function="wlanconnect"/>
+		        </actions>
+		    </action>
 
-			<text style="text_l">
-				<placement x="%col1_x_header%" y="%row3_header_y%"/>
-				<text>{@wlan_btn=WLAN}</text>
-			</text>
+		    <text style="text_l">
+		        <placement x="%col1_x_header%" y="%row3_header_y%"/>
+		        <text>{@wlan_btn=WLAN}</text>
+		    </text>
 
-			<text style="text_m">
-				<placement x="%col1_x_header%" y="%row4_header_y%"/>
-				<text>{@wlan_password_hdr=Enter Password}</text>
-			</text>
+		    <text style="text_m">
+		        <placement x="%col1_x_header%" y="%row4_header_y%"/>
+		        <text>{@wlan_password_hdr=Enter Password}</text>
+		    </text>
 
-			<text style="text_m">
-				<placement x="%center_x%" y="%row6_y%" placement="5"/>
-				<text>{@wlan_password_prompt=Enter password for network:}</text>
-			</text>
+		    <text style="text_m">
+		        <placement x="%center_x%" y="%row6_y%" placement="5"/>
+		        <text>{@wlan_password_prompt=Enter password for network:}</text>
+		    </text>
 
-			<text style="text_m_accent">
-				<placement x="%center_x%" y="%row7_y%" placement="5"/>
-				<text>%tw_selected_wlan%</text>
-			</text>
+		    <text style="text_m_accent">
+		        <placement x="%center_x%" y="%row7_y%" placement="5"/>
+		        <text>%tw_selected_wlan%</text>
+		    </text>
 
-			<text style="text_m">
-				<placement x="%center_x%" y="%row8_y%" placement="5"/>
-				<text>{@wlan_encryption_hdr=Encryption:}</text>
-			</text>
+		    <text style="text_m">
+		        <placement x="%center_x%" y="%row8_y%" placement="5"/>
+		        <text>{@wlan_encryption_hdr=Encryption:}</text>
+		    </text>
 
-			<text style="text_m_accent">
-				<placement x="%center_x%" y="%row9_y%" placement="5"/>
-				<text>%tw_selected_wlan_encryption%</text>
-			</text>
+		    <text style="text_m_accent">
+		        <placement x="%center_x%" y="%row9_y%" placement="5"/>
+		        <text>%tw_selected_wlan_encryption%</text>
+		    </text>
 
-			<text style="text_m">
-				<placement x="%center_x%" y="%row11_y%" placement="5"/>
-				<text>{@wlan_password_hint=Press back to cancel.}</text>
-			</text>
+		    <text style="text_m">
+		        <placement x="%center_x%" y="%row11_y%" placement="5"/>
+		        <text>{@wlan_password_hint=Press back to cancel.}</text>
+		    </text>
 
-			<input>
-				<placement x="%indent%" y="%row13_y%" w="%content_width%" h="%input_height%"/>
-				<text>%tw_wlan_password%</text>
-				<data name="tw_wlan_password"/>
-				<action function="page">wlan_password_confirm</action>
-			</input>
-
-			<fill color="%accent_color%">
-				<placement x="%indent%" y="row14_y" w="%content_width%" h="input_line_width"/>
-			</fill>
-
-			<template name="keyboardtemplate"/>
-
-			<action>
-				<touch key="home"/>
-				<action function="page">main</action>
-			</action>
-
-			<action>
-				<touch key="back"/>
+		    <input>
+		        <placement x="%indent%" y="%row13_y%" w="%content_width%" h="%input_height%"/>
+		        <text>%tw_wlan_password%</text>
+		        <data name="tw_wlan_password"/>
 				<action function="page">wlan</action>
-			</action>
-		</page>
+				<action function="wlanconnect"/>
+		    </input>
 
-		<page name="wlan_password_confirm">
-			<action>
-				<condition var1="tw_wlan_password" op="!=" var2=""/>
-				<actions>
-					<action function="set">tw_wlan_password=</action>
-					<action function="page">wlan</action>
-					<action function="wlanconnect"/>
-				</actions>
-			</action>
+		    <fill color="%accent_color%">
+		        <placement x="%indent%" y="row14_y" w="%content_width%" h="input_line_width"/>
+		    </fill>
 
-			<action>
-				<condition var1="tw_wlan_password" op="=" var2=""/>
-				<actions>
-					<action function="page">wlan</action>
-					<action function="wlanconnect"/>
-				</actions>
-			</action>
+		    <template name="keyboardtemplate"/>
+
+		    <action>
+		        <touch key="home"/>
+		        <action function="page">main</action>
+		    </action>
+
+		    <action>
+		        <touch key="back"/>
+		        <action function="page">wlan</action>
+		    </action>
 		</page>
 
 		<page name="checkpartitionlist">

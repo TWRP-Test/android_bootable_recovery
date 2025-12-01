@@ -2472,8 +2472,8 @@ int GUIAction::wlanscan(std::string arg __unused) {
         }
     }
 
-    // 给扫描一点时间（0.5 秒）
-    usleep(500 * 1000);
+    // 给扫描一点时间（1 秒）
+    usleep(1000 * 1000);
 
     // ========= 2. 执行 scan_results =========
     std::vector<std::string> lines;
@@ -2824,8 +2824,13 @@ int GUIAction::wlanconnect(std::string arg __unused) {
     std::string password;
     DataManager::GetValue("tw_wlan_password", password);
 
+    // 获取选中的WLAN的加密方式
+    std::string encryption = DataManager::GetStrValue("tw_selected_wlan_encryption");
+    
     logBox->AddLogLine("[INFO] Connecting to network...", "normal");
     logBox->AddLogLine("[INFO] SSID: " + selectedWlan, "normal");
+    logBox->AddLogLine("[INFO] Encryption: " + encryption, "normal");
+    
     if (!password.empty()) {
         logBox->AddLogLine("[INFO] Using password authentication", "normal");
     } else {
@@ -2845,17 +2850,50 @@ int GUIAction::wlanconnect(std::string arg __unused) {
     std::string cmd_set_ssid = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 ssid " + ssid_to_hex(selectedWlan);
     run_command_get_output(cmd_set_ssid);
 
-    // 设置 key_mgmt
-    std::string cmd_set_key_mgmt = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 key_mgmt WPA-PSK";
+    // ========= 根据加密方式设置 key_mgmt =========
+    std::string key_mgmt;
+    if (encryption == "Open") {
+        key_mgmt = "NONE";
+        logBox->AddLogLine("[INFO] Using open network authentication", "normal");
+    } else if (encryption == "WPA3") {
+        key_mgmt = "SAE";
+        logBox->AddLogLine("[INFO] Using WPA3-SAE authentication", "normal");
+    } else if (encryption == "WPA2") {
+        key_mgmt = "WPA-PSK";
+        logBox->AddLogLine("[INFO] Using WPA2-PSK authentication", "normal");
+    } else if (encryption == "WPA") {
+        key_mgmt = "WPA-PSK";
+        logBox->AddLogLine("[INFO] Using WPA-PSK authentication", "normal");
+    } else {
+        // 默认使用WPA-PSK，兼容旧版本
+        key_mgmt = "WPA-PSK";
+        logBox->AddLogLine("[INFO] Using default WPA-PSK authentication", "normal");
+    }
+
+    std::string cmd_set_key_mgmt = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 key_mgmt " + key_mgmt;
     run_command_get_output(cmd_set_key_mgmt);
 
-    // 设置 PSK
+    // 设置 PSK（仅当需要密码时）
     if (!password.empty()) {
-        uint8_t psk[32];
-        pbkdf2_hmac_sha1(password, selectedWlan, 4096, psk);
-        std::string psk_hex = psk_to_hex(psk);
-        std::string cmd_set_psk = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 psk " + psk_hex;
-        run_command_get_output(cmd_set_psk);
+        if (encryption == "Open") {
+            logBox->AddLogLine("[WARNING] Open network should not have password, ignoring password", "warning");
+        } else {
+            uint8_t psk[32];
+            pbkdf2_hmac_sha1(password, selectedWlan, 4096, psk);
+            std::string psk_hex = psk_to_hex(psk);
+            std::string cmd_set_psk = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 psk " + psk_hex;
+            run_command_get_output(cmd_set_psk);
+        }
+    } else {
+        if (encryption != "Open") {
+            logBox->AddLogLine("[WARNING] Password required for encrypted network", "warning");
+            // 对于加密网络但没有密码的情况，可能需要特殊处理
+            if (encryption == "WPA3" || encryption == "WPA2" || encryption == "WPA") {
+                logBox->AddLogLine("[ERROR] Password is required for " + encryption + " network", "error");
+                gui_forceRender();
+                return -1;
+            }
+        }
     }
 
     // 启用 network 0
