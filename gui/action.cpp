@@ -2876,12 +2876,12 @@ int GUIAction::wlangetstatus(std::string arg __unused) {
             state = line.substr(10);  // 去掉 wpa_state=
         } else if (line.find("ssid=") == 0) {
             // 使用echo -e解码SSID
-			std::string escaped_ssid = line.substr(5);
-			ssid = run_command_get_output("echo -e \"" + escaped_ssid + "\"");
-			// 移除可能的换行符
-			if (!ssid.empty() && ssid.back() == '\n') {
-				ssid.pop_back();
-			}
+            std::string escaped_ssid = line.substr(5);
+            ssid = run_command_get_output("echo -e \"" + escaped_ssid + "\"");
+            // 移除可能的换行符
+            if (!ssid.empty() && ssid.back() == '\n') {
+                ssid.pop_back();
+            }
         } else if (line.find("ip_address=") == 0) {
             ip = line.substr(11);
         }
