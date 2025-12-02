@@ -2587,7 +2587,7 @@ int GUIAction::wlanscan(std::string arg __unused) {
 
         // 简单判断加密类型（留给 GUIWlanList 用）
         std::string encryption = "Open";
-        if (flags.find("WPA3") != std::string::npos) {
+        if (flags.find("SAE") != std::string::npos) {
             encryption = "WPA3";
         } else if (flags.find("WPA2") != std::string::npos) {
             encryption = "WPA2";
@@ -2628,128 +2628,6 @@ int GUIAction::wlanscan(std::string arg __unused) {
     DataManager::SetValue("tw_wlan_list_update", "1");
 
     return 0;
-}
-
-// ===== SHA1 实现 =====
-struct SHA1_CTX {
-    uint32_t state[5];
-    uint32_t count[2];
-    uint8_t buffer[64];
-};
-
-static uint32_t rol(uint32_t value, size_t bits) {
-    return (value << bits) | (value >> (32 - bits));
-}
-
-static void SHA1Transform(uint32_t state[5], const uint8_t buffer[64]) {
-    uint32_t a,b,c,d,e,W[80];
-    for (int t=0;t<16;t++) {
-        W[t] = (buffer[t*4]<<24)|(buffer[t*4+1]<<16)|(buffer[t*4+2]<<8)|buffer[t*4+3];
-    }
-    for (int t=16;t<80;t++) W[t] = rol(W[t-3]^W[t-8]^W[t-14]^W[t-16],1);
-
-    a=state[0]; b=state[1]; c=state[2]; d=state[3]; e=state[4];
-    for(int t=0;t<80;t++){
-        uint32_t f,k;
-        if(t<20){f=(b&c)|((~b)&d);k=0x5A827999;}
-        else if(t<40){f=b^c^d;k=0x6ED9EBA1;}
-        else if(t<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
-        else {f=b^c^d;k=0xCA62C1D6;}
-        uint32_t temp = rol(a,5)+f+e+k+W[t];
-        e=d; d=c; c=rol(b,30); b=a; a=temp;
-    }
-    state[0]+=a; state[1]+=b; state[2]+=c; state[3]+=d; state[4]+=e;
-}
-
-static void SHA1Init(SHA1_CTX *ctx){
-    ctx->state[0]=0x67452301; ctx->state[1]=0xEFCDAB89;
-    ctx->state[2]=0x98BADCFE; ctx->state[3]=0x10325476;
-    ctx->state[4]=0xC3D2E1F0; ctx->count[0]=ctx->count[1]=0;
-}
-
-static void SHA1Update(SHA1_CTX *ctx, const uint8_t *data, size_t len){
-    size_t i,j;
-    j=(ctx->count[0]>>3)&63;
-    if((ctx->count[0]+=len<<3)<(len<<3)) ctx->count[1]++;
-    ctx->count[1]+=(len>>29);
-    size_t partlen=64-j;
-    if(len>=partlen){
-        memcpy(&ctx->buffer[j], data, partlen);
-        SHA1Transform(ctx->state, ctx->buffer);
-        for(i=partlen;i+63<len;i+=64) SHA1Transform(ctx->state,&data[i]);
-        j=0;
-    }else i=0;
-    memcpy(&ctx->buffer[j], &data[i], len-i);
-}
-
-static void SHA1Final(uint8_t digest[20], SHA1_CTX *ctx){
-    uint8_t finalcount[8];
-    for(int i=0;i<4;i++){
-        finalcount[i] = (ctx->count[1]>>(24-i*8))&0xFF;
-        finalcount[i+4] = (ctx->count[0]>>(24-i*8))&0xFF;
-    }
-    uint8_t c=0x80; SHA1Update(ctx,&c,1);
-    uint8_t zero[64]={0};
-    while((ctx->count[0]&0x1F8)!=448) SHA1Update(ctx, zero, 1);
-    SHA1Update(ctx, finalcount, 8);
-    for(int i=0;i<5;i++){
-        digest[i*4]=(ctx->state[i]>>24)&0xFF;
-        digest[i*4+1]=(ctx->state[i]>>16)&0xFF;
-        digest[i*4+2]=(ctx->state[i]>>8)&0xFF;
-        digest[i*4+3]=ctx->state[i]&0xFF;
-    }
-}
-
-// ===== HMAC-SHA1 =====
-static void hmac_sha1(const uint8_t *key, size_t key_len,
-                      const uint8_t *data, size_t data_len,
-                      uint8_t out[20])
-{
-    uint8_t k_ipad[64]={0}, k_opad[64]={0}, tk[20];
-    if(key_len>64){ SHA1_CTX tctx; SHA1Init(&tctx); SHA1Update(&tctx,key,key_len); SHA1Final(tk,&tctx); key=tk; key_len=20; }
-    memcpy(k_ipad,key,key_len); memcpy(k_opad,key,key_len);
-    for(int i=0;i<64;i++){ k_ipad[i]^=0x36; k_opad[i]^=0x5c; }
-    SHA1_CTX ctx; uint8_t temp[20];
-    SHA1Init(&ctx); SHA1Update(&ctx,k_ipad,64); SHA1Update(&ctx,data,data_len); SHA1Final(temp,&ctx);
-    SHA1Init(&ctx); SHA1Update(&ctx,k_opad,64); SHA1Update(&ctx,temp,20); SHA1Final(out,&ctx);
-}
-
-// ===== PBKDF2-HMAC-SHA1 =====
-static void pbkdf2_hmac_sha1(const std::string &password, const std::string &ssid, int iter, uint8_t out[32]){
-    uint8_t U[20], T[20];
-    for(int i=1;i<=2;i++){
-        uint8_t block[ssid.size()+4];
-        memcpy(block, ssid.c_str(), ssid.size());
-        block[ssid.size()]=(i>>24)&0xFF; block[ssid.size()+1]=(i>>16)&0xFF;
-        block[ssid.size()+2]=(i>>8)&0xFF; block[ssid.size()+3]=i&0xFF;
-        hmac_sha1((const uint8_t*)password.c_str(), password.size(), block, ssid.size()+4, U);
-        memcpy(T,U,20);
-        for(int j=1;j<iter;j++){
-            hmac_sha1((const uint8_t*)password.c_str(), password.size(), U, 20, U);
-            for(int k=0;k<20;k++) T[k]^=U[k];
-        }
-        if(i==1) memcpy(out,T,20); else memcpy(out+20,T,12);
-    }
-}
-
-static std::string psk_to_hex(const uint8_t psk[32]){
-    static const char hex_chars[]="0123456789abcdef";
-    std::string hex; hex.reserve(64);
-    for(int i=0;i<32;i++){
-        hex.push_back(hex_chars[(psk[i]>>4)&0xF]);
-        hex.push_back(hex_chars[psk[i]&0xF]);
-    }
-    return hex;
-}
-
-static std::string ssid_to_hex(const std::string& ssid){
-    static const char hex_chars[]="0123456789abcdef";
-    std::string hex; hex.reserve(ssid.size()*2);
-    for(unsigned char c: ssid){
-        hex.push_back(hex_chars[(c>>4)&0xF]);
-        hex.push_back(hex_chars[c&0xF]);
-    }
-    return hex;
 }
 
 static std::string run_command_get_output(const std::string &cmd){
@@ -2847,7 +2725,7 @@ int GUIAction::wlanconnect(std::string arg __unused) {
     run_command_get_output(std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " add_network");
 
     // 设置 SSID
-    std::string cmd_set_ssid = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 ssid " + ssid_to_hex(selectedWlan);
+    std::string cmd_set_ssid = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 ssid '\"" + selectedWlan + "\"'";
     run_command_get_output(cmd_set_ssid);
 
     // ========= 根据加密方式设置 key_mgmt =========
@@ -2879,9 +2757,7 @@ int GUIAction::wlanconnect(std::string arg __unused) {
             logBox->AddLogLine("[WARNING] Open network should not have password, ignoring password", "warning");
         } else {
             uint8_t psk[32];
-            pbkdf2_hmac_sha1(password, selectedWlan, 4096, psk);
-            std::string psk_hex = psk_to_hex(psk);
-            std::string cmd_set_psk = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 psk " + psk_hex;
+			std::string cmd_set_psk = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " set_network 0 psk '\"" + password + "\"'";
             run_command_get_output(cmd_set_psk);
         }
     } else {
@@ -2923,7 +2799,7 @@ int GUIAction::wlanconnect(std::string arg __unused) {
     logBox->AddLogLine("[INFO] Wi-Fi link established, requesting IP with dhcpcd...", "normal");
     gui_forceRender();
     run_command_get_output("dhcpcd wlan0");
-    ::sleep(5); // 等 dhcpcd 配置完成
+	::sleep(5); // 等 dhcpcd 配置完成
 
     // 获取 IP 地址
     std::string ip_address = run_command_get_output("ifconfig wlan0 | grep 'inet ' | awk -F'[: ]+' '{print $4}'");
@@ -2999,14 +2875,20 @@ int GUIAction::wlangetstatus(std::string arg __unused) {
         if (line.find("wpa_state=") == 0) {
             state = line.substr(10);  // 去掉 wpa_state=
         } else if (line.find("ssid=") == 0) {
-            ssid = line.substr(5);
+            // 使用echo -e解码SSID
+			std::string escaped_ssid = line.substr(5);
+			ssid = run_command_get_output("echo -e \"" + escaped_ssid + "\"");
+			// 移除可能的换行符
+			if (!ssid.empty() && ssid.back() == '\n') {
+				ssid.pop_back();
+			}
         } else if (line.find("ip_address=") == 0) {
             ip = line.substr(11);
         }
     }
 
     // 获取 MAC 地址
-    std::string mac_out = run_command_get_output("ifconfig wlan0 | grep 'ether ' | awk '{print $2}'");
+    std::string mac_out = run_command_get_output("ifconfig wlan0 | awk '/HWaddr/ {print $5}'");
     while (!mac_out.empty() && (mac_out.back() == '\n' || mac_out.back() == '\r')) mac_out.pop_back();
     if (!mac_out.empty()) mac = mac_out;
 
