@@ -2799,7 +2799,7 @@ int GUIAction::wlanconnect(std::string arg __unused) {
     logBox->AddLogLine("[INFO] Wi-Fi link established, requesting IP with dhcpcd...", "normal");
     gui_forceRender();
     run_command_get_output("dhcpcd wlan0");
-	::sleep(5); // 等 dhcpcd 配置完成
+    ::sleep(5); // 等 dhcpcd 配置完成
 
     // 获取 IP 地址
     std::string ip_address = run_command_get_output("ifconfig wlan0 | grep 'inet ' | awk -F'[: ]+' '{print $4}'");
