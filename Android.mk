@@ -371,6 +371,12 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
     endif
     TW_INCLUDE_LIBRESETPROP := true
 endif
+
+TWRP_REQUIRED_MODULES += \
+    microhttpd \
+    index.html \
+    microhttpd.rc
+
 ifeq ($(TW_USE_DMCTL), true)
     LOCAL_CFLAGS += -DTW_USE_DMCTL
     TWRP_REQUIRED_MODULES += \
