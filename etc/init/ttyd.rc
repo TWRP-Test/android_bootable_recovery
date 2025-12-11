@@ -1,0 +1,9 @@
+on property:servicemanager.ready=true
+    start ttyd
+
+service ttyd /system/bin/ttyd -p 7681 --writable /sbin/sh
+    class hal
+    user root
+    group root
+    disabled
+    seclabel u:r:recovery:s0

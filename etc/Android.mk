@@ -155,6 +155,16 @@ ifeq ($(PRODUCT_USE_DYNAMIC_PARTITIONS),true)
 	include $(BUILD_PREBUILT)
 endif
 
+ifneq ($(TW_NO_NETWORK), true)
+	include $(CLEAR_VARS)
+	LOCAL_MODULE := ttyd.rc
+	LOCAL_MODULE_TAGS := optional
+	LOCAL_MODULE_CLASS := EXECUTABLES
+	LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc/init
+	LOCAL_SRC_FILES := init/$(LOCAL_MODULE)
+	include $(BUILD_PREBUILT)
+endif
+
 ifeq ($(TW_INCLUDE_OMAPI), true)
 	include $(CLEAR_VARS)
 	LOCAL_MODULE := se_omapi.rc
