@@ -310,7 +310,9 @@ ifneq ($(TW_NO_NETWORK), true)
     TWRP_REQUIRED_MODULES += \
         microhttpd \
         index.html \
-        microhttpd.rc
+        microhttpd.rc \
+        ttyd \
+        ttyd.rc
 endif
 ifneq ($(TW_ADDITIONAL_APEX_FILES),)
     LOCAL_CFLAGS += -DTW_ADDITIONAL_APEX_FILES=$(TW_ADDITIONAL_APEX_FILES)
