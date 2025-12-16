@@ -390,6 +390,11 @@ ifeq ($(TW_INCLUDE_7ZA), true)
     TWRP_REQUIRED_MODULES += \
         7za
 endif
+ifeq ($(TW_INCLUDE_ZSTD), true)
+    LOCAL_CFLAGS += -DTW_INCLUDE_ZSTD
+    TWRP_REQUIRED_MODULES += \
+        zstd
+endif
 # backup/restore bug - temporary workaround
 # activate the workaround by default
 TW_WORKAROUND_BACKUP_BUG := 1
