@@ -244,6 +244,9 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.se.omapi-V1-ndk.so
             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.secure_element-V1-ndk.so
         endif
+        ifeq ($(TW_INCLUDE_ZSTD), true)
+            RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/zstd
+        endif
         ifneq ($(TW_EXCLUDE_LIBXML2), true)
             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libxml2.so
         endif
