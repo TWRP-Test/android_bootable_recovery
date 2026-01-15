@@ -40,6 +40,9 @@ extern "C" {
 #include "../twrp-functions.hpp"
 #include "../adbbu/libtwadbbu.hpp"
 
+#include <sys/utsname.h>
+#include "../partitions.hpp"
+
 int GUIFileSelector::mSortOrder = 0;
 
 GUIFileSelector::GUIFileSelector(xml_node<>* node) : GUIScrollList(node)
@@ -437,6 +440,31 @@ void GUIFileSelector::NotifySelect(size_t item_selected)
 			}
 		} else if (!mVariable.empty()) {
 			str = mFileList.at(item_selected - folderSize).fileName;
+			std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+			if (str.size() >= 4 && str.compare(str.size() - 4, 4, ".img") == 0) {
+				DataManager::SetValue("tw_selectimage", 1);
+				if (str == "boot.img" || str == "boot_a.img" || str == "boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/boot;");
+				} else if (str == "init_boot.img" || str == "init_boot_a.img" || str == "init_boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/init_boot;");
+				} else if (str == "vendor_boot.img" || str == "vendor_boot_a.img" || str == "vendor_boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/vendor_boot;");
+				} else if ((str.find("recovery") == 0) || (str.find("twrp") == 0) || (str.find("orangefox") == 0)) {
+					DataManager::SetValue("tw_flash_partition", "/recovery;");
+				} else if (str == "dtbo.img" || str == "dtbo_a.img" || str == "dtbo_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/dtbo;");
+				} else if (str.find("kernelsu_patched_") == 0) {
+					if (PartitionManager.Find_Partition_By_Path("/init_boot") != nullptr) {
+						DataManager::SetValue("tw_flash_partition", "/init_boot;");
+					} else {
+						DataManager::SetValue("tw_flash_partition", "/boot;");
+					}
+				} else {
+				    DataManager::SetValue("tw_flash_partition", "");
+				}
+			} else {
+				DataManager::SetValue("tw_selectimage", 0);
+			}
 			if (mSelection != "0")
 				DataManager::SetValue(mSelection, str);
 
