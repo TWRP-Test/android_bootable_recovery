@@ -459,7 +459,7 @@ void GUIFileSelector::NotifySelect(size_t item_selected)
 						DataManager::SetValue("tw_flash_partition", "/boot;");
 					}
 				} else {
-				    DataManager::SetValue("tw_flash_partition", "");
+					DataManager::SetValue("tw_flash_partition", "");
 				}
 			} else {
 				DataManager::SetValue("tw_selectimage", 0);
