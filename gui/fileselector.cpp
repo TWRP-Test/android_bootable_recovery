@@ -40,7 +40,6 @@ extern "C" {
 #include "../twrp-functions.hpp"
 #include "../adbbu/libtwadbbu.hpp"
 
-#include <sys/utsname.h>
 #include "../partitions.hpp"
 
 int GUIFileSelector::mSortOrder = 0;
