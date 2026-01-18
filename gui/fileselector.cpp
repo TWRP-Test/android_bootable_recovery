@@ -40,6 +40,8 @@ extern "C" {
 #include "../twrp-functions.hpp"
 #include "../adbbu/libtwadbbu.hpp"
 
+#include "../partitions.hpp"
+
 int GUIFileSelector::mSortOrder = 0;
 
 GUIFileSelector::GUIFileSelector(xml_node<>* node) : GUIScrollList(node)
@@ -437,6 +439,32 @@ void GUIFileSelector::NotifySelect(size_t item_selected)
 			}
 		} else if (!mVariable.empty()) {
 			str = mFileList.at(item_selected - folderSize).fileName;
+			std::string str_lower = str;
+			std::transform(str_lower.begin(), str_lower.end(), str_lower.begin(), ::tolower);
+			if (str_lower.size() >= 4 && str_lower.compare(str_lower.size() - 4, 4, ".img") == 0) {
+				DataManager::SetValue("tw_selectimage", 1);
+				if (str_lower == "boot.img" || str_lower == "boot_a.img" || str_lower == "boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/boot;");
+				} else if (str_lower == "init_boot.img" || str_lower == "init_boot_a.img" || str_lower == "init_boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/init_boot;");
+				} else if (str_lower == "vendor_boot.img" || str_lower == "vendor_boot_a.img" || str_lower == "vendor_boot_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/vendor_boot;");
+				} else if ((str_lower.find("recovery") == 0) || (str_lower.find("twrp") == 0) || (str_lower.find("orangefox") == 0)) {
+					DataManager::SetValue("tw_flash_partition", "/recovery;");
+				} else if (str_lower == "dtbo.img" || str_lower == "dtbo_a.img" || str_lower == "dtbo_b.img") {
+					DataManager::SetValue("tw_flash_partition", "/dtbo;");
+				} else if (str_lower.find("kernelsu_patched_") == 0) {
+					if (PartitionManager.Find_Partition_By_Path("/init_boot") != nullptr) {
+						DataManager::SetValue("tw_flash_partition", "/init_boot;");
+					} else {
+						DataManager::SetValue("tw_flash_partition", "/boot;");
+					}
+				} else {
+					DataManager::SetValue("tw_flash_partition", "");
+				}
+			} else {
+				DataManager::SetValue("tw_selectimage", 0);
+			}
 			if (mSelection != "0")
 				DataManager::SetValue(mSelection, str);
 
