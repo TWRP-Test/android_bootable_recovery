@@ -7,40 +7,12 @@
 #include <android-base/strings.h>
 #include <sys/mount.h>
 
-static void TrimString(std::string& s) {
-	while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r' || s.front() == '\n')) {
-		s.erase(s.begin());
-	}
-	while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n')) {
-		s.pop_back();
-	}
-}
-
-static std::string GetPropFromBuildProp(const std::string& path, const std::string& key) {
-	std::string content;
-	if (!android::base::ReadFileToString(path, &content)) {
-		LOGINFO("Failed to read %s\n", path.c_str());
-		return "";
-	}
-
-	for (const auto& line : android::base::Split(content, "\n")) {
-		if (android::base::StartsWith(line, key + "=")) {
-			auto value = line.substr(key.size() + 1);
-			TrimString(value);
-			return value;
-		}
-	}
-
-	LOGINFO("Key %s not found in %s\n", key.c_str(), path.c_str());
-	return "";
-}
-
 static void ResetProp(const std::string& key, const std::string& value) {
-    if (value.empty())
-        return;
+	if (value.empty())
+		return;
 
-    std::string cmd = "/system/bin/resetprop " + key + " " + value;
-    TWFunc::Exec_Cmd(cmd);
+	std::string cmd = "/system/bin/resetprop " + key + " " + value;
+	TWFunc::Exec_Cmd(cmd);
 }
 #endif
 
@@ -145,15 +117,13 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 	}
 
 #ifdef TW_INCLUDE_CRYPTO
-	LOGINFO("Begging override security patch...\n");
+	LOGINFO("Beginning override security patch...\n");
 
-	vendor_patch = GetPropFromBuildProp("/vendor/build.prop", "ro.vendor.build.security_patch");
+	vendor_patch = TWFunc::Partition_Property_Get("ro.vendor.build.security_patch", PartitionManager, "/vendor", "build.prop");
 
 	if (!vendor_patch.empty()) {
 		ResetProp("ro.vendor.build.security_patch", vendor_patch);
 	}
-
-	LOGINFO("Mounting /system_root for build.prop check\n");
 
 	if (sysroot) {
 		sysroot->Mount(true);
@@ -162,13 +132,13 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 		mount("/system", "/system_root", "", MS_BIND, NULL);
 	}
 
-	system_patch = GetPropFromBuildProp("/system_root/system/build.prop", "ro.build.version.security_patch");
+	system_patch = TWFunc::Partition_Property_Get("ro.build.version.security_patch", PartitionManager, "/system_root", "build.prop");
 
 	if (!system_patch.empty()) {
 		ResetProp("ro.build.version.security_patch", system_patch);
 	}
 
-	LOGINFO("Endding override security patch...\n");
+	LOGINFO("Ending override security patch...\n");
 #endif
 
 	if (ven_dlkm) {
@@ -189,6 +159,7 @@ exit:
 		ven->UnMount(false);
 	if (ven_dlkm)
 		ven_dlkm->UnMount(false, MNT_DETACH);
+
 #ifdef TW_INCLUDE_CRYPTO
 	if (sysroot)
 		sysroot->UnMount(false);
