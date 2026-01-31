@@ -2,6 +2,20 @@
 #include "common.h"
 #include "variables.h"
 
+#ifdef TW_INCLUDE_CRYPTO
+#include <android-base/file.h>
+#include <android-base/strings.h>
+#include <sys/mount.h>
+
+static void ResetProp(const std::string& key, const std::string& value) {
+	if (value.empty())
+		return;
+
+	std::string cmd = "/system/bin/resetprop " + key + " " + value;
+	TWFunc::Exec_Cmd(cmd);
+}
+#endif
+
 const std::vector<std::string> kernel_modules_requested = TWFunc::split_string(EXPAND(TW_LOAD_VENDOR_MODULES), ' ', true);
 
 BOOT_MODE KernelModuleLoader::Get_Boot_Mode() {
@@ -30,6 +44,11 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 	// check /vendor_dlkm/lib/modules (vendor_dlkm mounted)
 	if (android::base::GetBoolProperty(TW_MODULES_MOUNTED_PROP, false)) return true;
 	int modules_loaded = 0;
+#ifdef TW_INCLUDE_CRYPTO
+	std::string vendor_patch;
+	std::string system_patch;
+	TWPartition* sysroot = PartitionManager.Find_Partition_By_Path("/system_root");
+#endif
 
 	LOGINFO("Attempting to load modules\n");
 	std::string vendor_base_dir(VENDOR_MODULE_DIR);
@@ -96,6 +115,32 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 		LOGINFO("Checking mounted /vendor\n");
 		ven->Mount(true);
 	}
+
+#ifdef TW_INCLUDE_CRYPTO
+	LOGINFO("Beginning override security patch...\n");
+
+	vendor_patch = TWFunc::Partition_Property_Get("ro.vendor.build.security_patch", PartitionManager, "/vendor", "build.prop");
+
+	if (!vendor_patch.empty()) {
+		ResetProp("ro.vendor.build.security_patch", vendor_patch);
+	}
+
+	if (sysroot) {
+		sysroot->Mount(true);
+	} else {
+		TWFunc::Recursive_Mkdir("/system_root");
+		mount("/system", "/system_root", "", MS_BIND, NULL);
+	}
+
+	system_patch = TWFunc::Partition_Property_Get("ro.build.version.security_patch", PartitionManager, "/system_root", "build.prop");
+
+	if (!system_patch.empty()) {
+		ResetProp("ro.build.version.security_patch", system_patch);
+	}
+
+	LOGINFO("Ending override security patch...\n");
+#endif
+
 	if (ven_dlkm) {
 		LOGINFO("Checking mounted /vendor_dlkm\n");
 		ven_dlkm->Mount(true);
@@ -114,6 +159,11 @@ exit:
 		ven->UnMount(false);
 	if (ven_dlkm)
 		ven_dlkm->UnMount(false, MNT_DETACH);
+
+#ifdef TW_INCLUDE_CRYPTO
+	if (sysroot)
+		sysroot->UnMount(false);
+#endif
 
 	android::base::SetProperty(TW_MODULES_MOUNTED_PROP, "true");
 
