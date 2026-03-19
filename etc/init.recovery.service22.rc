@@ -4,3 +4,4 @@ on boot
 service recovery /system/bin/recovery
     socket recovery stream 422 system system
     seclabel u:r:recovery:s0
+    user root
