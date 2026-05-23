@@ -647,10 +647,10 @@ bool TWPartition::Process_Fstab_Line(const char *fstab_line, bool Display_Error,
 		}
 	}
 
-	if (Mount_Point == "/persist" && Can_Be_Mounted) {
+	if (Mount_Point == TW_PERSIST_ROOT && Can_Be_Mounted) {
 		bool mounted = Is_Mounted();
 		if (mounted || Mount(false)) {
-			TWFunc::Fixup_Time_On_Boot("/persist/time/");
+			TWFunc::Fixup_Time_On_Boot(TW_PERSIST_ROOT "/time/");
 			if (!mounted)
 				UnMount(false);
 		}
@@ -2277,9 +2277,9 @@ bool TWPartition::Wipe_EXTFS(string File_System) {
 			LOGINFO("Cannot lookup security context for '%s'\n", Mount_Point.c_str());
 		} else {
 			// Execute e2fsdroid to initialize selinux context
-			if (Mount_Point == "/persist") {
+			if (Mount_Point == TW_PERSIST_ROOT) {
 				Mount(true);
-				TWFunc::removeDir("/persist/lost+found", false);
+				TWFunc::removeDir(TW_PERSIST_ROOT "/lost+found", false);
 				UnMount(true);
 			}
 			Command = "e2fsdroid -e -S /file_contexts -a " + File_Contexts_Entry + " " + Actual_Block_Device;
