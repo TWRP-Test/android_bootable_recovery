@@ -2026,7 +2026,7 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 			gui_msg(Msg("decrypt_success_dev=Data successfully decrypted, new block device: '{1}'")(Block_Device));
 		} else {
 			std::string crypto_blkdev = android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "");
-			if (!crypto_blkdev.empty()) {
+			if (!crypto_blkdev.empty() && crypto_blkdev != "error") {
 				dat->Decrypted_Block_Device = crypto_blkdev;
 				gui_msg(Msg("decrypt_success_dev=Data successfully decrypted, new block device: '{1}'")(crypto_blkdev));
 			} else {
@@ -2065,7 +2065,6 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 	} else
 		LOGERR("Unable to locate data partition.\n");
 }
-
 
 void TWPartitionManager::Parse_Users() {
 #ifdef TW_INCLUDE_FBE
@@ -2180,6 +2179,10 @@ int TWPartitionManager::Decrypt_Device(string Password, int user_id) {
 
 	if (DataManager::GetIntValue(TW_IS_FBE)) {
 #ifdef TW_INCLUDE_FBE
+		TWPartition* dat = Find_Partition_By_Path("/data");
+		if (dat && !dat->Decrypted_Block_Device.empty()) {
+		dat->Is_Decrypted = true;
+		}
 		if (!Mount_By_Path("/data", true)) // /data has to be mounted for FBE
 			return -1;
 
