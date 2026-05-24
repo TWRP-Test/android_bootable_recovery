@@ -700,6 +700,7 @@ void TWPartition::Setup_Data_Partition(bool Display_Error) {
 	if (strcmp(crypto_blkdev, "error") != 0) {
 		Set_FBE_Status();
 		Decrypted_Block_Device = crypto_blkdev;
+		Is_Decrypted = true;
 		LOGINFO("Data already decrypted, new block device: '%s'\n", crypto_blkdev);
 		#ifndef TW_PREPARE_DATA_MEDIA_EARLY
 		if (datamedia)
