@@ -2025,7 +2025,13 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 			dat->Decrypted_Block_Device = Block_Device;
 			gui_msg(Msg("decrypt_success_dev=Data successfully decrypted, new block device: '{1}'")(Block_Device));
 		} else {
-			gui_msg("decrypt_success_nodev=Data successfully decrypted");
+			std::string crypto_blkdev = android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "");
+			if (!crypto_blkdev.empty()) {
+				dat->Decrypted_Block_Device = crypto_blkdev;
+				gui_msg(Msg("decrypt_success_dev=Data successfully decrypted, new block device: '{1}'")(crypto_blkdev));
+			} else {
+				gui_msg("decrypt_success_nodev=Data successfully decrypted");
+			}
 		}
 		property_set("twrp.decrypt.done", "true");
 		dat->Setup_File_System(false);
@@ -2059,6 +2065,7 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 	} else
 		LOGERR("Unable to locate data partition.\n");
 }
+
 
 void TWPartitionManager::Parse_Users() {
 #ifdef TW_INCLUDE_FBE
