@@ -2181,7 +2181,7 @@ int TWPartitionManager::Decrypt_Device(string Password, int user_id) {
 #ifdef TW_INCLUDE_FBE
 		TWPartition* dat = Find_Partition_By_Path("/data");
 		if (dat && !dat->Decrypted_Block_Device.empty()) {
-		dat->Is_Decrypted = true;
+			dat->Is_Decrypted = true;
 		}
 		if (!Mount_By_Path("/data", true)) // /data has to be mounted for FBE
 			return -1;
