@@ -1540,8 +1540,6 @@ bool TWPartition::Mount(bool Display_Error) {
 		return false;
 	}
 
-	Find_Actual_Block_Device();
-
 	// Check the current file system before mounting
 	Check_FS_Type();
 	if (Current_File_System == "exfat") {
