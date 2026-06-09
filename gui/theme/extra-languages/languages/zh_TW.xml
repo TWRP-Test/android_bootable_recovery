@@ -75,7 +75,7 @@
 		<string name="zip_queue_count_s">已選 %tw_zip_queue_count% 個，最多 10 個：</string>
 		<string name="zip_warn1">此操作可能會刷入不相容的韌體，</string>
 		<string name="zip_warn2">致使您的裝置變磚。</string>
-		<string name="zip_back_cancel">按返回按鈕取消添加此刷機包。</string>
+		<string name="zip_back_cancel">按返回按鈕取消增加此刷機包。</string>
 		<string name="zip_back_clear">按返回按鈕清除刷機包刷入佇列。</string>
 		<string name="folder">目錄：</string>
 		<string name="file">文件：</string>
@@ -87,7 +87,7 @@
 		<string name="zip_queue">佇列：</string>
 		<string name="options">選項：</string>
 		<string name="swipe_confirm">   確認</string>
-		<string name="zip_add_btn">添加更多刷機包</string>
+		<string name="zip_add_btn">增加更多刷機包</string>
 		<string name="zip_clear_btn">清除刷機佇列</string>
 		<string name="install_zip_count_hdr">正在刷入第 %tw_zip_index% 個，共 %tw_zip_queue_count% 個</string>
 		<string name="installing_zip_xml">正在安裝: %tw_file%</string>
@@ -229,7 +229,7 @@
 		<string name="boot_slot_b">槽位 B</string>
 		<string name="changing_boot_slot">更改啟動槽位</string>
 		<string name="changing_boot_slot_complete">更改啟動槽位完成</string>
-		<string name="refresh_sizes_btn">刷新大小</string>
+		<string name="refresh_sizes_btn">重新整理大小</string>
 		<string name="swipe_backup">滑動滑塊確認備份</string>
 		<string name="append_date_btn">附加日期</string>
 		<string name="backup_name_exists">使用該名稱的備份已經存在！</string>
@@ -394,7 +394,7 @@
 		<string name="part_sd_s_btn">SDCard</string>
 		<string name="file_manager_btn">文件管理</string>
 		<string name="language_hdr">語言</string>
-		<string name="terminal_btn">終端命令</string>
+		<string name="terminal_btn">終端指令</string>
 		<string name="reload_theme_btn">重載主題</string>
 		<string name="inject_twrp_btn">注入 TWRP</string>
 		<string name="inject_twrp_confirm">是否重新注入 TWRP？</string>
@@ -453,7 +453,7 @@
 		<string name="decrypt_data_enter_pattern">繪製解鎖圖案</string>
 		<string name="decrypt_data_trying">正在嘗試解密</string>
 		<string name="decrypt_data_vold_os_missing">缺少解密 vold 所需的文件: {1}</string>
-		<string name="term_hdr">終端命令</string>
+		<string name="term_hdr">終端指令</string>
 		<string name="term_s_hdr">終端</string>
 		<string name="term_kill_btn">終止</string>
 		<string name="term_sel_folder_hdr">選擇執行目錄</string>
@@ -495,7 +495,7 @@
 		<string name="unpacking_image">正在解包 {1}…</string>
 		<string name="repacking_image">正在打包 {1}…</string>
 		<string name="repack_image_hdr">選擇映像</string>
-		<string name="repack_overwrite_warning">如果裝置之前有 Root 權限，現在可能被覆蓋，請重新獲取 Root 權限。</string>
+		<string name="repack_overwrite_warning">如果裝置之前有 Root 權限，現在可能被覆蓋，請重新取得 Root 權限。</string>
 		<string name="reflash_twrp">刷入目前的 TWRP</string>
 		<string name="reflash_twrp_confirm">是否刷入目前的 TWRP？</string>
 		<string name="reflashing_twrp">正在刷入 TWRP…</string>
@@ -745,7 +745,7 @@
 		<string name="rescue_party2"> 2. 格式化 Data 分割區；</string>
 		<string name="rescue_party3"> 3. 重新刷入您的 ROM。</string>
 		<string name="rescue_party4">報告的問題為：</string>
-		<string name="restore_system_context">無法獲取 {1} 的預設 context -- Android 可能無法啟動。</string>
+		<string name="restore_system_context">無法取得 {1} 的預設 context -- Android 可能無法啟動。</string>
 		<string name="change_twrp_folder_btn">更改 TWRP 資料夾</string>
 		<string name="change_twrp_folder_on_process">正在更改 TWRP 資料夾</string>
 		<string name="change_twrp_folder_after_process">TWRP 資料夾已改為</string>
@@ -774,13 +774,13 @@
 		<string name="restore_with_pattern2">復原前應該在 ROM 中停用圖案密碼</string>
 		<string name="reboot_after_restore">建議在 Android 首次啟動後再重啟一次。</string>
 		<string name="install_took_seconds_msg">安裝耗時 {1} 秒。</string>
-		<string name="auto_disable_avb2">刷入 ROM 後自動禁用 AVB2.0</string>
-		<string name="disable_avb2">禁用 AVB2.0</string>
-		<string name="disable_avb2_confirm">是否禁用 AVB2.0？</string>
-		<string name="disabling_AVB2">正在禁用 AVB2.0…</string>
-		<string name="disabling_AVB2_complete">禁用 AVB2.0 完成！</string>
-		<string name="disable_avb2_success_msg">禁用 AVB2.0: 處理 '{1}' 成功。</string>
-		<string name="disable_avb2_fail_msg">禁用 AVB2.0: 處理 '{1}' 失敗！</string>
+		<string name="auto_disable_avb2">刷入 ROM 後自動停用 AVB2.0</string>
+		<string name="disable_avb2">停用 AVB2.0</string>
+		<string name="disable_avb2_confirm">是否停用 AVB2.0？</string>
+		<string name="disabling_AVB2">正在停用 AVB2.0…</string>
+		<string name="disabling_AVB2_complete">停用 AVB2.0 完成！</string>
+		<string name="disable_avb2_success_msg">停用 AVB2.0: 處理 '{1}' 成功。</string>
+		<string name="disable_avb2_fail_msg">停用 AVB2.0: 處理 '{1}' 失敗！</string>
 		<string name="wlan_btn">WLAN</string>
 		<string name="extension_btn">擴充</string>
 		<string name="wlan_password_hdr">輸入密碼</string>
