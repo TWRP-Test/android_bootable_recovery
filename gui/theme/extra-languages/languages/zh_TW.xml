@@ -75,7 +75,7 @@
 		<string name="zip_queue_count_s">已選 %tw_zip_queue_count% 個，最多 10 個：</string>
 		<string name="zip_warn1">此操作可能會刷入不相容的韌體，</string>
 		<string name="zip_warn2">致使您的裝置變磚。</string>
-		<string name="zip_back_cancel">按返回按鈕取消添加此刷機包。</string>
+		<string name="zip_back_cancel">按返回按鈕取消增加此刷機包。</string>
 		<string name="zip_back_clear">按返回按鈕清除刷機包刷入佇列。</string>
 		<string name="folder">目錄：</string>
 		<string name="file">文件：</string>
@@ -87,7 +87,7 @@
 		<string name="zip_queue">佇列：</string>
 		<string name="options">選項：</string>
 		<string name="swipe_confirm">   確認</string>
-		<string name="zip_add_btn">添加更多刷機包</string>
+		<string name="zip_add_btn">增加更多刷機包</string>
 		<string name="zip_clear_btn">清除刷機佇列</string>
 		<string name="install_zip_count_hdr">正在刷入第 %tw_zip_index% 個，共 %tw_zip_queue_count% 個</string>
 		<string name="installing_zip_xml">正在安裝: %tw_file%</string>
@@ -229,7 +229,7 @@
 		<string name="boot_slot_b">槽位 B</string>
 		<string name="changing_boot_slot">更改啟動槽位</string>
 		<string name="changing_boot_slot_complete">更改啟動槽位完成</string>
-		<string name="refresh_sizes_btn">刷新大小</string>
+		<string name="refresh_sizes_btn">重新整理大小</string>
 		<string name="swipe_backup">滑動滑塊確認備份</string>
 		<string name="append_date_btn">附加日期</string>
 		<string name="backup_name_exists">使用該名稱的備份已經存在！</string>
@@ -394,7 +394,7 @@
 		<string name="part_sd_s_btn">SDCard</string>
 		<string name="file_manager_btn">文件管理</string>
 		<string name="language_hdr">語言</string>
-		<string name="terminal_btn">終端命令</string>
+		<string name="terminal_btn">終端指令</string>
 		<string name="reload_theme_btn">重載主題</string>
 		<string name="inject_twrp_btn">注入 TWRP</string>
 		<string name="inject_twrp_confirm">是否重新注入 TWRP？</string>
@@ -453,7 +453,7 @@
 		<string name="decrypt_data_enter_pattern">繪製解鎖圖案</string>
 		<string name="decrypt_data_trying">正在嘗試解密</string>
 		<string name="decrypt_data_vold_os_missing">缺少解密 vold 所需的文件: {1}</string>
-		<string name="term_hdr">終端命令</string>
+		<string name="term_hdr">終端指令</string>
 		<string name="term_s_hdr">終端</string>
 		<string name="term_kill_btn">終止</string>
 		<string name="term_sel_folder_hdr">選擇執行目錄</string>
@@ -490,10 +490,12 @@
 		<string name="install_complete">安裝完成</string>
 		<string name="unpack_error">解包映像錯誤。</string>
 		<string name="repack_error">重新打包映像錯誤。</string>
+		<string name="modified_ramdisk_error">ramdisk 檔案已被修改，無法建立要刷入的 ramdisk。請使用 fastboot boot twrp 後再重試此選項，或改用「安裝 Recovery Ramdisk」選項。</string>
+		<string name="create_ramdisk_error">建立要刷入的 ramdisk 失敗。</string>
 		<string name="unpacking_image">正在解包 {1}…</string>
 		<string name="repacking_image">正在打包 {1}…</string>
 		<string name="repack_image_hdr">選擇映像</string>
-		<string name="repack_overwrite_warning">如果裝置之前有 Root 權限，現在可能被覆蓋，請重新獲取 Root 權限。</string>
+		<string name="repack_overwrite_warning">如果裝置之前有 Root 權限，現在可能被覆蓋，請重新取得 Root 權限。</string>
 		<string name="reflash_twrp">刷入目前的 TWRP</string>
 		<string name="reflash_twrp_confirm">是否刷入目前的 TWRP？</string>
 		<string name="reflashing_twrp">正在刷入 TWRP…</string>
@@ -533,7 +535,9 @@
 		<string name="digest_error" version="2"> * Digest 錯誤！</string>
 		<string name="digest_compute_error" version="2"> * 計算 Digest 錯誤。</string>
 		<string name="current_date">（目前日期）</string>
+		<string name="curr_date">（目前日期）</string>
 		<string name="auto_generate">（自動生成）</string>
+		<string name="auto_gen">（自動生成）</string>
 		<string name="unable_to_locate_partition">未找到“{1}”分割區。</string>
 		<string name="no_partition_selected">未選擇備份分割區。</string>
 		<string name="total_partitions_backup"> * 備份分割區總數: {1}</string>
@@ -728,19 +732,20 @@
 		<string name="flash_ab_inactive">正在刷入 A/B Zip 刷機包至非活動槽位: {1}</string>
 		<string name="flash_ab_reboot">請重啟 TWRP 切換到新槽位後，再刷入其它的 Zip。</string>
 		<string name="flash_ab_both_slots">刷入到 2 個槽位</string>
-		<string name="ozip _decrypt_decryption">正在解密 Ozip…</string>
-		<string name="ozip _decrypt_finish">Ozip 解密完成！</string>
+		<string name="ozip_decrypt_decryption">正在解密 Ozip…</string>
+		<string name="ozip_decrypt_finish">Ozip 解密完成！</string>
 		<string name="fastboot_button">Fastboot</string>
 		<string name="enable_adb">啟用 ADB</string>
 		<string name="enable_fastboot">啟用 Fastboot</string>
 		<string name="fastboot_console_msg">進入 Fastboot 模式…</string>
+		<string name="data_media_fbe_msg">TWRP 不會在 FBE 裝置上重新建立 /data/media。請重新啟動到 ROM 以建立 /data/media</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android 救援程式已觸發！您可以嘗試下面的操作：</string>
 		<string name="rescue_party1"> 1. 清除 Cache；</string>
 		<string name="rescue_party2"> 2. 格式化 Data 分割區；</string>
 		<string name="rescue_party3"> 3. 重新刷入您的 ROM。</string>
 		<string name="rescue_party4">報告的問題為：</string>
-		<string name="restore_system_context">無法獲取 {1} 的預設 context -- Android 可能無法啟動。</string>
+		<string name="restore_system_context">無法取得 {1} 的預設 context -- Android 可能無法啟動。</string>
 		<string name="change_twrp_folder_btn">更改 TWRP 資料夾</string>
 		<string name="change_twrp_folder_on_process">正在更改 TWRP 資料夾</string>
 		<string name="change_twrp_folder_after_process">TWRP 資料夾已改為</string>
@@ -749,6 +754,9 @@
 		<string name="unmap_super_devices_confirm">是否取消所有 Super Devices 映射？</string>
 		<string name="unmapping_super_devices">正在取消映射 Super Devices…</string>
 		<string name="unmap_super_devices_complete">取消所有 Super Devices 映射完成！</string>
+		<string name="remove_dynamic_groups_confirm">是否取消所有 Super Devices 映射？</string>
+		<string name="remove_dynamic_groups">正在取消 Super Devices 映射…</string>
+		<string name="remove_dynamic_groups_complete">已取消所有 Super Devices 映射</string>
 		<string name="merges_snapshots">合併快照</string>
 		<string name="merge_snapshots_confirm">是否合併快照？</string>
 		<string name="merging_snapshots">正在合併快照…</string>
@@ -766,12 +774,27 @@
 		<string name="restore_with_pattern2">復原前應該在 ROM 中停用圖案密碼</string>
 		<string name="reboot_after_restore">建議在 Android 首次啟動後再重啟一次。</string>
 		<string name="install_took_seconds_msg">安裝耗時 {1} 秒。</string>
-		<string name="auto_disable_avb2">刷入 ROM 後自動禁用 AVB2.0</string>
-		<string name="disable_avb2">禁用 AVB2.0</string>
-		<string name="disable_avb2_confirm">是否禁用 AVB2.0？</string>
-		<string name="disabling_AVB2">正在禁用 AVB2.0…</string>
-		<string name="disabling_AVB2_complete">禁用 AVB2.0 完成！</string>
-		<string name="disable_avb2_success_msg">禁用 AVB2.0: 處理 '{1}' 成功。</string>
-		<string name="disable_avb2_fail_msg">禁用 AVB2.0: 處理 '{1}' 失敗！</string>
+		<string name="auto_disable_avb2">刷入 ROM 後自動停用 AVB2.0</string>
+		<string name="disable_avb2">停用 AVB2.0</string>
+		<string name="disable_avb2_confirm">是否停用 AVB2.0？</string>
+		<string name="disabling_AVB2">正在停用 AVB2.0…</string>
+		<string name="disabling_AVB2_complete">停用 AVB2.0 完成！</string>
+		<string name="disable_avb2_success_msg">停用 AVB2.0: 處理 '{1}' 成功。</string>
+		<string name="disable_avb2_fail_msg">停用 AVB2.0: 處理 '{1}' 失敗！</string>
+		<string name="wlan_btn">WLAN</string>
+		<string name="extension_btn">擴充</string>
+		<string name="wlan_password_hdr">輸入密碼</string>
+		<string name="wlan_password_prompt">輸入網路密碼：</string>
+		<string name="wlan_encryption_hdr">加密：</string>
+		<string name="wlan_password_hint">按返回取消。</string>
+		<string name="wlan_log_hdr">此頁面由 Jason 建立</string>
+		<string name="wlan_get_status_btn">取得狀態</string>
+		<string name="wlan_test_network_btn">測試網路</string>
+		<string name="wlan_scan_btn">掃描</string>
+		<string name="wlan_connect_btn">連線</string>
+		<string name="wlan_stop_service_btn">停止服務</string>
+		<string name="wlan_start_service_btn">啟動服務</string>
+		<string name="select_wlan_hdr">選擇要連線的 WLAN</string>
+		<string name="next_btn">下一步</string>
 	</resources>
 </language>
