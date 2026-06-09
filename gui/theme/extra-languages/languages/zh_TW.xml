@@ -490,6 +490,8 @@
 		<string name="install_complete">安裝完成</string>
 		<string name="unpack_error">解包映像錯誤。</string>
 		<string name="repack_error">重新打包映像錯誤。</string>
+		<string name="modified_ramdisk_error">ramdisk 檔案已被修改，無法建立要刷入的 ramdisk。請使用 fastboot boot twrp 後再重試此選項，或改用「安裝 Recovery Ramdisk」選項。</string>
+		<string name="create_ramdisk_error">建立要刷入的 ramdisk 失敗。</string>
 		<string name="unpacking_image">正在解包 {1}…</string>
 		<string name="repacking_image">正在打包 {1}…</string>
 		<string name="repack_image_hdr">選擇映像</string>
@@ -533,7 +535,9 @@
 		<string name="digest_error" version="2"> * Digest 錯誤！</string>
 		<string name="digest_compute_error" version="2"> * 計算 Digest 錯誤。</string>
 		<string name="current_date">（目前日期）</string>
+		<string name="curr_date">（目前日期）</string>
 		<string name="auto_generate">（自動生成）</string>
+		<string name="auto_gen">（自動生成）</string>
 		<string name="unable_to_locate_partition">未找到“{1}”分割區。</string>
 		<string name="no_partition_selected">未選擇備份分割區。</string>
 		<string name="total_partitions_backup"> * 備份分割區總數: {1}</string>
@@ -734,6 +738,7 @@
 		<string name="enable_adb">啟用 ADB</string>
 		<string name="enable_fastboot">啟用 Fastboot</string>
 		<string name="fastboot_console_msg">進入 Fastboot 模式…</string>
+		<string name="data_media_fbe_msg">TWRP 不會在 FBE 裝置上重新建立 /data/media。請重新啟動到 ROM 以建立 /data/media</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android 救援程式已觸發！您可以嘗試下面的操作：</string>
 		<string name="rescue_party1"> 1. 清除 Cache；</string>
@@ -749,6 +754,9 @@
 		<string name="unmap_super_devices_confirm">是否取消所有 Super Devices 映射？</string>
 		<string name="unmapping_super_devices">正在取消映射 Super Devices…</string>
 		<string name="unmap_super_devices_complete">取消所有 Super Devices 映射完成！</string>
+		<string name="remove_dynamic_groups_confirm">是否取消所有 Super Devices 映射？</string>
+		<string name="remove_dynamic_groups">正在取消 Super Devices 映射…</string>
+		<string name="remove_dynamic_groups_complete">已取消所有 Super Devices 映射</string>
 		<string name="merges_snapshots">合併快照</string>
 		<string name="merge_snapshots_confirm">是否合併快照？</string>
 		<string name="merging_snapshots">正在合併快照…</string>
@@ -773,5 +781,20 @@
 		<string name="disabling_AVB2_complete">禁用 AVB2.0 完成！</string>
 		<string name="disable_avb2_success_msg">禁用 AVB2.0: 處理 '{1}' 成功。</string>
 		<string name="disable_avb2_fail_msg">禁用 AVB2.0: 處理 '{1}' 失敗！</string>
+		<string name="wlan_btn">WLAN</string>
+		<string name="extension_btn">擴充</string>
+		<string name="wlan_password_hdr">輸入密碼</string>
+		<string name="wlan_password_prompt">輸入網路密碼：</string>
+		<string name="wlan_encryption_hdr">加密：</string>
+		<string name="wlan_password_hint">按返回取消。</string>
+		<string name="wlan_log_hdr">此頁面由 Jason 建立</string>
+		<string name="wlan_get_status_btn">取得狀態</string>
+		<string name="wlan_test_network_btn">測試網路</string>
+		<string name="wlan_scan_btn">掃描</string>
+		<string name="wlan_connect_btn">連線</string>
+		<string name="wlan_stop_service_btn">停止服務</string>
+		<string name="wlan_start_service_btn">啟動服務</string>
+		<string name="select_wlan_hdr">選擇要連線的 WLAN</string>
+		<string name="next_btn">下一步</string>
 	</resources>
 </language>
