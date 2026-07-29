@@ -624,5 +624,19 @@
         <string name="no_real_sdcard">Cet appareil n'a pas une vraie carte SD! Abandon!</string>
         <string name="cancel_sideload">Annulation du transfert par ADB...</string>
         <string name="change_fs_err">Erreur lors du changement du système de fichier.</string>
-    </resources>
+		<string name="root_tools">Outils root</string>
+		<string name="root_tools_choose">Choisissez une solution root</string>
+		<string name="install_kernelsu">Installer KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Installer KernelSU dans init_boot actif ?</string>
+		<string name="root_tools_backup_note">L’image d’origine sera d’abord sauvegardée.</string>
+		<string name="installing_kernelsu">Installation de KernelSU...</string>
+		<string name="install_kernelsu_complete">Installation de KernelSU terminée</string>
+		<string name="install_magisk">Installer Magisk</string>
+		<string name="install_magisk_confirm">Installer Magisk dans l’emplacement actif ?</string>
+		<string name="installing_magisk">Installation de Magisk...</string>
+		<string name="install_magisk_complete">Installation de Magisk terminée</string>
+		<string name="root_tools_warning">N’installez pas KernelSU et Magisk ensemble.</string>
+		<string name="flash_kernelsu_version">Flasher KernelSU v3.2.5</string>
+		<string name="flash_magisk_version">Flasher Magisk v30.7</string>
+	</resources>
 </language>

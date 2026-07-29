@@ -737,5 +737,19 @@
 		<string name="change_twrp_folder_on_process">Mengubah folder TWRP</string>
 		<string name="change_twrp_folder_after_process">Folder TWRP diubah ke</string>
 		<string name="tw_folder_exists">Nama folder sudah ada!</string>
+		<string name="root_tools">Root Tools</string>
+		<string name="root_tools_choose">Choose one root solution</string>
+		<string name="install_kernelsu">Install KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Install KernelSU to active init_boot?</string>
+		<string name="root_tools_backup_note">The original image will be backed up first.</string>
+		<string name="installing_kernelsu">Installing KernelSU...</string>
+		<string name="install_kernelsu_complete">KernelSU installation complete</string>
+		<string name="install_magisk">Install Magisk</string>
+		<string name="install_magisk_confirm">Install Magisk to the active slot?</string>
+		<string name="installing_magisk">Installing Magisk...</string>
+		<string name="install_magisk_complete">Magisk installation complete</string>
+		<string name="root_tools_warning">Do not install KernelSU and Magisk together.</string>
+		<string name="flash_kernelsu_version">Flash KernelSU v3.2.5</string>
+		<string name="flash_magisk_version">Flash Magisk v30.7</string>
 	</resources>
 </language>

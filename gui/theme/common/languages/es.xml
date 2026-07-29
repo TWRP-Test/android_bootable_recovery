@@ -627,5 +627,19 @@
 		<string name="theme_ver_err">Tema personalizado no coincide con la versión de TWRP. Usando tema stock.</string>
 		<string name="up_a_level">(Subir Un Nivel)</string>
 		<string name="install_reboot">Reiniciando en 5 segundos</string>
+		<string name="root_tools">Herramientas root</string>
+		<string name="root_tools_choose">Elige una solución root</string>
+		<string name="install_kernelsu">Instalar KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">¿Instalar KernelSU en init_boot activo?</string>
+		<string name="root_tools_backup_note">Primero se creará una copia de la imagen original.</string>
+		<string name="installing_kernelsu">Instalando KernelSU...</string>
+		<string name="install_kernelsu_complete">Instalación de KernelSU completada</string>
+		<string name="install_magisk">Instalar Magisk</string>
+		<string name="install_magisk_confirm">¿Instalar Magisk en la ranura activa?</string>
+		<string name="installing_magisk">Instalando Magisk...</string>
+		<string name="install_magisk_complete">Instalación de Magisk completada</string>
+		<string name="root_tools_warning">No instales KernelSU y Magisk juntos.</string>
+		<string name="flash_kernelsu_version">Flashear KernelSU v3.2.5</string>
+		<string name="flash_magisk_version">Flashear Magisk v30.7</string>
 	</resources>
 </language>

@@ -288,6 +288,9 @@ endif
 ifeq ($(TW_HAS_EDL_MODE), true)
     LOCAL_CFLAGS += -DTW_HAS_EDL_MODE
 endif
+ifeq ($(TW_INCLUDE_ROOT_TOOLS), true)
+    LOCAL_CFLAGS += -DTW_INCLUDE_ROOT_TOOLS
+endif
 ifeq ($(TW_NO_SCREEN_BLANK), true)
     LOCAL_CFLAGS += -DTW_NO_SCREEN_BLANK
 endif

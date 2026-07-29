@@ -787,5 +787,19 @@
 		<string name="wlan_start_service_btn">启动服务</string>
 		<string name="select_wlan_hdr">选择需要连接的WiFi</string>
 		<string name="next_btn">下一步</string>
+		<string name="root_tools">Root 工具</string>
+		<string name="root_tools_choose">请选择一种 Root 方案</string>
+		<string name="install_kernelsu">安装 KernelSU（LKM）</string>
+		<string name="install_kernelsu_confirm">将 KernelSU 安装到当前槽的 init_boot？</string>
+		<string name="root_tools_backup_note">操作前会先备份原始镜像。</string>
+		<string name="installing_kernelsu">正在安装 KernelSU…</string>
+		<string name="install_kernelsu_complete">KernelSU 安装完成</string>
+		<string name="install_magisk">安装 Magisk</string>
+		<string name="install_magisk_confirm">将 Magisk 安装到当前槽？</string>
+		<string name="installing_magisk">正在安装 Magisk…</string>
+		<string name="install_magisk_complete">Magisk 安装完成</string>
+		<string name="root_tools_warning">请勿同时安装 KernelSU 和 Magisk。</string>
+		<string name="flash_kernelsu_version">刷入 KernelSU v3.2.5</string>
+		<string name="flash_magisk_version">刷入 Magisk v30.7</string>
 	</resources>
 </language>

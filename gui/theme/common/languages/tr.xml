@@ -666,5 +666,19 @@
 		<string name="include_kernel_log">Kernel Kaydını Dahil Et</string>
 		<string name="sha2_chk">Hash için SHA2 kullan</string>
 		<string name="unable_set_boot_slot">Önyükleyici önyükleme yuvasını {1} olarak değiştiremiyor</string>
+		<string name="root_tools">Root araçları</string>
+		<string name="root_tools_choose">Bir root çözümü seçin</string>
+		<string name="install_kernelsu">KernelSU (LKM) yükle</string>
+		<string name="install_kernelsu_confirm">KernelSU etkin init_boot bölümüne yüklensin mi?</string>
+		<string name="root_tools_backup_note">Önce özgün imaj yedeklenecek.</string>
+		<string name="installing_kernelsu">KernelSU yükleniyor...</string>
+		<string name="install_kernelsu_complete">KernelSU yüklemesi tamamlandı</string>
+		<string name="install_magisk">Magisk yükle</string>
+		<string name="install_magisk_confirm">Magisk etkin yuvaya yüklensin mi?</string>
+		<string name="installing_magisk">Magisk yükleniyor...</string>
+		<string name="install_magisk_complete">Magisk yüklemesi tamamlandı</string>
+		<string name="root_tools_warning">KernelSU ve Magisk'i birlikte yüklemeyin.</string>
+		<string name="flash_kernelsu_version">KernelSU v3.2.5 flaşla</string>
+		<string name="flash_magisk_version">Magisk v30.7 flaşla</string>
 	</resources>
 </language>

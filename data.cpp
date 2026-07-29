@@ -955,6 +955,12 @@ void DataManager::SetDefaultValues()
 	mConst.SetValue("tw_has_boot_slots", "0");
 #endif
 
+#ifdef TW_INCLUDE_ROOT_TOOLS
+	mConst.SetValue("tw_has_root_tools", "1");
+#else
+	mConst.SetValue("tw_has_root_tools", "0");
+#endif
+
 #ifdef TW_NO_LEGACY_PROPS
 	LOGINFO("TW_NO_LEGACY_PROPS := true\n");
 #endif

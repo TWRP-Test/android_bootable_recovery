@@ -664,5 +664,19 @@
 		<string name="copy_kernel_log">Log del kernel copiato in {1}</string>
 		<string name="include_kernel_log">Includi Log del Kernel</string>
 		<string name="unable_set_boot_slot">Errore nel cambio slot d'avvio del bootloader in {1}</string>
+		<string name="root_tools">Strumenti root</string>
+		<string name="root_tools_choose">Scegli una soluzione root</string>
+		<string name="install_kernelsu">Installa KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Installare KernelSU nell’init_boot attivo?</string>
+		<string name="root_tools_backup_note">Prima verrà eseguito il backup dell’immagine originale.</string>
+		<string name="installing_kernelsu">Installazione di KernelSU...</string>
+		<string name="install_kernelsu_complete">Installazione di KernelSU completata</string>
+		<string name="install_magisk">Installa Magisk</string>
+		<string name="install_magisk_confirm">Installare Magisk nello slot attivo?</string>
+		<string name="installing_magisk">Installazione di Magisk...</string>
+		<string name="install_magisk_complete">Installazione di Magisk completata</string>
+		<string name="root_tools_warning">Non installare KernelSU e Magisk insieme.</string>
+		<string name="flash_kernelsu_version">Flash KernelSU v3.2.5</string>
+		<string name="flash_magisk_version">Flash Magisk v30.7</string>
 	</resources>
 </language>

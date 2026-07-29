@@ -641,5 +641,19 @@
 		<string name="theme_ver_err">カスタムテーマのバージョンが TWRP のバージョンと一致しません。標準のテーマを使用します。</string>
 		<string name="up_a_level">(上の階層へ)</string>
 		<string name="install_reboot">5秒後に再起動します</string>
+		<string name="root_tools">Rootツール</string>
+		<string name="root_tools_choose">Root方式を1つ選択</string>
+		<string name="install_kernelsu">KernelSU (LKM)をインストール</string>
+		<string name="install_kernelsu_confirm">有効なinit_bootにKernelSUをインストールしますか？</string>
+		<string name="root_tools_backup_note">最初に元のイメージをバックアップします。</string>
+		<string name="installing_kernelsu">KernelSUをインストール中...</string>
+		<string name="install_kernelsu_complete">KernelSUのインストールが完了しました</string>
+		<string name="install_magisk">Magiskをインストール</string>
+		<string name="install_magisk_confirm">有効なスロットにMagiskをインストールしますか？</string>
+		<string name="installing_magisk">Magiskをインストール中...</string>
+		<string name="install_magisk_complete">Magiskのインストールが完了しました</string>
+		<string name="root_tools_warning">KernelSUとMagiskを同時にインストールしないでください。</string>
+		<string name="flash_kernelsu_version">KernelSU v3.2.5を書き込む</string>
+		<string name="flash_magisk_version">Magisk v30.7を書き込む</string>
 	</resources>
 </language>
