@@ -2875,6 +2875,15 @@
 			</button>
 
 			<button style="main_button_half_height">
+				<placement x="%indent%" y="%row21a_y%"/>
+				<text>{@select_storage_btn=Select Storage}</text>
+				<actions>
+					<action function="set">tw_back=mount</action>
+					<action function="overlay">select_storage</action>
+				</actions>
+			</button>
+
+			<button style="main_button_half_height">
 				<conditions>
 					<condition var1="tw_is_encrypted" var2="1"/>
 					<condition var1="tw_is_decrypted" var2="0"/>
@@ -2886,15 +2895,6 @@
 				<action function="set">tw_password_fail=0</action>
 				<action function="set">tw_crypto_pwtype=%tw_crypto_pwtype_0%</action>
 				<action function="page">decrypt</action>
-			</button>
-
-			<button style="main_button_half_height">
-				<placement x="%indent%" y="%row21a_y%"/>
-				<text>{@select_storage_btn=Select Storage}</text>
-				<actions>
-					<action function="set">tw_back=mount</action>
-					<action function="overlay">select_storage</action>
-				</actions>
 			</button>
 
 			<button style="main_button_half_height">
