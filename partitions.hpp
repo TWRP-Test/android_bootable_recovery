@@ -354,6 +354,8 @@ public:
 	int Resize_By_Path(string Path, bool Display_Error);                      // Resizes a partition based on path
 	void Update_System_Details();                                             // Updates fstab, file systems, sizes, etc.
 	int Decrypt_Device(string Password, int user_id = 0);                     // Attempt to decrypt any encrypted partitions
+	bool Mount_Decrypted_Data();                                              // Remount FBE data and reinstall its user keys
+	bool UnMount_Decrypted_Data();                                            // Evict cached FBE user keys, then unmount data
 	void Parse_Users();                                                       // Parse FBE users
 	int usb_storage_enable(void);                                             // Enable USB storage mode
 	int usb_storage_disable(void);                                            // Disable USB storage mode

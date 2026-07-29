@@ -222,14 +222,22 @@ void GUIPartitionList::NotifySelect(size_t item_selected)
 	if (item_selected < mList.size()) {
 		int listSize = mList.size();
 		if (ListType == "mount") {
+			TWPartition* selected_part =
+				PartitionManager.Find_Partition_By_Path(mList.at(item_selected).Mount_Point);
 			if (!mList.at(item_selected).selected) {
-				if (PartitionManager.Mount_By_Path(mList.at(item_selected).Mount_Point, true)) {
+				bool mounted = selected_part && selected_part->Mount_Point == "/data" &&
+					selected_part->Is_Decrypted ? PartitionManager.Mount_Decrypted_Data() :
+					PartitionManager.Mount_By_Path(mList.at(item_selected).Mount_Point, true);
+				if (mounted) {
 					mList.at(item_selected).selected = 1;
 					PartitionManager.Add_MTP_Storage(mList.at(item_selected).Mount_Point);
 					mUpdate = 1;
 				}
 			} else {
-				if (PartitionManager.UnMount_By_Path(mList.at(item_selected).Mount_Point, true)) {
+				bool unmounted = selected_part && selected_part->Mount_Point == "/data" &&
+					selected_part->Is_Decrypted ? PartitionManager.UnMount_Decrypted_Data() :
+					PartitionManager.UnMount_By_Path(mList.at(item_selected).Mount_Point, true);
+				if (unmounted) {
 					mList.at(item_selected).selected = 0;
 					mUpdate = 1;
 				}

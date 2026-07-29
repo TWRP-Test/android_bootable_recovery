@@ -1792,7 +1792,11 @@ bool TWPartition::UnMount(bool Display_Error, int flags) {
 		if (!Symlink_Mount_Point.empty())
 			umount2(Symlink_Mount_Point.c_str(), flags);
 
-		umount2(Mount_Point.c_str(), flags);
+		int unmount_result = umount2(Mount_Point.c_str(), flags);
+		for (int retry = 0; unmount_result != 0 && errno == EBUSY && retry < 500; retry++) {
+			usleep(10000);
+			unmount_result = umount2(Mount_Point.c_str(), flags);
+		}
 		if (Is_Mounted()) {
 			if (Display_Error)
 				gui_msg(Msg(msg::kError, "fail_unmount=Failed to unmount '{1}' ({2})")(Mount_Point)(strerror(errno)));
@@ -2200,6 +2204,7 @@ bool TWPartition::Decrypt(string Password) {
 bool TWPartition::Wipe_Encryption() {
 	bool Save_Data_Media = Has_Data_Media;
 	bool ret = false;
+	bool wiped = false;
 	BasePartition* base_partition = make_partition();
 
 	if (!base_partition->PreWipeEncryption())
@@ -2215,6 +2220,25 @@ bool TWPartition::Wipe_Encryption() {
 #ifdef TW_INCLUDE_CRYPTO
 	if (!UnMount(true))
 		return false;
+	// Metadata encryption maps userdata through device-mapper. The raw
+	// userdata block device cannot be reformatted reliably while that mapping
+	// still exists, so tear it down before switching back to the raw device.
+	if (Mount_Point == "/data" &&
+		TWFunc::Path_Exists("/dev/block/mapper/userdata")) {
+		LOGINFO("Removing metadata-encryption userdata mapping before format.\n");
+		if (TWFunc::Exec_Cmd("dmctl delete userdata", false) != 0) {
+			LOGERR("Unable to remove metadata-encryption userdata mapping.\n");
+			return false;
+		}
+		for (int retry = 0;
+			 retry < 100 && TWFunc::Path_Exists("/dev/block/mapper/userdata");
+			 retry++)
+			usleep(10000);
+		if (TWFunc::Path_Exists("/dev/block/mapper/userdata")) {
+			LOGERR("userdata mapping did not disappear before format.\n");
+			return false;
+		}
+	}
 	if (Is_Decrypted && !Decrypted_Block_Device.empty()) {
 //		if (delete_crypto_blk_dev((char*)("userdata")) != 0) {
 //			LOGERR("Error deleting crypto block device, continuing anyway.\n");
@@ -2225,7 +2249,11 @@ bool TWPartition::Wipe_Encryption() {
 	Decrypted_Block_Device = "";
 	Is_Decrypted = false;
 	Is_Encrypted = false;
-	if (Wipe(Fstab_File_System)) {
+	// Format Data always recreates the raw userdata filesystem. Do not route
+	// this through generic Wipe(), whose data/media and rm-rf branches may try
+	// to mount the now-unmapped raw metadata-encrypted device.
+	wiped = Mount_Point == "/data" ? Wipe_F2FS() : Wipe(Fstab_File_System);
+	if (wiped) {
 		Has_Data_Media = Save_Data_Media;
 		DataManager::SetValue(TW_IS_ENCRYPTED, 0);
 #ifndef TW_OEM_BUILD
@@ -2566,6 +2594,7 @@ bool TWPartition::Wipe_F2FS() {
 	bool needs_casefold = false;
 
 	Find_Actual_Block_Device();
+	LOGINFO("Wipe_F2FS raw block device: %s\n", Actual_Block_Device.c_str());
 	if (!Is_Present) {
 		LOGINFO("Block device not present, cannot wipe %s.\n", Display_Name.c_str());
 		gui_msg(Msg(msg::kError, "unable_to_wipe=Unable to wipe {1}.")(Display_Name));
@@ -2577,6 +2606,7 @@ bool TWPartition::Wipe_F2FS() {
 	}
 
 	unsigned long long dev_sz = TWFunc::IOCTL_Get_Block_Size(Actual_Block_Device.c_str());
+	LOGINFO("Wipe_F2FS block size: %llu bytes\n", dev_sz);
 	if (!dev_sz)
 		return false;
 
