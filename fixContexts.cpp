@@ -32,8 +32,8 @@
 
 using namespace std;
 
-struct selabel_handle *sehandle;
-struct selinux_opt selinux_options[] = {
+static struct selabel_handle *sehandle;
+static struct selinux_opt selinux_options[] = {
 	{ SELABEL_OPT_PATH, "/file_contexts" }
 };
 
