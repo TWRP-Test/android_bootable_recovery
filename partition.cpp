@@ -804,10 +804,9 @@ bool TWPartition::Decrypt_FBE_DE() {
 	ExcludeAll(Mount_Point + "/per_boot"); // removed each boot by init
 	ExcludeAll(Mount_Point + "/gsi"); // cow devices
 
-	int retry_count = 3;
-	while (!android::keystore::Decrypt_DE() && --retry_count)
-		usleep(2000);
-	if (retry_count > 0) {
+	// Not retried: every attempt installs keys and touches the key directories
+	// again, so a retry only widens the damage when the first one went wrong.
+	if (android::keystore::Decrypt_DE()) {
 		PartitionManager.Set_Crypto_State();
 		Is_Encrypted = true;
 		Is_Decrypted = false;
