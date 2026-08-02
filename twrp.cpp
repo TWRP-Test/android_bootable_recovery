@@ -223,7 +223,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	LOGINFO("Backup of TWRP ramdisk done.\n");
 #endif
 #ifdef TW_INCLUDE_CRYPTO
-	android::keystore::copySqliteDb();
+	android::keystore::syncKeystoreDb();
 #endif
 	Decrypt_Page(skip_decryption, datamedia);
 
