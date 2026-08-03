@@ -339,7 +339,7 @@ public:
 	TWPartition* Find_Partition_By_Path(const string& Path);                  // Returns a pointer to a partition based on path
 	TWPartition* Find_Partition_By_Block_Device(const string& Block_Device);  // Returns a pointer to a partition based on block device
 	int Check_Backup_Name(const std::string& Backup_Name, bool Display_Error, bool Must_Be_Unique); // Checks the current backup name to ensure that it is valid and optionally that a backup with that name doesn't already exist
-	int Run_Backup(bool adbbackup);                                           // Initiates a backup in the current storage
+	bool Run_Backup(bool adbbackup);                                          // Initiates a backup in the current storage
 	int Run_Restore(const string& Restore_Name);                              // Restores a backup
 	bool Write_ADB_Stream_Header(uint64_t partition_count);                   // Write ADB header over twrpbu FIFO
 	bool Write_ADB_Stream_Trailer();                                          // Write ADB trailer over twrpbu FIFO

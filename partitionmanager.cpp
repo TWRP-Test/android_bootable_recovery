@@ -1119,7 +1119,7 @@ int TWPartitionManager::Cancel_Backup() {
 	return 0;
 }
 
-int TWPartitionManager::Run_Backup(bool adbbackup) {
+bool TWPartitionManager::Run_Backup(bool adbbackup) {
 	PartitionSettings part_settings;
 	int partition_count = 0, disable_free_space_check = 0, skip_digest = 0;
 	string Backup_Name, Backup_List, backup_path;
@@ -1263,8 +1263,8 @@ int TWPartitionManager::Run_Backup(bool adbbackup) {
 	// Half of a backup restores to half of a system, so do not leave one in
 	// the list looking like something that could be restored.
 	auto discard_unfinished_backup = [&]() {
-		if (backup_folder_made)
-			TWFunc::removeDir(part_settings.Backup_Folder, false);
+		if (backup_folder_made && TWFunc::removeDir(part_settings.Backup_Folder, false) != 0)
+			LOGERR("Unable to remove '%s'\n", part_settings.Backup_Folder.c_str());
 	};
 
 	DataManager::SetProgress(0.0);
@@ -1274,7 +1274,7 @@ int TWPartitionManager::Run_Backup(bool adbbackup) {
 	while (end_pos != string::npos && start_pos < Backup_List.size()) {
 		if (stop_backup.get_value() != 0) {
 			discard_unfinished_backup();
-			return -1;
+			return false;
 		}
 		backup_path = Backup_List.substr(start_pos, end_pos - start_pos);
 		part_settings.Part = Find_Partition_By_Path(backup_path);
