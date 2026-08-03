@@ -103,10 +103,10 @@ extern "C" {
 #include "gui/pages.hpp"
 #ifdef TW_INCLUDE_FBE
 #include "Decrypt.h"
+#include "FsCrypt.h"
 #ifdef TW_INCLUDE_FBE_METADATA_DECRYPT
 	#ifdef USE_FSCRYPT
 	#include "cryptfs.h"
-	#include "fscrypt-common.h"
 	#include "MetadataCrypt.h"
 	#endif
 #endif
@@ -2144,6 +2144,27 @@ void TWPartitionManager::Mark_User_Decrypted(int userID) {
 		}
 	}
 	Check_Users_Decryption_Status();
+#endif
+}
+
+void TWPartitionManager::Mark_Data_Locked() {
+#ifdef TW_INCLUDE_FBE
+	std::vector<users_struct>::iterator iter;
+	for (iter = Users_List.begin(); iter != Users_List.end(); iter++) {
+		if (!(*iter).isDecrypted)
+			continue;
+		// fscrypt_unlock_ce_storage() returns early for a user vold still holds
+		// a policy for, so the next decrypt would install nothing.
+		fscrypt_lock_ce_storage(atoi((*iter).userId.c_str()));
+		(*iter).isDecrypted = false;
+		string user_prop_decrypted = "twrp.user." + (*iter).userId + ".decrypt";
+		property_set(user_prop_decrypted.c_str(), "0");
+	}
+	Check_Users_Decryption_Status();
+	DataManager::SetValue(TW_IS_DECRYPTED, 0);
+	DataManager::SetValue(TW_IS_ENCRYPTED, 1);
+	property_set("twrp.decrypt.done", "");
+	LOGINFO("Data is locked again, its keys did not survive the unmount.\n");
 #endif
 }
 

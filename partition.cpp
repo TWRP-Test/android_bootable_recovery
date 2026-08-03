@@ -1802,6 +1802,9 @@ bool TWPartition::UnMount(bool Display_Error, int flags) {
 				LOGINFO("Unable to unmount '%s'\n", Mount_Point.c_str());
 			return false;
 		} else {
+			// fscrypt keys live in the mounted filesystem's keyring.
+			if (Is_FBE && Mount_Point == "/data" && DataManager::GetIntValue(TW_IS_DECRYPTED))
+				PartitionManager.Mark_Data_Locked();
 			return true;
 		}
 	} else {
