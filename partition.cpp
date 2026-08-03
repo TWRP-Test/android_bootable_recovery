@@ -3207,8 +3207,8 @@ bool TWPartition::Find_Wildcard_Block_Devices(const string& Device) {
 		if (de->d_type != DT_BLK || strlen(de->d_name) <= wildcard_index || strncmp(de->d_name, Dev.c_str(), wildcard_index) != 0)
 			continue;
 
-		string item = Path + "/";
-		item.append(de->d_name);
+		// Get_Path() keeps the trailing slash, so do not add another one.
+		string item = Path + de->d_name;
 		if (PartitionManager.Find_Partition_By_Block_Device(item))
 			continue;
 		TWPartition *part = new TWPartition;
