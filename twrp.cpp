@@ -86,7 +86,7 @@ static void Decrypt_Page(bool SkipDecryption, bool datamedia) {
 	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0) {
 		if (SkipDecryption) {
 			LOGINFO("Skipping decryption\n");
-			PartitionManager.Update_System_Details();
+			PartitionManager.Update_System_Details(true);
 		} else if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) != 0) {
 			LOGINFO("Is encrypted, do decrypt page first\n");
 			if (DataManager::GetIntValue(TW_IS_FBE))
@@ -96,7 +96,7 @@ static void Decrypt_Page(bool SkipDecryption, bool datamedia) {
 			}
 		}
 	} else if (datamedia) {
-		PartitionManager.Update_System_Details();
+		PartitionManager.Update_System_Details(true);
 		if (tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str()) != 0) {
 			LOGINFO("Failed to get default contexts and file mode for storage files.\n");
 		} else {

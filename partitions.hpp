@@ -146,7 +146,8 @@ public:
 	bool Decrypt(string Password);                                            // Decrypts the partition, return 0 for failure and -1 for success
 	bool Wipe_Encryption();                                                   // Ignores wipe commands for /data/media devices and formats the original block device
 	void Check_FS_Type();                                                     // Checks the fs type using blkid, does not do anything on MTD / yaffs2 because this crashes on some devices
-	bool Update_Size(bool Display_Error);                                     // Updates size information
+	bool Update_Size(bool Display_Error, bool Defer_Folder_Size = false);     // Updates size information, Defer_Folder_Size leaves the data/media walk to Update_Data_Size_Async()
+	void Update_Data_Size_Async();                                            // Walks data/media off the UI thread and publishes the size once it finishes
 	void Recreate_Media_Folder();                                             // Recreates the /data/media folder
 	bool Flash_Image(PartitionSettings *part_settings);                                        // Flashes an image to the partition
 	void Change_Mount_Read_Only(bool new_value);                              // Changes Mount_Read_Only to new_value
@@ -352,7 +353,7 @@ public:
 	int Wipe_Media_From_Data();                                               // Removes and recreates the media folder on /data/media devices
 	int Repair_By_Path(string Path, bool Display_Error);                      // Repairs a partition based on path
 	int Resize_By_Path(string Path, bool Display_Error);                      // Resizes a partition based on path
-	void Update_System_Details();                                             // Updates fstab, file systems, sizes, etc.
+	void Update_System_Details(bool Defer_Data_Size = false);                 // Updates fstab, file systems, sizes, etc.
 	int Decrypt_Device(string Password, int user_id = 0);                     // Attempt to decrypt any encrypted partitions
 	void Parse_Users();                                                       // Parse FBE users
 	int usb_storage_enable(void);                                             // Enable USB storage mode

@@ -28,9 +28,11 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <atomic>
 #include <iostream>
 #include <libgen.h>
 #include <mntent.h>
+#include <thread>
 #include <zlib.h>
 #include <sstream>
 #include <android-base/properties.h>
@@ -3121,7 +3123,45 @@ bool TWPartition::Restore_Image(PartitionSettings *part_settings) {
 	return true;
 }
 
-bool TWPartition::Update_Size(bool Display_Error) {
+// Is_Decrypted and TW_IS_DECRYPTED both go true as soon as the metadata layer is
+// up, so ask the user list instead. Empty when the device isn't FBE.
+static bool Data_Is_Locked() {
+	for (const users_struct& user : *PartitionManager.Get_Users_List()) {
+		if (user.userId == "0")
+			return !user.isDecrypted;
+	}
+	return false;
+}
+
+void TWPartition::Update_Data_Size_Async() {
+	static std::atomic<bool> running(false);
+
+	if (Data_Is_Locked())
+		return;
+
+	if (running.exchange(true))
+		return;
+
+	// Backup_Tar() appends to the real list, so walk a copy.
+	TWExclude exclusions = backup_exclusions;
+	string path = Mount_Point;
+
+	std::thread([this, exclusions, path]() mutable {
+		if (Is_Mounted()) {
+			unsigned long long size = exclusions.Get_Folder_Size(path);
+			Used = size;
+			Backup_Size = size;
+			int bak = (int)(size / 1048576LLU);
+			DataManager::SetValue(TW_BACKUP_DATA_SIZE, bak);
+			LOGINFO("Data backup size is %iMB.\n", bak);
+		} else {
+			LOGINFO("'%s' is not mounted, keeping the statfs backup size.\n", path.c_str());
+		}
+		running = false;
+	}).detach();
+}
+
+bool TWPartition::Update_Size(bool Display_Error, bool Defer_Folder_Size) {
 	bool ret = false, Was_Already_Mounted = false, ro = false;
 
 	Find_Actual_Block_Device();
@@ -3160,11 +3200,19 @@ bool TWPartition::Update_Size(bool Display_Error) {
 
 	if (Has_Data_Media) {
 		if (Mount(Display_Error)) {
-			Used = backup_exclusions.Get_Folder_Size(Mount_Point);
-			Backup_Size = Used;
-			int bak = (int)(Used / 1048576LLU);
-			int fre = (int)(Free / 1048576LLU);
-			LOGINFO("Data backup size is %iMB, free: %iMB.\n", bak, fre);
+			// Nothing in a locked /data can be backed up, and the walk costs
+			// seconds. Post_Decrypt() calls Update_System_Details() again.
+			if (Data_Is_Locked()) {
+				LOGINFO("Data is locked, keeping the statfs backup size.\n");
+			} else if (Defer_Folder_Size) {
+				LOGINFO("Deferring the data backup size to a background walk.\n");
+			} else {
+				Used = backup_exclusions.Get_Folder_Size(Mount_Point);
+				Backup_Size = Used;
+				int bak = (int)(Used / 1048576LLU);
+				int fre = (int)(Free / 1048576LLU);
+				LOGINFO("Data backup size is %iMB, free: %iMB.\n", bak, fre);
+			}
 		} else {
 			if (!Was_Already_Mounted)
 				UnMount(false);

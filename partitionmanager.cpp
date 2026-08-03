@@ -594,7 +594,7 @@ void TWPartitionManager::Setup_Fstab_Partitions(bool Display_Error) {
 		Decrypt_Data();
 	#endif
 
-		Update_System_Details();
+		Update_System_Details(true);
 		if (Get_Super_Status())
 			Setup_Super_Partition();
 		UnMount_Main_Partitions();
@@ -1920,13 +1920,18 @@ int TWPartitionManager::Resize_By_Path(string Path, bool Display_Error) {
 	return false;
 }
 
-void TWPartitionManager::Update_System_Details(void) {
+void TWPartitionManager::Update_System_Details(bool Defer_Data_Size) {
 	std::vector<TWPartition*>::iterator iter;
 	int data_size = 0;
+	TWPartition* Deferred = NULL;
 
 	gui_msg("update_part_details=Updating partition details...");
 	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-		(*iter)->Update_Size(true);
+		// Only /data feeds TW_BACKUP_DATA_SIZE, so only /data is worth deferring.
+		bool defer = Defer_Data_Size && (*iter)->Has_Data_Media && (*iter)->Mount_Point == "/data";
+		(*iter)->Update_Size(true, defer);
+		if (defer)
+			Deferred = *iter;
 		if ((*iter)->Can_Be_Mounted) {
 			if ((*iter)->Mount_Point == Get_Android_Root_Path()) {
 				int backup_display_size = (int)((*iter)->Backup_Size / 1048576LLU);
@@ -2002,6 +2007,8 @@ void TWPartitionManager::Update_System_Details(void) {
 	}
 	if (!Write_Fstab())
 		LOGERR("Error creating fstab\n");
+	if (Deferred)
+		Deferred->Update_Data_Size_Async();
 	return;
 }
 
@@ -2050,7 +2057,7 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 		LOGINFO("New storage path after decryption: %s\n", dat->Storage_Path.c_str());
 
 		DataManager::LoadTWRPFolderInfo();
-		Update_System_Details();
+		Update_System_Details(true);
 		Output_Partition(dat);
 		if (!android::base::StartsWith(dat->Actual_Block_Device, "/dev/block/mmcblk")) {
 			if (!dat->Bind_Mount(false))
