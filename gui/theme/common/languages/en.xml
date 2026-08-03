@@ -707,6 +707,7 @@
 		<string name="dalvik_wipe_err">Failed to wipe dalvik</string>
 		<string name="auto_gen">(Auto Generate)</string>
 		<string name="curr_date">(Current Date)</string>
+		<string name="calculating">calculating</string>
 		<string name="backup_name_len">Backup name is too long.</string>
 		<string name="backup_name_invalid">Backup name '{1}' contains invalid character: '{1}'</string>
 		<string name="no_real_sdcard">This device does not have a real SD card! Aborting!</string>

@@ -2008,7 +2008,9 @@ void TWPartitionManager::Update_System_Details(bool Defer_Data_Size) {
 	}
 	if (!Write_Fstab())
 		LOGERR("Error creating fstab\n");
-	if (Deferred)
+	// A locked /data holds nothing a backup could restore, so leave the walk
+	// until something actually asks for the number.
+	if (Deferred && !TWPartition::Data_Is_Locked())
 		Deferred->Update_Data_Size_Async();
 	return;
 }
@@ -2656,10 +2658,17 @@ void TWPartitionManager::Get_Partition_List(string ListType, std::vector<Partiti
 							Backup_Size += (*subpart)->Backup_Size;
 					}
 				}
-				sprintf(backup_size, "%llu", Backup_Size / 1024 / 1024);
 				part.Display_Name = (*iter)->Backup_Display_Name + " (";
-				part.Display_Name += backup_size;
-				part.Display_Name += "MB)";
+				if ((*iter)->Backup_Size_Provisional) {
+					// The list is on screen, so someone wants the number now.
+					(*iter)->Update_Data_Size_Async();
+					part.Display_Name += gui_lookup("calculating", "calculating");
+					part.Display_Name += ")";
+				} else {
+					sprintf(backup_size, "%llu", Backup_Size / 1024 / 1024);
+					part.Display_Name += backup_size;
+					part.Display_Name += "MB)";
+				}
 				part.Mount_Point = (*iter)->Backup_Path;
 				part.selected = 0;
 				Partition_List->push_back(part);

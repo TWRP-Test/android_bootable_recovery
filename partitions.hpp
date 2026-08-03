@@ -148,6 +148,7 @@ public:
 	void Check_FS_Type();                                                     // Checks the fs type using blkid, does not do anything on MTD / yaffs2 because this crashes on some devices
 	bool Update_Size(bool Display_Error, bool Defer_Folder_Size = false);     // Updates size information, Defer_Folder_Size leaves the data/media walk to Update_Data_Size_Async()
 	void Update_Data_Size_Async();                                            // Walks data/media off the UI thread and publishes the size once it finishes
+	static bool Data_Is_Locked();                                             // True while user 0's CE storage is still locked
 	void Recreate_Media_Folder();                                             // Recreates the /data/media folder
 	bool Flash_Image(PartitionSettings *part_settings);                                        // Flashes an image to the partition
 	void Change_Mount_Read_Only(bool new_value);                              // Changes Mount_Read_Only to new_value
@@ -259,6 +260,7 @@ private:
 	unsigned long long Used;                                                  // Overall used space
 	unsigned long long Free;                                                  // Overall free space
 	unsigned long long Backup_Size;                                           // Backup size -- may be different than used space especially when /data/media is present
+	bool Backup_Size_Provisional;                                             // Backup_Size is the statfs figure, not the walked one
 	unsigned long long Restore_Size;                                          // Restore size of the current restore operation
 	bool Can_Be_Encrypted;                                                    // This partition might be encrypted, affects error handling, can only be true if crypto support is compiled in
 	bool Is_Encrypted;                                                        // This partition is thought to be encrypted -- it wouldn't mount for some reason, only avialble with crypto support

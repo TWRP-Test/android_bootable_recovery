@@ -29,6 +29,7 @@ extern "C" {
 #include "objects.hpp"
 #include "../data.hpp"
 #include "../partitions.hpp"
+#include "../variables.h"
 
 GUIPartitionList::GUIPartitionList(xml_node<>* node) : GUIScrollList(node)
 {
@@ -135,6 +136,13 @@ int GUIPartitionList::NotifyVarChange(const std::string& varName, const std::str
 
 	if (!isConditionTrue())
 		return 0;
+
+	// A deferred data/media walk landed, so the sizes on screen are stale.
+	if (ListType == "backup" && varName == TW_BACKUP_SIZES_READY) {
+		updateList = true;
+		mUpdate = 1;
+		return 0;
+	}
 
 	if (varName == mVariable && !mUpdate)
 	{

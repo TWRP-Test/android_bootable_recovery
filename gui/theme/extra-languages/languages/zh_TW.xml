@@ -708,6 +708,7 @@
 		<string name="zip_wipe_cache">一個或多個刷機包請求清除 Cache -- 正在清除 Cache。</string>
 		<string name="and_sec_wipe_err">無法清除 Android Secure</string>
 		<string name="dalvik_wipe_err">清除 Dalvik 失敗</string>
+		<string name="calculating">計算中</string>
 		<string name="backup_name_len">備份名稱太長。</string>
 		<string name="backup_name_invalid">備份名稱“{1}”中包含無效字元:“{1}”</string>
 		<string name="no_real_sdcard">此裝置沒有真實的 SDCard！正在中止！</string>

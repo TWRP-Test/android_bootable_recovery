@@ -28,10 +28,10 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include <atomic>
 #include <iostream>
 #include <libgen.h>
 #include <mntent.h>
+#include <mutex>
 #include <thread>
 #include <zlib.h>
 #include <sstream>
@@ -252,6 +252,7 @@ TWPartition::TWPartition() {
 	Used = 0;
 	Free = 0;
 	Backup_Size = 0;
+	Backup_Size_Provisional = false;
 	Can_Be_Encrypted = false;
 	Is_Encrypted = false;
 	Is_Decrypted = false;
@@ -3125,7 +3126,7 @@ bool TWPartition::Restore_Image(PartitionSettings *part_settings) {
 
 // Is_Decrypted and TW_IS_DECRYPTED both go true as soon as the metadata layer is
 // up, so ask the user list instead. Empty when the device isn't FBE.
-static bool Data_Is_Locked() {
+bool TWPartition::Data_Is_Locked() {
 	for (const users_struct& user : *PartitionManager.Get_Users_List()) {
 		if (user.userId == "0")
 			return !user.isDecrypted;
@@ -3133,14 +3134,17 @@ static bool Data_Is_Locked() {
 	return false;
 }
 
+// Only one partition ever carries data/media, so one walk at a time will do.
+static std::mutex size_walk_lock;
+static bool size_walk_running = false;
+
 void TWPartition::Update_Data_Size_Async() {
-	static std::atomic<bool> running(false);
-
-	if (Data_Is_Locked())
-		return;
-
-	if (running.exchange(true))
-		return;
+	{
+		std::lock_guard<std::mutex> lock(size_walk_lock);
+		if (size_walk_running || !Backup_Size_Provisional)
+			return;
+		size_walk_running = true;
+	}
 
 	// Backup_Tar() appends to the real list, so walk a copy.
 	TWExclude exclusions = backup_exclusions;
@@ -3151,13 +3155,17 @@ void TWPartition::Update_Data_Size_Async() {
 			unsigned long long size = exclusions.Get_Folder_Size(path);
 			Used = size;
 			Backup_Size = size;
+			Backup_Size_Provisional = false;
 			int bak = (int)(size / 1048576LLU);
 			DataManager::SetValue(TW_BACKUP_DATA_SIZE, bak);
 			LOGINFO("Data backup size is %iMB.\n", bak);
+			// Repaint any partition list that is already on screen.
+			DataManager::SetValue(TW_BACKUP_SIZES_READY, bak);
 		} else {
 			LOGINFO("'%s' is not mounted, keeping the statfs backup size.\n", path.c_str());
 		}
-		running = false;
+		std::lock_guard<std::mutex> lock(size_walk_lock);
+		size_walk_running = false;
 	}).detach();
 }
 
@@ -3200,15 +3208,15 @@ bool TWPartition::Update_Size(bool Display_Error, bool Defer_Folder_Size) {
 
 	if (Has_Data_Media) {
 		if (Mount(Display_Error)) {
-			// Nothing in a locked /data can be backed up, and the walk costs
-			// seconds. Post_Decrypt() calls Update_System_Details() again.
-			if (Data_Is_Locked()) {
-				LOGINFO("Data is locked, keeping the statfs backup size.\n");
-			} else if (Defer_Folder_Size) {
+			if (Defer_Folder_Size) {
+				// Leave the statfs figure in place for now. Whoever deferred
+				// decides whether the walk is worth starting.
+				Backup_Size_Provisional = true;
 				LOGINFO("Deferring the data backup size to a background walk.\n");
 			} else {
 				Used = backup_exclusions.Get_Folder_Size(Mount_Point);
 				Backup_Size = Used;
+				Backup_Size_Provisional = false;
 				int bak = (int)(Used / 1048576LLU);
 				int fre = (int)(Free / 1048576LLU);
 				LOGINFO("Data backup size is %iMB, free: %iMB.\n", bak, fre);

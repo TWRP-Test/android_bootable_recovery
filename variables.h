@@ -44,6 +44,7 @@
 #define TW_BACKUP_AVG_FILE_COMP_RATE    "tw_backup_avg_file_comp_rate"
 #define TW_BACKUP_SYSTEM_SIZE       "tw_backup_system_size"
 #define TW_BACKUP_DATA_SIZE         "tw_backup_data_size"
+#define TW_BACKUP_SIZES_READY       "tw_backup_sizes_ready"
 #define TW_BACKUP_BOOT_SIZE         "tw_backup_boot_size"
 #define TW_BACKUP_RECOVERY_SIZE     "tw_backup_recovery_size"
 #define TW_BACKUP_CACHE_SIZE        "tw_backup_cache_size"
