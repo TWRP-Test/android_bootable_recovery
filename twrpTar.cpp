@@ -515,7 +515,7 @@ int twrpTar::extractTarFork() {
 			} else {
 				LOGINFO("Multiple archives\n");
 				string temp;
-				char actual_filename[255];
+				char actual_filename[PATH_MAX];
 				twrpTar tars[9];
 				pthread_t tar_thread[9];
 				pthread_attr_t tattr;
@@ -812,7 +812,7 @@ int twrpTar::tarList(std::vector<TarListStruct> *TarList, unsigned thread_id) {
 					}
 					archive_count++;
 					gui_msg(Msg("split_thread=Splitting thread ID {1} into archive {2}")(thread_id)(archive_count + 1));
-					if (archive_count > 99) {
+					if (archive_count > 999) {
 						LOGINFO("Too many archives for thread %i\n", thread_id);
 						gui_err("backup_error=Error creating backup.");
 						return -4;
@@ -862,7 +862,7 @@ void* twrpTar::extractMulti(void *cookie) {
 	twrpTar* threadTar = (twrpTar*) cookie;
 	int archive_count = 0;
 	string temp = threadTar->basefn + "%i%02i";
-	char actual_filename[255];
+	char actual_filename[PATH_MAX];
 	sprintf(actual_filename, temp.c_str(), threadTar->thread_id, archive_count);
 	while (TWFunc::Path_Exists(actual_filename)) {
 		threadTar->tarfn = actual_filename;
@@ -871,8 +871,7 @@ void* twrpTar::extractMulti(void *cookie) {
 			return (void*)-2;
 		}
 		archive_count++;
-		if (archive_count > 99)
-			break;
+		// The next name not existing is the bound, a count silently truncated.
 		sprintf(actual_filename, temp.c_str(), threadTar->thread_id, archive_count);
 	}
 	LOGINFO("Thread ID %i finished successfully.\n", threadTar->thread_id);
@@ -1426,7 +1425,7 @@ unsigned long long twrpTar::get_size() {
 	} else {
 		LOGINFO("Multiple archives\n");
 		string temp;
-		char actual_filename[255];
+		char actual_filename[PATH_MAX];
 		int archive_count = 0;
 		unsigned long long total_restore_size = 0;
 
@@ -1446,8 +1445,6 @@ unsigned long long twrpTar::get_size() {
 				while (TWFunc::Path_Exists(actual_filename)) {
 					total_restore_size += uncompressedSize(actual_filename);
 					archive_count++;
-					if (archive_count > 99)
-						break;
 					sprintf(actual_filename, temp.c_str(), i, archive_count);
 				}
 			}
