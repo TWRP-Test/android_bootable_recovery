@@ -157,10 +157,11 @@ void TWPartitionManager::Set_Crypto_State() {
 int TWPartitionManager::Set_Crypto_Type(const char* crypto_type) {
 	char type_prop[PROPERTY_VALUE_MAX];
 	property_get("ro.crypto.type", type_prop, "error");
-	if (strcmp(type_prop, "error") == 0)
+	if (strcmp(type_prop, "error") == 0) {
 		property_set("ro.crypto.type", crypto_type);
-	// Sleep for a bit so that services can start if needed
-	sleep(1);
+		// Give whatever acts on the property a moment to start.
+		sleep(1);
+	}
 	return 0;
 }
 
@@ -2038,10 +2039,12 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 		dat->Setup_File_System(false);
 		dat->Current_File_System = dat->Fstab_File_System;  // Needed if we're ignoring blkid because encrypted devices start out as emmc
 
-		sleep(1); // Sleep for a bit so that the device will be ready
-
 		// Mount only /data
 		dat->Symlink_Path = ""; // Not to let it to bind mount /data/media again
+		// The mount is what the wait here was ever for, so wait on that.
+		int retry_count = 20;
+		while (!dat->Mount(false) && --retry_count)
+			usleep(50000);
 		if (!dat->Mount(false)) {
 			LOGERR("Unable to mount /data after decryption");
 		}
