@@ -3207,6 +3207,12 @@ void TWPartitionManager::Translate_Partition_Display_Names() {
 	if (part)
 		part->Backup_Display_Name = gui_lookup("android_secure", "Android Secure");
 
+	// So is super, its name carries the count Setup_Super_Partition() found
+	part = PartitionManager.Find_Partition_By_Path("/super");
+	if (part)
+		part->Backup_Display_Name = "Super (" + to_string(Super_Partition_List.size()) + " " +
+			gui_lookup("partitions", "partitions") + ")";
+
 	std::vector<TWPartition*>::iterator sysfs;
 	for (sysfs = Partitions.begin(); sysfs != Partitions.end(); sysfs++) {
 		if (!(*sysfs)->Sysfs_Entry.empty()) {
@@ -3684,23 +3690,8 @@ void TWPartitionManager::Setup_Super_Partition() {
 	superPartition->Mount_Point = "/super";
 	superPartition->Actual_Block_Device = superPart;
 	superPartition->Alternate_Block_Device = superPart;
-	superPartition->Backup_Display_Name = "Super (";
-	// Add first 4 items to fstab as logical that you would like to display in Backup_Display_Name
-	// for the Super partition
-	int list_size = Super_Partition_List.size();
-	int orig_list_size = list_size;
-	int max_display_size = 3; // total of 4 items since we start at 0
-
-	for (auto partition: Super_Partition_List) {
-		superPartition->Backup_Display_Name = superPartition->Backup_Display_Name + partition;
-		if ((orig_list_size - list_size) == max_display_size) {
-			break;
-		}
-		if (list_size != 1)
-			superPartition->Backup_Display_Name = superPartition->Backup_Display_Name + " ";
-		list_size--;
-	}
-	superPartition->Backup_Display_Name += ")";
+	// Translated in Translate_Partition_Display_Names(), no resources yet.
+	superPartition->Backup_Display_Name = "Super (" + to_string(Super_Partition_List.size()) + " partitions)";
 	superPartition->Can_Flash_Img = true;
 	superPartition->Current_File_System = "emmc";
 	superPartition->Can_Be_Backed_Up = true;
