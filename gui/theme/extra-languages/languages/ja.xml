@@ -16,7 +16,7 @@
 		<string name="recovery">Recovery</string>
 		<string name="cache">Cache</string>
 		<string name="data">Data</string>
-		<string name="data_backup">Data（内部ストレージスペースを除く）</string>
+		<string name="data_backup">Data (内部ストレージスペースを除く)</string>
 		<string name="sdcard">SDカード</string>
 		<string name="internal">内部ストレージ</string>
 		<string name="microsd">microSD カード</string>

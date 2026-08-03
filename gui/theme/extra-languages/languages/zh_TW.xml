@@ -18,7 +18,7 @@
 		<string name="recovery">Recovery</string>
 		<string name="cache">Cache</string>
 		<string name="data">Data</string>
-		<string name="data_backup">Data（不包含內建儲存空間）</string>
+		<string name="data_backup">Data (不包含內建儲存空間)</string>
 		<string name="sdcard">SDCard</string>
 		<string name="internal">內建儲存空間</string>
 		<string name="microsd">Micro SDCard</string>
