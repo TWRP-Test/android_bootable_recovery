@@ -572,7 +572,7 @@ int twrpTar::extractTarFork() {
 					_exit(-1);
 				}*/
 				for (i = start_thread_id; i < 9; i++) {
-					sprintf(actual_filename, temp.c_str(), i, 0);
+					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, 0);
 					if (TWFunc::Path_Exists(actual_filename)) {
 						thread_count++;
 						tars[i].basefn = basefn;
@@ -779,7 +779,7 @@ int twrpTar::tarList(std::vector<TarListStruct> *TarList, unsigned thread_id) {
 	if (split_archives) {
 		basefn = tarfn;
 		temp = basefn + "%i%02i";
-		sprintf(actual_filename, temp.c_str(), thread_id, archive_count);
+		snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), thread_id, archive_count);
 		tarfn = actual_filename;
 		include_root_dir = true;
 	} else {
@@ -817,7 +817,7 @@ int twrpTar::tarList(std::vector<TarListStruct> *TarList, unsigned thread_id) {
 						gui_err("backup_error=Error creating backup.");
 						return -4;
 					}
-					sprintf(actual_filename, temp.c_str(), thread_id, archive_count);
+					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), thread_id, archive_count);
 					tarfn = actual_filename;
 					if (createTar() != 0) {
 						LOGINFO("Error creating tar '%s' for thread %i\n", tarfn.c_str(), thread_id);
@@ -863,7 +863,7 @@ void* twrpTar::extractMulti(void *cookie) {
 	int archive_count = 0;
 	string temp = threadTar->basefn + "%i%02i";
 	char actual_filename[PATH_MAX];
-	sprintf(actual_filename, temp.c_str(), threadTar->thread_id, archive_count);
+	snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), threadTar->thread_id, archive_count);
 	while (TWFunc::Path_Exists(actual_filename)) {
 		threadTar->tarfn = actual_filename;
 		if (threadTar->extract() != 0) {
@@ -872,7 +872,7 @@ void* twrpTar::extractMulti(void *cookie) {
 		}
 		archive_count++;
 		// The next name not existing is the bound, a count silently truncated.
-		sprintf(actual_filename, temp.c_str(), threadTar->thread_id, archive_count);
+		snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), threadTar->thread_id, archive_count);
 	}
 	LOGINFO("Thread ID %i finished successfully.\n", threadTar->thread_id);
 	return (void*)0;
@@ -1433,7 +1433,7 @@ unsigned long long twrpTar::get_size() {
 		temp = basefn + "%i%02i";
 		tarfn += "000";
 		thread_id = 0;
-		sprintf(actual_filename, temp.c_str(), thread_id, archive_count);
+		snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), thread_id, archive_count);
 		if (!part_settings->adbbackup) {
 			if (!TWFunc::Path_Exists(actual_filename)) {
 				LOGERR("Unable to locate '%s' or '%s'\n", basefn.c_str(), tarfn.c_str());
@@ -1441,11 +1441,11 @@ unsigned long long twrpTar::get_size() {
 			}
 			for (int i = 0; i < 9; i++) {
 				archive_count = 0;
-				sprintf(actual_filename, temp.c_str(), i, archive_count);
+				snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
 				while (TWFunc::Path_Exists(actual_filename)) {
 					total_restore_size += uncompressedSize(actual_filename);
 					archive_count++;
-					sprintf(actual_filename, temp.c_str(), i, archive_count);
+					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
 				}
 			}
 	#ifndef BUILD_TWRPTAR_MAIN
