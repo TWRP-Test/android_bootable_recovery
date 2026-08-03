@@ -304,6 +304,11 @@ bool twrpAdbBuFifo::Restore_ADB_Backup(void) {
 					Backup_FileName = Restore_Name.substr(pos + 1, Restore_Name.size());
 					pos = Restore_Name.find_last_of("/");
 					part_settings.Part = PartitionManager.Find_Partition_By_Path(path);
+					if (part_settings.Part == NULL) {
+						gui_msg(Msg(msg::kError, "restore_unable_locate=Unable to locate '{1}' partition for restoring.")(path));
+						ret = false;
+						break;
+					}
 					part_settings.Part->Set_Backup_FileName(Backup_FileName);
 					PartitionManager.Set_Restore_Files(path);
 

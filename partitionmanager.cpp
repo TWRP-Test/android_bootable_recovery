@@ -1526,8 +1526,12 @@ void TWPartitionManager::Set_Restore_Files(string Restore_Name) {
 			string adb_restore_file = adb_files.at(i);
 			std::size_t pos = adb_restore_file.find_first_of(".");
 			std::string path = "/" + adb_restore_file.substr(0, pos);
-			Restore_List = path + ";";
 			TWPartition* Part = Find_Partition_By_Path(path);
+			if (Part == NULL) {
+				gui_msg(Msg(msg::kError, "restore_unable_locate=Unable to locate '{1}' partition for restoring.")(path));
+				continue;
+			}
+			Restore_List = path + ";";
 			Part->Backup_FileName = TWFunc::Get_Filename(adb_restore_file);
 			adbbackup = true;
 		}
