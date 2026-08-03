@@ -699,7 +699,7 @@
 		<string name="change_fs_err">Fehler beim Ändern des Dateisystems.</string>
 		<string name="theme_ver_err">Theme-Version inkompatibel zu TWRP-Version. Standard-Theme wird verwendet.</string>
 		<string name="up_a_level">(Übergeordneter Ordner)</string>
-		<string name="install_reboot"version="2">Neustart in %tw_sleep% Sekunden</string>
+		<string name="install_reboot" version="2">Neustart in %tw_sleep% Sekunden</string>
 		<string name="adbbackup_error">Fehler während ADB Backup. Abbruch..."</string>
 		<string name="adbbackup_control_error">Kein Zugriff auf ADB Control Channel</string>
 		<string name="twrp_adbbu_option">--twrp option wird für ADB Backup benötigt</string>
