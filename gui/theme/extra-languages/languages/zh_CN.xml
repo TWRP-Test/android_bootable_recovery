@@ -731,7 +731,7 @@
 		<string name="flash_ab_both_slots">刷入到 2 个槽位</string>
 		<string name="ozip_decrypt_decryption">正在解密 Ozip…</string>
 		<string name="ozip_decrypt_finish">Ozip 解密完成！</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">启用 ADB</string>
 		<string name="enable_fastboot">启用 Fastboot</string>
 		<string name="fastboot_console_msg">进入 Fastboot 模式…</string>

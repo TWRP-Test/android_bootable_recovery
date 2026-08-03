@@ -731,7 +731,7 @@
 		<string name="flash_ab_both_slots">Slots දෙකටම Flash කරන්න</string>
 		<string name="ozip_decrypt_decryption">Ozip Decryption එක පටන් ගත්තා...</string>
 		<string name="ozip_decrypt_finish">Ozip Decryption ඉවරයි!</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">ADB Enable කරන්න</string>
 		<string name="enable_fastboot">Fastboot Enable කරන්න</string>
 		<string name="fastboot_console_msg">Fastboot mode එකේ ඉන්නෙ...</string>

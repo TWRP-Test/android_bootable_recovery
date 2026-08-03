@@ -734,7 +734,7 @@
 		<string name="flash_ab_both_slots">Wgraj na oba sloty</string>
 		<string name="ozip_decrypt_decryption">Rozpoczynanie deszyfrowania Ozip...</string>
 		<string name="ozip_decrypt_finish">Deszyfrowanie Ozip zakończone!</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Włącz ADB</string>
 		<string name="enable_fastboot">Włącz Fastboot</string>
 		<string name="fastboot_console_msg">Jesteś w trybie Fastboot...</string>

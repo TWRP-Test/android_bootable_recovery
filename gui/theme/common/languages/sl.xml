@@ -733,7 +733,7 @@
 		<string name="flash_ab_both_slots">Namesti v oba polja</string>
 		<string name="ozip_decrypt_decryption">Začenjanje odšifriranja Ozip …</string>
 		<string name="ozip_decrypt_finish">Odšifriranje Ozip je končano!</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Omogoči ADB</string>
 		<string name="enable_fastboot">Omogoči Fastboot</string>
 		<string name="fastboot_console_msg">sedaj ste v načinu Fastboot …</string>

@@ -720,7 +720,7 @@
 		<string name="flash_ab_both_slots">Beide slots flashen</string>
 		<string name="ozip_decrypt_decryption">Ozip-ontsleutelen...</string>
 		<string name="ozip_decrypt_finish">Ozip-ontsleutelen gereed!</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">ADB inschakelen</string>
 		<string name="enable_fastboot">Fastboot inschakelen</string>
 		<string name="fastboot_console_msg">In Fastboot modus...</string>

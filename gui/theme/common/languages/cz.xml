@@ -733,7 +733,7 @@
 		<string name="flash_ab_both_slots">Instalace do obou slotů</string>
 		<string name="ozip_decrypt_decryption">Spouštění Ozip dešifrování...</string>
 		<string name="ozip_decrypt_finish">Ozip dešifrování dokončeno!</string>
-		<string name="fastboot_button">Fastboot</string>
+		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Povolit ADB</string>
 		<string name="enable_fastboot">Povolit Fastboot</string>
 		<string name="fastboot_console_msg">Přepínání do Fastboot režimu...</string>
