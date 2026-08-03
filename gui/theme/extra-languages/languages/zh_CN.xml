@@ -733,8 +733,8 @@
 		<string name="ozip_decrypt_finish">Ozip 解密完成！</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">启用 ADB</string>
-		<string name="enable_fastboot">启用 Fastboot</string>
-		<string name="fastboot_console_msg">进入 Fastboot 模式…</string>
+		<string name="enable_fastboot">启用 Fastbootd</string>
+		<string name="fastboot_console_msg">进入 Fastbootd 模式…</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android 救援程序已触发！您可以尝试下面的操作：</string>
 		<string name="rescue_party1"> 1. 清除 Cache；</string>

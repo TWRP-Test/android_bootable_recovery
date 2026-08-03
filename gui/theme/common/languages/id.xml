@@ -724,8 +724,8 @@
 		<string name="ozip_decrypt_finish">Mendeskripsi Ozip selesai!</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Aktifkan ADB</string>
-		<string name="enable_fastboot">Aktifkan Fastboot</string>
-		<string name="fastboot_console_msg">Memasuki mode Fastboot...</string>
+		<string name="enable_fastboot">Aktifkan Fastbootd</string>
+		<string name="fastboot_console_msg">Memasuki mode Fastbootd...</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Memicu Pihak Penyelamat Android! Solusi memungkinkan? Antara:</string>
 		<string name="rescue_party1"> 1. Hapus cache, dan/atau</string>

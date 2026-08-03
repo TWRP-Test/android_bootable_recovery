@@ -722,8 +722,8 @@
 		<string name="ozip_decrypt_finish">Ozip-ontsleutelen gereed!</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">ADB inschakelen</string>
-		<string name="enable_fastboot">Fastboot inschakelen</string>
-		<string name="fastboot_console_msg">In Fastboot modus...</string>
+		<string name="enable_fastboot">Fastbootd inschakelen</string>
+		<string name="fastboot_console_msg">In Fastbootd modus...</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android Rescue Party trigger! Mogelijke oplossingen? Of:</string>
 		<string name="rescue_party1"> 1. Cachemappen wissen, en/of</string>

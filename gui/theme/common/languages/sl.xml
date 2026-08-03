@@ -735,8 +735,8 @@
 		<string name="ozip_decrypt_finish">Odšifriranje Ozip je končano!</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Omogoči ADB</string>
-		<string name="enable_fastboot">Omogoči Fastboot</string>
-		<string name="fastboot_console_msg">sedaj ste v načinu Fastboot …</string>
+		<string name="enable_fastboot">Omogoči Fastbootd</string>
+		<string name="fastboot_console_msg">sedaj ste v načinu Fastbootd …</string>
 		<string name="data_media_fbe_msg">TWRP na napravi FBE ne bo ustvaril /data/media.  Če želite ustvariti /data/media, napravo zaženite v ROM.</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Sprožil se je način za reševanje Androida! Možne rešitve? Naredite lahko naslednje korake:</string>

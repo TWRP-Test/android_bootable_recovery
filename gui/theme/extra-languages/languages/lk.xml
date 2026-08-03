@@ -733,8 +733,8 @@
 		<string name="ozip_decrypt_finish">Ozip Decryption ඉවරයි!</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">ADB Enable කරන්න</string>
-		<string name="enable_fastboot">Fastboot Enable කරන්න</string>
-		<string name="fastboot_console_msg">Fastboot mode එකේ ඉන්නෙ...</string>
+		<string name="enable_fastboot">Fastbootd Enable කරන්න</string>
+		<string name="fastboot_console_msg">Fastbootd mode එකේ ඉන්නෙ...</string>
 		<string name="data_media_fbe_msg">TWRP එක /data/media FBE device වල ආයිමත් හදන්ෙන නෑ. ඒක නිසා /data/media හදා ගන්න ඔයාෙග් rom එකට reboot කරන්න.</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android Rescue Party trigger! බලන්න,:</string>

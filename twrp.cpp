@@ -112,7 +112,7 @@ static void process_fastbootd_mode() {
 			PartitionManager.Unmap_Super_Devices();
 		}
 
-		gui_msg(Msg("fastboot_console_msg=Entered Fastboot mode..."));
+		gui_msg(Msg("fastboot_console_msg=Entered Fastbootd mode..."));
 		// Check for and run startup script if script exists
 		TWFunc::check_and_run_script("/system/bin/runatboot.sh", "boot");
 		TWFunc::check_and_run_script("/system/bin/postfastboot.sh", "fastboot");

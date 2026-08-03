@@ -736,8 +736,8 @@
 		<string name="ozip_decrypt_finish">Deszyfrowanie Ozip zakończone!</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Włącz ADB</string>
-		<string name="enable_fastboot">Włącz Fastboot</string>
-		<string name="fastboot_console_msg">Jesteś w trybie Fastboot...</string>
+		<string name="enable_fastboot">Włącz Fastbootd</string>
+		<string name="fastboot_console_msg">Jesteś w trybie Fastbootd...</string>
 		<string name="data_media_fbe_msg">TWRP nie utworzy ponownie katalogu /data/media na urządzeniu z FBE. Uruchom swój ROM, aby utworzyć /data/media</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Wywołano Android Rescue Party! Co może pomóc? Spróbuj:</string>

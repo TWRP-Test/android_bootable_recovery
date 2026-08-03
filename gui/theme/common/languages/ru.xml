@@ -728,8 +728,8 @@
 		<string name="fbe_wipe_msg">ВНИМАНИЕ: {1} очищен. Устройство необходимо перезагрузить в ОС (не в рекавери) для установки начальной политики FBE после очистки.</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">Включить ADB</string>
-		<string name="enable_fastboot">Включить Fastboot</string>
-		<string name="fastboot_console_msg">Переход в режим Fastboot...</string>
+		<string name="enable_fastboot">Включить Fastbootd</string>
+		<string name="fastboot_console_msg">Переход в режим Fastbootd...</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Обнаружен сбой Android Rescue Party! Возможные решения:</string>
 		<string name="rescue_party1"> 1. Очистить Cache и/или</string>

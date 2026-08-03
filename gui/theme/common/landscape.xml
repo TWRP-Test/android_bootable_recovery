@@ -5383,7 +5383,7 @@ edi				<conditions>
 			<button style="main_button_half_width">
 				<condition var1="tw_enable_adb" op="=" var2="1" />
 				<placement x="%col1_x_left%" y="%row15a_y%"/>
-				<text>{@enable_fastboot=Enable Fastboot}</text>
+				<text>{@enable_fastboot=Enable Fastbootd}</text>
 				<actions>
 					<action function="enablefastboot"/>
 					<action function="set">tw_enable_fastboot=1</action>

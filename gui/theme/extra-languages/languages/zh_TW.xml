@@ -738,8 +738,8 @@
 		<string name="ozip_decrypt_finish">Ozip 解密完成！</string>
 		<string name="fastboot_button">Fastbootd</string>
 		<string name="enable_adb">啟用 ADB</string>
-		<string name="enable_fastboot">啟用 Fastboot</string>
-		<string name="fastboot_console_msg">進入 Fastboot 模式…</string>
+		<string name="enable_fastboot">啟用 Fastbootd</string>
+		<string name="fastboot_console_msg">進入 Fastbootd 模式…</string>
 		<string name="data_media_fbe_msg">TWRP 不會在 FBE 裝置上重新建立 /data/media。請重新啟動到 ROM 以建立 /data/media</string>
 		<!-- Android Rescue Party trigger -->
 		<string name="rescue_party0">Android 救援程式已觸發！您可以嘗試下面的操作：</string>
