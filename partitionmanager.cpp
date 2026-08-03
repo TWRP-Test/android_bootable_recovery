@@ -2667,7 +2667,9 @@ void TWPartitionManager::Get_Partition_List(string ListType, std::vector<Partiti
 		char free_space[255];
 		string Current_Storage = DataManager::GetCurrentStoragePath();
 		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Is_Storage) {
+			// A uevent entry with nothing plugged into it is a place to put a
+			// device, not a place to put files.
+			if ((*iter)->Is_Storage && (*iter)->Is_Present) {
 				struct PartitionList part;
 				sprintf(free_space, "%llu", (*iter)->Free / 1024 / 1024);
 				part.Display_Name = (*iter)->Storage_Name + " (";
