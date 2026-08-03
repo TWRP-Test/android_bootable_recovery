@@ -2185,6 +2185,15 @@ void TWPartitionManager::Mark_Data_Locked() {
 #endif
 }
 
+bool TWPartitionManager::Storage_Name_In_Use(const string& Name) {
+	std::vector<TWPartition*>::iterator iter;
+	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
+		if ((*iter)->Storage_Name == Name)
+			return true;
+	}
+	return false;
+}
+
 void TWPartitionManager::Check_Users_Decryption_Status() {
 #ifdef TW_INCLUDE_FBE
 	int all_is_decrypted = 1;

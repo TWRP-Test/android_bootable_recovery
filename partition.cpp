@@ -3248,6 +3248,20 @@ fail:
 	return false;
 }
 
+// Whatever the volume calls itself, empty when it has no label.
+static string Get_Volume_Label(const string& Block_Device) {
+	const char* label;
+	string name;
+
+	blkid_probe pr = blkid_new_probe_from_filename(Block_Device.c_str());
+	if (pr == NULL)
+		return name;
+	if (blkid_do_fullprobe(pr) == 0 && blkid_probe_lookup_value(pr, "LABEL", &label, NULL) == 0)
+		name = label;
+	blkid_free_probe(pr);
+	return name;
+}
+
 bool TWPartition::Find_Wildcard_Block_Devices(const string& Device) {
 	int mount_point_index = 0; // we will need to create separate mount points for each partition found and we use this index to name each one
 	string Path = TWFunc::Get_Path(Device);
@@ -3274,8 +3288,12 @@ bool TWPartition::Find_Wildcard_Block_Devices(const string& Device) {
 		char buffer[MAX_FSTAB_LINE_LENGTH];
 		sprintf(buffer, "%s %s-%i auto defaults defaults", item.c_str(), Mount_Point.c_str(), ++mount_point_index);
 		part->Process_Fstab_Line(buffer, false, NULL);
-		char display[MAX_FSTAB_LINE_LENGTH];
-		sprintf(display, "%s %i", Storage_Name.c_str(), mount_point_index);
+		// Prefer the label, number whatever name is already taken.
+		string display = Get_Volume_Label(item);
+		if (display.empty())
+			display = Storage_Name;
+		if (PartitionManager.Storage_Name_In_Use(display))
+			display += " " + TWFunc::to_string(mount_point_index);
 		part->Storage_Name = display;
 		part->Display_Name = display;
 		part->Primary_Block_Device = item;

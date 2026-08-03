@@ -358,6 +358,7 @@ public:
 	void Update_System_Details(bool Defer_Data_Size = false);                 // Updates fstab, file systems, sizes, etc.
 	int Decrypt_Device(string Password, int user_id = 0);                     // Attempt to decrypt any encrypted partitions
 	void Mark_Data_Locked();                                                  // Data was unmounted, so its fscrypt keys went with it
+	bool Storage_Name_In_Use(const string& Name);                             // Checks whether a partition is already showing this name
 	void Parse_Users();                                                       // Parse FBE users
 	int usb_storage_enable(void);                                             // Enable USB storage mode
 	int usb_storage_disable(void);                                            // Disable USB storage mode
