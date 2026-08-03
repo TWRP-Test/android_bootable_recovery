@@ -1128,6 +1128,7 @@ int TWPartitionManager::Run_Backup(bool adbbackup) {
 	struct tm *t;
 	time_t seconds, total_start, total_stop;
 	size_t start_pos = 0, end_pos = 0;
+	bool backup_folder_made = false;
 	stop_backup.set_value(0);
 	seconds = time(0);
 	t = localtime(&seconds);
@@ -1256,20 +1257,32 @@ int TWPartitionManager::Run_Backup(bool adbbackup) {
 			gui_err("fail_backup_folder=Failed to make backup folder.");
 			return false;
 		}
+		backup_folder_made = true;
 	}
+
+	// Half of a backup restores to half of a system, so do not leave one in
+	// the list looking like something that could be restored.
+	auto discard_unfinished_backup = [&]() {
+		if (backup_folder_made)
+			TWFunc::removeDir(part_settings.Backup_Folder, false);
+	};
 
 	DataManager::SetProgress(0.0);
 
 	start_pos = 0;
 	end_pos = Backup_List.find(";", start_pos);
 	while (end_pos != string::npos && start_pos < Backup_List.size()) {
-		if (stop_backup.get_value() != 0)
+		if (stop_backup.get_value() != 0) {
+			discard_unfinished_backup();
 			return -1;
+		}
 		backup_path = Backup_List.substr(start_pos, end_pos - start_pos);
 		part_settings.Part = Find_Partition_By_Path(backup_path);
 		if (part_settings.Part != NULL) {
-			if (!Backup_Partition(&part_settings))
+			if (!Backup_Partition(&part_settings)) {
+				discard_unfinished_backup();
 				return false;
+			}
 		} else {
 			gui_msg(Msg(msg::kError, "unable_to_locate_partition=Unable to locate '{1}' partition for backup calculations.")(backup_path));
 		}
