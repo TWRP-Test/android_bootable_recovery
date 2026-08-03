@@ -159,7 +159,12 @@ int vibrate(int timeout_ms)
         vib->on((uint32_t)timeout_ms);
     }
 #elif defined(USE_QTI_AIDL_HAPTICS)
-    std::shared_ptr<IVibrator> vib = IVibrator::fromBinder(ndk::SpAIBinder(AServiceManager_getService(kVibratorInstance.c_str())));
+    /* getService() blocks for seconds while the HAL is not up yet, and this
+     * runs on the thread drawing the UI. */
+    static std::shared_ptr<IVibrator> cached_vib;
+    if (cached_vib == nullptr)
+        cached_vib = IVibrator::fromBinder(ndk::SpAIBinder(AServiceManager_checkService(kVibratorInstance.c_str())));
+    std::shared_ptr<IVibrator> vib = cached_vib;
     if (vib != nullptr) {
 #ifdef USE_QTI_AIDL_HAPTICS_FIX_OFF
         std::thread([vib, timeout_ms] {
@@ -171,7 +176,9 @@ int vibrate(int timeout_ms)
             }
         }).detach();
 #else
-        vib->on((uint32_t)timeout_ms, nullptr);
+        /* Look again next press if the HAL went away. */
+        if (!vib->on((uint32_t)timeout_ms, nullptr).isOk())
+            cached_vib = nullptr;
 #endif
     }
 #elif defined(USE_SAMSUNG_HAPTICS)
