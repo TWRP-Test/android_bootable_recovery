@@ -2655,7 +2655,9 @@ void TWPartitionManager::Get_Partition_List(string ListType, std::vector<Partiti
 	std::vector<TWPartition*>::iterator iter;
 	if (ListType == "mount") {
 		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Can_Be_Mounted) {
+			// Setup_File_System() calls everything mountable, so ask whether
+			// there is a device to mount as well.
+			if ((*iter)->Can_Be_Mounted && (*iter)->Is_Present) {
 				struct PartitionList part;
 				part.Display_Name = (*iter)->Display_Name;
 				part.Mount_Point = (*iter)->Mount_Point;
@@ -2755,7 +2757,7 @@ void TWPartitionManager::Get_Partition_List(string ListType, std::vector<Partiti
 		dalvik.selected = 0;
 		Partition_List->push_back(dalvik);
 		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Wipe_Available_in_GUI && !(*iter)->Is_SubPartition) {
+			if ((*iter)->Wipe_Available_in_GUI && !(*iter)->Is_SubPartition && (*iter)->Is_Present) {
 				struct PartitionList part;
 				part.Display_Name = (*iter)->Display_Name;
 				part.Mount_Point = (*iter)->Mount_Point;
