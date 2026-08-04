@@ -1128,7 +1128,14 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   plane_options = NULL;
 
   /* Setup spr blob id if enabled */
+  if (spr_enabled && spr_prop_name.empty()) {
+    /* Nothing to program the block through, which is no reason to give up the
+     * whole drm backend. */
+    printf("spr is enabled but the crtc carries no spr property\n");
+    spr_enabled = 0;
+  }
   if (spr_enabled) {
+    printf("setting up %s, bypass %u\n", spr_prop_name.c_str(), spr_bypass);
     if (SetupSprBlob(drm_fd, spr_prop_name, &crtc_res.spr_blob_id)) {
       return NULL;
     }
