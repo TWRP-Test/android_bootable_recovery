@@ -370,7 +370,8 @@ static int SetupSprBlobV1(int fd, uint32_t* blob_id) {
   SPRFilterType filter_type = SPRFilterType::kFourTap;
   SPRAdaptiveModeType adpative_mode = SPRAdaptiveModeType::kYYGM;
 
-  drm_msm_spr_init_cfg spr_init_cfg;
+  // Whatever is not filled in below still reaches the kernel, so start at zero.
+  drm_msm_spr_init_cfg spr_init_cfg = {};
   spr_init_cfg.cfg0 = 1;
   spr_init_cfg.cfg1 = 1;
   spr_init_cfg.cfg2 = 1;
@@ -383,7 +384,7 @@ static int SetupSprBlobV1(int fd, uint32_t* blob_id) {
   spr_init_cfg.cfg8 = static_cast<uint16_t>(adpative_mode);
   if (pack_type == SPRPackType::kRGBW) {
     spr_init_cfg.cfg9 = 512;
-    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg.cfg11);
+    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg.cfg12);
   }
   spr_init_cfg.cfg10 = 0;
   std::copy(kDecimationRatioMap.at(pack_type).begin(), kDecimationRatioMap.at(pack_type).end(),
@@ -409,7 +410,8 @@ static int SetupSprBlobV2(int fd, uint32_t* blob_id) {
   SPRFilterType filter_type = SPRFilterType::kFourTap;
   SPRAdaptiveModeType adpative_mode = SPRAdaptiveModeType::kYYGM;
 
-  drm_msm_spr_init_cfg_v2 spr_init_cfg_v2;
+  // Whatever is not filled in below still reaches the kernel, so start at zero.
+  drm_msm_spr_init_cfg_v2 spr_init_cfg_v2 = {};
   spr_init_cfg_v2.cfg0 = 1;
   spr_init_cfg_v2.cfg1 = 1;
   spr_init_cfg_v2.cfg2 = 1;
@@ -422,7 +424,7 @@ static int SetupSprBlobV2(int fd, uint32_t* blob_id) {
   spr_init_cfg_v2.cfg8 = static_cast<uint16_t>(adpative_mode);
   if (pack_type == SPRPackType::kRGBW) {
     spr_init_cfg_v2.cfg9 = 512;
-    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg_v2.cfg11);
+    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg_v2.cfg12);
   }
   spr_init_cfg_v2.cfg10 = 0;
   std::copy(kDecimationRatioMap.at(pack_type).begin(), kDecimationRatioMap.at(pack_type).end(),
