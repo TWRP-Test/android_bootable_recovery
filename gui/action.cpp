@@ -2354,7 +2354,10 @@ int GUIAction::applycustomtwrpfolder(string arg __unused)
 	}
 
 	if (newFolder != prevFolder && ret) {
-		ret = TWFunc::Exec_Cmd("mv -f \"" + prevFolder + "\" \"" + newFolder + '\"') != 0 ? false : true;
+		// Nothing has been put under the old name until a backup or a theme
+		// lands there, so there may be nothing to move.
+		if (TWFunc::Path_Exists(prevFolder))
+			ret = TWFunc::Exec_Cmd("mv -f \"" + prevFolder + "\" \"" + newFolder + '\"') == 0;
 	} else {
 		gui_msg(Msg(msg::kError, "tw_folder_exists=A folder with that name already exists!"));
 	}
