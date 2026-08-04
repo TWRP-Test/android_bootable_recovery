@@ -83,6 +83,7 @@ struct drm_surface {
 #define SPR_INIT_PARAM_SIZE_4 24
 #define SPR_INIT_PARAM_SIZE_5 32
 #define SPR_INIT_PARAM_SIZE_6 7
+#define SPR_FLAG_BYPASS (1 << 0)
 enum class SPRPackType {
   kPentile,
   kRGBW,
@@ -238,6 +239,7 @@ static struct Connector conn_res;
 static struct Plane plane_res[NUM_PLANES];
 static uint32_t number_of_lms = DEFAULT_NUM_LMS;
 static uint32_t spr_enabled;
+static uint32_t spr_bypass;
 static std::string spr_prop_name;
 
 #define find_prop_id(_res, type, Type, obj_id, prop_name, prop_id)    \
@@ -376,7 +378,7 @@ static int SetupSprBlobV1(int fd, uint32_t* blob_id) {
   spr_init_cfg.cfg1 = 1;
   spr_init_cfg.cfg2 = 1;
   spr_init_cfg.cfg3 = 0;
-  spr_init_cfg.flags = 0;
+  spr_init_cfg.flags = spr_bypass ? SPR_FLAG_BYPASS : 0;
   spr_init_cfg.cfg4 = (pack_type == SPRPackType::kRGBW);
   spr_init_cfg.cfg5 = kDefaultColorPhaseIncrement.at(pack_type);
   spr_init_cfg.cfg6 = kDefaultColorPhaseRepeat.at(pack_type);
@@ -416,7 +418,7 @@ static int SetupSprBlobV2(int fd, uint32_t* blob_id) {
   spr_init_cfg_v2.cfg1 = 1;
   spr_init_cfg_v2.cfg2 = 1;
   spr_init_cfg_v2.cfg3 = 0;
-  spr_init_cfg_v2.flags = 0;
+  spr_init_cfg_v2.flags = spr_bypass ? SPR_FLAG_BYPASS : 0;
   spr_init_cfg_v2.cfg4 = (pack_type == SPRPackType::kRGBW);
   spr_init_cfg_v2.cfg5 = kDefaultColorPhaseIncrement.at(pack_type);
   spr_init_cfg_v2.cfg6 = kDefaultColorPhaseRepeat.at(pack_type);
@@ -937,6 +939,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   drmModeRes* res = nullptr;
 
   spr_enabled = android::base::GetIntProperty("vendor.display.enable_spr", 0);
+  spr_bypass = android::base::GetIntProperty("vendor.display.enable_spr_bypass", 0);
   /* Consider DRM devices in order. */
   for (int i = 0; i < DRM_MAX_MINOR; i++) {
     char* dev_name;
