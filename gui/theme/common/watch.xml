@@ -2694,7 +2694,7 @@
 				<placement x="%indent%" y="%row2_header_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>%tw_storage_display_name%</text>
 				<filter folders="1" files="1" nav="0" extn=".ab"/>
-				<path name="tw_backups_folder"/>
+				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
 			</fileselector>
@@ -2763,7 +2763,7 @@
 				<placement x="%indent%" y="%row2_header_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>%tw_storage_display_name%</text>
 				<filter folders="1" files="1" nav="0" extn=".ab"/>
-				<path name="tw_backups_folder"/>
+				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
 			</fileselector>

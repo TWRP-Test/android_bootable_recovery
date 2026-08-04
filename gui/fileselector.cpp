@@ -53,6 +53,7 @@ GUIFileSelector::GUIFileSelector(xml_node<>* node) : GUIScrollList(node)
 	mShowFolders = mShowFiles = mShowNavFolders = 1;
 	mUpdate = 0;
 	mPathVar = "cwd";
+	mPathCreate = false;
 	updateFileList = false;
 
 	// Load filter for filtering files (e.g. *.zip for only zips)
@@ -89,6 +90,9 @@ GUIFileSelector::GUIFileSelector(xml_node<>* node) : GUIScrollList(node)
 			mPathDefault = attr->value();
 			DataManager::SetValue(mPathVar, attr->value());
 		}
+		attr = child->first_attribute("create");
+		if (attr)
+			mPathCreate = atoi(attr->value()) != 0;
 	}
 
 	// Handle the result variable
@@ -249,6 +253,13 @@ int GUIFileSelector::GetFileList(const std::string folder)
 	// Clear all data
 	mFolderList.clear();
 	mFileList.clear();
+
+	// A list that owns its folder would otherwise walk up to the parent and
+	// leave the path variable pointing somewhere nobody asked for. Only make
+	// it while the storage is up, or it lands on the ramdisk under a mount
+	// point with nothing mounted on it.
+	if (mPathCreate && !TWFunc::Path_Exists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
+		TWFunc::Recursive_Mkdir(folder);
 
 	d = opendir(folder.c_str());
 	if (d == NULL) {

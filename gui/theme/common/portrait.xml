@@ -2378,7 +2378,7 @@
 				<placement x="%indent%" y="%row3_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>{@restore_sel_pack_fs=Select Package to Restore:}</text>
 				<filter folders="1" files="1" nav="0" extn=".ab"/>
-				<path name="tw_backups_folder"/>
+				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
 			</fileselector>
@@ -2450,7 +2450,7 @@
 				<placement x="%indent%" y="%row3_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>{@restore_sel_pack_fs=Select Package to Restore:}</text>
 				<filter folders="1" files="1" nav="0" extn=".ab"/>
-				<path name="tw_backups_folder"/>
+				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
 			</fileselector>

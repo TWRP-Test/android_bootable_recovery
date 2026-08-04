@@ -625,6 +625,7 @@ protected:
 	std::vector<FileData> mFileList;
 	std::string mPathVar; // current path displayed, saved in the data manager
 	std::string mPathDefault; // default value for the path if none is set in mPathVar
+	bool mPathCreate; // make the path when it is missing instead of falling back to its parent
 	std::string mExtn; // used for filtering the file list, for example, *.zip
 	std::string mPrfx; // used for filtering the file list, for example, Magisk-
 	std::string mVariable; // set when the user selects an item, pull path like /path/to/foo
