@@ -2509,10 +2509,16 @@ int TWPartitionManager::Partition_SDCard(void) {
 	// Locate and validate device to partition
 	TWPartition* SDCard = Find_Partition_By_Path(DataManager::GetCurrentStoragePath());
 
+	if (SDCard == NULL) {
+		gui_err("partition_sd_locate=Unable to locate device to partition.");
+		return false;
+	}
+
+	// Reverting clears Has_Data_Media, so the rest of the checks come after it.
 	if (SDCard->Is_Adopted_Storage)
 		SDCard->Revert_Adopted();
 
-	if (SDCard == NULL || !SDCard->Removable || SDCard->Has_Data_Media) {
+	if (!SDCard->Removable || SDCard->Has_Data_Media) {
 		gui_err("partition_sd_locate=Unable to locate device to partition.");
 		return false;
 	}
