@@ -148,16 +148,6 @@ on property:ro.debuggable=1
 on fs && property:ro.debuggable=1
     setprop sys.usb.config adb
 
-# Always start adbd on userdebug and eng builds
-on property:ro.debuggable=1
-    #write /sys/class/android_usb/android0/enable 1
-    #start adbd
-    setprop service.adb.root 1
-
-# Always start adbd on userdebug and eng builds
-on fs && property:ro.debuggable=1
-    setprop sys.usb.config adb
-
 service fastbootd /system/bin/fastbootd
     disabled
     group system
