@@ -2648,12 +2648,9 @@ int TWPartitionManager::Partition_SDCard(void) {
 		TWFunc::Exec_Cmd(Command);
 	}
 
-	// recreate TWRP folder and rewrite settings - these will be gone after sdcard is partitioned
-	if (SDCard->Mount(true)) {
-		string TWRP_Folder = SDCard->Mount_Point + "/TWRP";
-		mkdir(TWRP_Folder.c_str(), 0777);
-		DataManager::Flush();
-	}
+	// Update_System_Details() puts back whatever it had to mount itself, so
+	// mount here to leave the card up the way partitioning always has.
+	SDCard->Mount(true);
 
 	Update_System_Details();
 	gui_msg("part_complete=Partitioning complete.");

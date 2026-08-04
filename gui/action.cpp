@@ -1217,21 +1217,6 @@ int GUIAction::wipe(std::string arg)
 			}
 		} else
 			ret_val = PartitionManager.Wipe_By_Path(arg);
-#ifndef TW_OEM_BUILD
-		if (arg == DataManager::GetSettingsStoragePath()) {
-			// If we wiped the settings storage path, recreate the TWRP folder and dump the settings
-			string Storage_Path = DataManager::GetSettingsStoragePath();
-
-			if (PartitionManager.Mount_By_Path(Storage_Path, true)) {
-				LOGINFO("Making TWRP folder and saving settings.\n");
-				Storage_Path += "/TWRP";
-				mkdir(Storage_Path.c_str(), 0777);
-				DataManager::Flush();
-			} else {
-				LOGERR("Unable to recreate TWRP folder and save settings.\n");
-			}
-		}
-#endif
 	}
 	PartitionManager.Update_System_Details();
 	if (ret_val)
