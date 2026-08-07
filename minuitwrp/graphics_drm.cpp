@@ -699,7 +699,7 @@ static drm_surface *drm_create_surface(int width, int height) {
     printf("setting DRM_FORMAT_XBGR8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
 #else
     format = DRM_FORMAT_RGB565;
-    base_format = GGL_PIXEL_FORMAT_BGRA_8888;
+    base_format = GGL_PIXEL_FORMAT_RGB_565;
     printf("setting DRM_FORMAT_RGB565 and GGL_PIXEL_FORMAT_RGB_565\n");
 #endif
 
