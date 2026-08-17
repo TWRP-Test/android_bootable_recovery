@@ -127,6 +127,8 @@ public:
 	bool							getObjectPropertyInfo(MtpObjectProperty property, int& type);
 	bool							getDevicePropertyInfo(MtpDeviceProperty property, int& type);
 
+  	virtual int						openFilePath(const char* path, bool transcode);
+
 	virtual MtpObjectHandleList*	getObjectReferences(MtpObjectHandle handle);
 
 	virtual MtpResponseCode			setObjectReferences(MtpObjectHandle handle,

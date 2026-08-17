@@ -756,6 +756,11 @@ MtpProperty* IMtpDatabase::getObjectPropertyDesc(MtpObjectProperty property,
   return result;
 }
 
+int IMtpDatabase::openFilePath(const char* path, bool transcode) {
+  ALOGD("MtpDatabase %s: filePath=%s transcode=%d\n", __func__, path, transcode);
+  return open(path, O_RDONLY);
+}
+
 MtpProperty* IMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
   MtpProperty* result = NULL;
   bool writable = false;
