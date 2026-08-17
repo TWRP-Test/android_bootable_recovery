@@ -75,6 +75,7 @@ public:
 	static timespec timespec_diff(timespec& start, timespec& end);	            // Return a diff for 2 times
 	static int32_t timespec_diff_ms(timespec& start, timespec& end);            // Returns diff in ms
 	static bool Wait_For_File(const string& path, std::chrono::nanoseconds timeout); // Wait For File, True is success, False is timeout;
+	static void killForUseTargetProcess(const string& target);                  // Kills processes using the given path so it can be unmounted
 
 #ifndef BUILD_TWRPTAR_MAIN
 	static int Recursive_Mkdir(string Path);                                    // Recursively makes the entire path

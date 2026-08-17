@@ -211,6 +211,20 @@ bool TWFunc::Path_Exists(string Path) {
 	return stat(Path.c_str(), &st) == 0;
 }
 
+void TWFunc::killForUseTargetProcess(const string& target) {
+	if (!target.empty()) {
+		char cmdBuf[256] = {0};
+		snprintf(
+			cmdBuf,
+			sizeof(cmdBuf),
+			"lsof | awk '{print($1,$9,$2)}' | grep -v '^recovery ' | awk '{print($2,$3)}' | grep '^%s' | awk '{print $2}' | sort | uniq | xargs kill -9 > /dev/null 2>&1",
+			target.c_str()
+		);
+		string ret;
+		Exec_Cmd(cmdBuf, ret, false);
+	}
+}
+
 Archive_Type TWFunc::Get_File_Type(string fn) {
 	string::size_type i = 0;
 	int firstbyte = 0, secondbyte = 0;

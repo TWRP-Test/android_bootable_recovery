@@ -2218,8 +2218,14 @@ bool TWPartition::Wipe_Encryption() {
 	}
 
 #ifdef TW_INCLUDE_CRYPTO
-	if (!UnMount(true))
-		return false;
+	if (!UnMount(true)) {
+		LOGINFO("Force unmount /data.\n");
+		TWFunc::killForUseTargetProcess(Symlink_Mount_Point);
+		if (!Symlink_Mount_Point.empty()) umount2(Symlink_Mount_Point.c_str(), MNT_FORCE);
+		TWFunc::killForUseTargetProcess(Mount_Point);
+		UnMount(false);
+		if (Is_Mounted()) return false;
+	}
 	if (Is_Decrypted && !Decrypted_Block_Device.empty()) {
 //		if (delete_crypto_blk_dev((char*)("userdata")) != 0) {
 //			LOGERR("Error deleting crypto block device, continuing anyway.\n");
