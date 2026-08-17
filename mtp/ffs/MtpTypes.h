@@ -41,8 +41,8 @@ typedef MtpPropertyCode MtpObjectProperty;
 typedef uint32_t MtpObjectHandle;
 
 // Special values
-#define MTP_PARENT_ROOT			0xFFFFFFFF		 // parent is root of the storage
-#define kInvalidObjectHandle	0xFFFFFFFF
+#define MTP_PARENT_ROOT         0xFFFFFFFF       // parent is root of the storage
+#define kInvalidObjectHandle    0xFFFFFFFF
 
 class MtpStorage;
 class MtpDevice;
@@ -69,10 +69,10 @@ typedef UInt16List MtpObjectPropertyList;
 typedef UInt32List MtpStorageIDList;
 
 enum UrbPacketDivisionMode {
-	// First packet only contains a header.
-	FIRST_PACKET_ONLY_HEADER,
-	// First packet contains payload much as possible.
-	FIRST_PACKET_HAS_PAYLOAD
+    // First packet only contains a header.
+    FIRST_PACKET_ONLY_HEADER,
+    // First packet contains payload much as possible.
+    FIRST_PACKET_HAS_PAYLOAD
 };
 
 #endif // _MTP_TYPES_H

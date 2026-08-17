@@ -769,9 +769,9 @@ MtpProperty* IMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
 
 	  // get current value
 	  // TODO: add actual values
-	  result->setCurrentValue(0);
-	  result->setDefaultValue(0);
-	  break;
+      result->setCurrentValue(reinterpret_cast<uint16_t*>(0));
+      result->setDefaultValue(reinterpret_cast<uint16_t*>(0));
+      break;
   }
 
   return result;

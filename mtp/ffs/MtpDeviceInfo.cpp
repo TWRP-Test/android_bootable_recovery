@@ -22,84 +22,84 @@
 #include "MtpStringBuffer.h"
 
 MtpDeviceInfo::MtpDeviceInfo()
-	:	mStandardVersion(0),
-		mVendorExtensionID(0),
-		mVendorExtensionVersion(0),
-		mVendorExtensionDesc(NULL),
-		mFunctionalMode(0),
-		mOperations(NULL),
-		mEvents(NULL),
-		mDeviceProperties(NULL),
-		mCaptureFormats(NULL),
-		mPlaybackFormats(NULL),
-		mManufacturer(NULL),
-		mModel(NULL),
-		mVersion(NULL),
-		mSerial(NULL)
+    :   mStandardVersion(0),
+        mVendorExtensionID(0),
+        mVendorExtensionVersion(0),
+        mVendorExtensionDesc(NULL),
+        mFunctionalMode(0),
+        mOperations(NULL),
+        mEvents(NULL),
+        mDeviceProperties(NULL),
+        mCaptureFormats(NULL),
+        mPlaybackFormats(NULL),
+        mManufacturer(NULL),
+        mModel(NULL),
+        mVersion(NULL),
+        mSerial(NULL)
 {
 }
 
 MtpDeviceInfo::~MtpDeviceInfo() {
-	if (mVendorExtensionDesc)
-		free(mVendorExtensionDesc);
-	delete mOperations;
-	delete mEvents;
-	delete mDeviceProperties;
-	delete mCaptureFormats;
-	delete mPlaybackFormats;
-	if (mManufacturer)
-		free(mManufacturer);
-	if (mModel)
-		free(mModel);
-	if (mVersion)
-		free(mVersion);
-	if (mSerial)
-		free(mSerial);
+    if (mVendorExtensionDesc)
+        free(mVendorExtensionDesc);
+    delete mOperations;
+    delete mEvents;
+    delete mDeviceProperties;
+    delete mCaptureFormats;
+    delete mPlaybackFormats;
+    if (mManufacturer)
+        free(mManufacturer);
+    if (mModel)
+        free(mModel);
+    if (mVersion)
+        free(mVersion);
+    if (mSerial)
+        free(mSerial);
 }
 
 bool MtpDeviceInfo::read(MtpDataPacket& packet) {
-	MtpStringBuffer string;
+    MtpStringBuffer string;
 
-	// read the device info
-	if (!packet.getUInt16(mStandardVersion)) return false;
-	if (!packet.getUInt32(mVendorExtensionID)) return false;
-	if (!packet.getUInt16(mVendorExtensionVersion)) return false;
+    // read the device info
+    if (!packet.getUInt16(mStandardVersion)) return false;
+    if (!packet.getUInt32(mVendorExtensionID)) return false;
+    if (!packet.getUInt16(mVendorExtensionVersion)) return false;
 
-	if (!packet.getString(string)) return false;
-	mVendorExtensionDesc = strdup((const char *)string);
-	if (!mVendorExtensionDesc) return false;
+    if (!packet.getString(string)) return false;
+    mVendorExtensionDesc = strdup((const char *)string);
+    if (!mVendorExtensionDesc) return false;
 
-	if (!packet.getUInt16(mFunctionalMode)) return false;
-	mOperations = packet.getAUInt16();
-	if (!mOperations) return false;
-	mEvents = packet.getAUInt16();
-	if (!mEvents) return false;
-	mDeviceProperties = packet.getAUInt16();
-	if (!mDeviceProperties) return false;
-	mCaptureFormats = packet.getAUInt16();
-	if (!mCaptureFormats) return false;
-	mPlaybackFormats = packet.getAUInt16();
-	if (!mCaptureFormats) return false;
+    if (!packet.getUInt16(mFunctionalMode)) return false;
+    mOperations = packet.getAUInt16();
+    if (!mOperations) return false;
+    mEvents = packet.getAUInt16();
+    if (!mEvents) return false;
+    mDeviceProperties = packet.getAUInt16();
+    if (!mDeviceProperties) return false;
+    mCaptureFormats = packet.getAUInt16();
+    if (!mCaptureFormats) return false;
+    mPlaybackFormats = packet.getAUInt16();
+    if (!mCaptureFormats) return false;
 
-	if (!packet.getString(string)) return false;
-	mManufacturer = strdup((const char *)string);
-	if (!mManufacturer) return false;
-	if (!packet.getString(string)) return false;
-	mModel = strdup((const char *)string);
-	if (!mModel) return false;
-	if (!packet.getString(string)) return false;
-	mVersion = strdup((const char *)string);
-	if (!mVersion) return false;
-	if (!packet.getString(string)) return false;
-	mSerial = strdup((const char *)string);
-	if (!mSerial) return false;
+    if (!packet.getString(string)) return false;
+    mManufacturer = strdup((const char *)string);
+    if (!mManufacturer) return false;
+    if (!packet.getString(string)) return false;
+    mModel = strdup((const char *)string);
+    if (!mModel) return false;
+    if (!packet.getString(string)) return false;
+    mVersion = strdup((const char *)string);
+    if (!mVersion) return false;
+    if (!packet.getString(string)) return false;
+    mSerial = strdup((const char *)string);
+    if (!mSerial) return false;
 
 	return true;
 }
 
 void MtpDeviceInfo::print() {
-	ALOGV("Device Info:\n\tmStandardVersion: %d\n\tmVendorExtensionID: %d\n\tmVendorExtensionVersiony: %d\n",
-			mStandardVersion, mVendorExtensionID, mVendorExtensionVersion);
-	ALOGV("\tmVendorExtensionDesc: %s\n\tmFunctionalMode: %d\n\tmManufacturer: %s\n\tmModel: %s\n\tmVersion: %s\n\tmSerial: %s\n",
-			mVendorExtensionDesc, mFunctionalMode, mManufacturer, mModel, mVersion, mSerial);
+    ALOGV("Device Info:\n\tmStandardVersion: %d\n\tmVendorExtensionID: %d\n\tmVendorExtensionVersiony: %d\n",
+            mStandardVersion, mVendorExtensionID, mVendorExtensionVersion);
+    ALOGV("\tmVendorExtensionDesc: %s\n\tmFunctionalMode: %d\n\tmManufacturer: %s\n\tmModel: %s\n\tmVersion: %s\n\tmSerial: %s\n",
+            mVendorExtensionDesc, mFunctionalMode, mManufacturer, mModel, mVersion, mSerial);
 }

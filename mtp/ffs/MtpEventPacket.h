@@ -27,23 +27,23 @@ class IMtpHandle;
 class MtpEventPacket : public MtpPacket {
 
 public:
-						MtpEventPacket();
-	virtual				~MtpEventPacket();
+                        MtpEventPacket();
+    virtual             ~MtpEventPacket();
 
 #ifdef MTP_DEVICE
-	// write our data to the given usb handle
-	int					write(IMtpHandle *h);
+    // write our data to the given usb handle
+    int                 write(IMtpHandle *h);
 #endif
 
 #ifdef MTP_HOST
-	// read our buffer with the given request
-	int					sendRequest(struct usb_request *request);
-	int					readResponse(struct usb_device *device);
+    // read our buffer with the given request
+    int                 sendRequest(struct usb_request *request);
+    int                 readResponse(struct usb_device *device);
 #endif
 
-	inline MtpEventCode		getEventCode() const { return getContainerCode(); }
-	inline void				setEventCode(MtpEventCode code)
-													 { return setContainerCode(code); }
+    inline MtpEventCode     getEventCode() const { return getContainerCode(); }
+    inline void             setEventCode(MtpEventCode code)
+                                                     { return setContainerCode(code); }
 };
 
 #endif // _MTP_EVENT_PACKET_H

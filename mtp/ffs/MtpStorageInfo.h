@@ -23,23 +23,23 @@ class MtpDataPacket;
 
 class MtpStorageInfo {
 public:
-	MtpStorageID		mStorageID;
-	uint16_t			mStorageType;
-	uint16_t			mFileSystemType;
-	uint16_t			mAccessCapability;
-	uint64_t			mMaxCapacity;
-	uint64_t			mFreeSpaceBytes;
-	uint32_t			mFreeSpaceObjects;
-	char*				mStorageDescription;
-	char*				mVolumeIdentifier;
+    MtpStorageID        mStorageID;
+    uint16_t            mStorageType;
+    uint16_t            mFileSystemType;
+    uint16_t            mAccessCapability;
+    uint64_t            mMaxCapacity;
+    uint64_t            mFreeSpaceBytes;
+    uint32_t            mFreeSpaceObjects;
+    char*               mStorageDescription;
+    char*               mVolumeIdentifier;
 
 public:
-	explicit			MtpStorageInfo(MtpStorageID id);
-	virtual				~MtpStorageInfo();
+    explicit            MtpStorageInfo(MtpStorageID id);
+    virtual             ~MtpStorageInfo();
 
-	bool				read(MtpDataPacket& packet);
+    bool                read(MtpDataPacket& packet);
 
-	void				print();
+    void                print();
 };
 
 #endif // _MTP_STORAGE_INFO_H

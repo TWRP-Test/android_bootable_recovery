@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *		http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,26 +26,26 @@ struct usb_request;
 class MtpRequestPacket : public MtpPacket {
 
 public:
-						MtpRequestPacket();
-	virtual				~MtpRequestPacket();
+                        MtpRequestPacket();
+    virtual             ~MtpRequestPacket();
 
 #ifdef MTP_DEVICE
-	// fill our buffer with data from the given usb handle
-	int					read(IMtpHandle *h);
+    // fill our buffer with data from the given usb handle
+    int                 read(IMtpHandle *h);
 #endif
 
 #ifdef MTP_HOST
-	// write our buffer to the given endpoint
-	int					write(struct usb_request *request);
+    // write our buffer to the given endpoint
+    int                 write(struct usb_request *request);
 #endif
 
-	inline MtpOperationCode    getOperationCode() const { return getContainerCode(); }
-	inline void				   setOperationCode(MtpOperationCode code)
-													{ return setContainerCode(code); }
-	inline int					getParameterCount() const { return mParameterCount; }
+    inline MtpOperationCode    getOperationCode() const { return getContainerCode(); }
+    inline void                setOperationCode(MtpOperationCode code)
+                                                    { return setContainerCode(code); }
+    inline int                  getParameterCount() const { return mParameterCount; }
 
 private:
-	int		mParameterCount;
+    int     mParameterCount;
 };
 
 #endif // _MTP_REQUEST_PACKET_H

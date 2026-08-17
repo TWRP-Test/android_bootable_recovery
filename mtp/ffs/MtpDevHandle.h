@@ -22,21 +22,21 @@
 
 class MtpDevHandle : public IMtpHandle {
 private:
-	android::base::unique_fd mFd;
+    android::base::unique_fd mFd;
 
 public:
-	MtpDevHandle(int controlFd);
-	~MtpDevHandle();
-	int read(void *data, size_t len);
-	int write(const void *data, size_t len);
+    MtpDevHandle(int controlFd);
+    ~MtpDevHandle();
+    int read(void *data, size_t len);
+    int write(const void *data, size_t len);
 
-	int receiveFile(mtp_file_range mfr, bool);
-	int sendFile(mtp_file_range mfr);
-	int sendEvent(mtp_event me);
+    int receiveFile(mtp_file_range mfr, bool);
+    int sendFile(mtp_file_range mfr);
+    int sendEvent(mtp_event me);
 
-	int start(bool ptp);
-	void close();
-	bool writeDescriptors(bool usePtp);
+    int start(bool ptp);
+    void close();
+    bool writeDescriptors(bool usePtp);
 };
 
 #endif // _MTP_FFS_HANDLE_H

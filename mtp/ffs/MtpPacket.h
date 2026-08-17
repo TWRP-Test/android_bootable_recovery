@@ -28,47 +28,47 @@ struct usb_request;
 class MtpPacket {
 
 protected:
-	uint8_t*			mBuffer;
-	// current size of the buffer
-	size_t				mBufferSize;
-	// number of bytes to add when resizing the buffer
-	size_t				mAllocationIncrement;
-	// size of the data in the packet
-	size_t				mPacketSize;
+    uint8_t*            mBuffer;
+    // current size of the buffer
+    size_t              mBufferSize;
+    // number of bytes to add when resizing the buffer
+    size_t              mAllocationIncrement;
+    // size of the data in the packet
+    size_t              mPacketSize;
 
 public:
-	explicit			MtpPacket(int bufferSize);
-	virtual				~MtpPacket();
+    explicit            MtpPacket(int bufferSize);
+    virtual             ~MtpPacket();
 
-	// sets packet size to the default container size and sets buffer to zero
-	virtual void		reset();
+    // sets packet size to the default container size and sets buffer to zero
+    virtual void        reset();
 
-	void				allocate(size_t length);
-	void				dump();
-	void				copyFrom(const MtpPacket& src);
+    void                allocate(size_t length);
+    void                dump();
+    void                copyFrom(const MtpPacket& src);
 
-	uint16_t			getContainerCode() const;
-	void				setContainerCode(uint16_t code);
+    uint16_t            getContainerCode() const;
+    void                setContainerCode(uint16_t code);
 
-	uint16_t			getContainerType() const;
+    uint16_t            getContainerType() const;
 
-	MtpTransactionID	getTransactionID() const;
-	void				setTransactionID(MtpTransactionID id);
+    MtpTransactionID    getTransactionID() const;
+    void                setTransactionID(MtpTransactionID id);
 
-	uint32_t			getParameter(int index) const;
-	void				setParameter(int index, uint32_t value);
+    uint32_t            getParameter(int index) const;
+    void                setParameter(int index, uint32_t value);
 
 #ifdef MTP_HOST
-	int					transfer(struct usb_request* request);
+    int                 transfer(struct usb_request* request);
 #endif
 
 protected:
-	uint16_t			getUInt16(int offset) const;
-	uint32_t			getUInt32(int offset) const;
-	void				putUInt16(int offset, uint16_t value);
-	void				putUInt32(int offset, uint32_t value);
+    uint16_t            getUInt16(int offset) const;
+    uint32_t            getUInt32(int offset) const;
+    void                putUInt16(int offset, uint16_t value);
+    void                putUInt32(int offset, uint32_t value);
 
-	DISALLOW_COPY_AND_ASSIGN(MtpPacket);
+    DISALLOW_COPY_AND_ASSIGN(MtpPacket);
 };
 
 #endif // _MTP_PACKET_H

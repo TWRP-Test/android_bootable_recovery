@@ -26,7 +26,7 @@
 #include <usbhost/usbhost.h>
 
 MtpEventPacket::MtpEventPacket()
-	:	MtpPacket(512)
+    :   MtpPacket(512)
 {
 }
 
@@ -35,37 +35,37 @@ MtpEventPacket::~MtpEventPacket() {
 
 #ifdef MTP_DEVICE
 int MtpEventPacket::write(IMtpHandle *h) {
-	struct mtp_event	event;
+    struct mtp_event    event;
 
-	putUInt32(MTP_CONTAINER_LENGTH_OFFSET, mPacketSize);
-	putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_EVENT);
+    putUInt32(MTP_CONTAINER_LENGTH_OFFSET, mPacketSize);
+    putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_EVENT);
 
-	event.data = mBuffer;
-	event.length = mPacketSize;
-	int ret = h->sendEvent(event);
-	return (ret < 0 ? ret : 0);
+    event.data = mBuffer;
+    event.length = mPacketSize;
+    int ret = h->sendEvent(event);
+    return (ret < 0 ? ret : 0);
 }
 #endif
 
 #ifdef MTP_HOST
 int MtpEventPacket::sendRequest(struct usb_request *request) {
-	request->buffer = mBuffer;
-	request->buffer_length = mBufferSize;
-	mPacketSize = 0;
-	if (usb_request_queue(request)) {
-		MTPE("usb_endpoint_queue failed, errno: %d", errno);
-		return -1;
-	}
-	return 0;
+    request->buffer = mBuffer;
+    request->buffer_length = mBufferSize;
+    mPacketSize = 0;
+    if (usb_request_queue(request)) {
+        ALOGE("usb_endpoint_queue failed, errno: %d", errno);
+        return -1;
+    }
+    return 0;
 }
 
 int MtpEventPacket::readResponse(struct usb_device *device) {
-	struct usb_request* const req = usb_request_wait(device, -1);
-	if (req) {
-		mPacketSize = req->actual_length;
-		return req->actual_length;
-	} else {
-		return -1;
-	}
+    struct usb_request* const req = usb_request_wait(device, -1);
+    if (req) {
+        mPacketSize = req->actual_length;
+        return req->actual_length;
+    } else {
+        return -1;
+    }
 }
 #endif

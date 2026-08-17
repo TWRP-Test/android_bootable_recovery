@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *		http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,22 +25,22 @@ class IMtpHandle;
 class MtpResponsePacket : public MtpPacket {
 
 public:
-						MtpResponsePacket();
-	virtual				~MtpResponsePacket();
+                        MtpResponsePacket();
+    virtual             ~MtpResponsePacket();
 
 #ifdef MTP_DEVICE
-	// write our data to the given usb handle
-	int					write(IMtpHandle *h);
+    // write our data to the given usb handle
+    int                 write(IMtpHandle *h);
 #endif
 
 #ifdef MTP_HOST
-	// read our buffer with the given request
-	int					read(struct usb_request *request);
+    // read our buffer with the given request
+    int                 read(struct usb_request *request);
 #endif
 
-	inline MtpResponseCode		getResponseCode() const { return getContainerCode(); }
-	inline void					setResponseCode(MtpResponseCode code)
-													 { return setContainerCode(code); }
+    inline MtpResponseCode      getResponseCode() const { return getContainerCode(); }
+    inline void                 setResponseCode(MtpResponseCode code)
+                                                     { return setContainerCode(code); }
 };
 
 #endif // _MTP_RESPONSE_PACKET_H

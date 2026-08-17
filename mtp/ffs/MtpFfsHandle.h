@@ -31,84 +31,86 @@
 constexpr int NUM_IO_BUFS = 2;
 
 struct io_buffer {
-	std::vector<struct iocb> iocbs;		// Holds memory for all iocbs. Not used directly.
-	std::vector<struct iocb*> iocb;		// Pointers to individual iocbs, for syscalls
-	std::vector<unsigned char> bufs;	// A large buffer, used with filesystem io
-	std::vector<unsigned char*> buf;	// Pointers within the larger buffer, for syscalls
-	unsigned actual;					// The number of buffers submitted for this request
+    std::vector<struct iocb> iocbs;     // Holds memory for all iocbs. Not used directly.
+    std::vector<struct iocb*> iocb;     // Pointers to individual iocbs, for syscalls
+    std::vector<unsigned char> bufs;    // A large buffer, used with filesystem io
+    std::vector<unsigned char*> buf;    // Pointers within the larger buffer, for syscalls
+    unsigned actual;                    // The number of buffers submitted for this request
 };
 
 template <class T> class MtpFfsHandleTest;
 
 class MtpFfsHandle : public IMtpHandle {
-	template <class T> friend class MtpFfsHandleTest;
+    template <class T> friend class MtpFfsHandleTest;
 protected:
-	void closeConfig();
-	void closeEndpoints();
-	void advise(int fd);
-	int handleControlRequest(const struct usb_ctrlrequest *request);
-	int doAsync(void* data, size_t len, bool read, bool zero_packet);
-	int handleEvent();
-	void cancelTransaction();
-	void doSendEvent(mtp_event me);
-	bool openEndpoints(bool ptp);
+    void closeConfig();
+    void closeEndpoints();
+    void advise(int fd);
+    int handleControlRequest(const struct usb_ctrlrequest *request);
+    int doAsync(void* data, size_t len, bool read, bool zero_packet);
+    int handleEvent();
+    void cancelTransaction();
+    void doSendEvent(mtp_event me);
+    bool openEndpoints(bool ptp);
 
-	static int getPacketSize(int ffs_fd);
+    static int getPacketSize(int ffs_fd);
 
-	bool mCanceled;
-	bool mBatchCancel;
+    bool mCanceled;
+    bool mBatchCancel;
 
-	android::base::unique_fd mControl;
-	// "in" from the host's perspective => sink for mtp server
-	android::base::unique_fd mBulkIn;
-	// "out" from the host's perspective => source for mtp server
-	android::base::unique_fd mBulkOut;
-	android::base::unique_fd mIntr;
+    std::vector<std::thread> mChildThreads;
 
-	aio_context_t mCtx;
+    android::base::unique_fd mControl;
+    // "in" from the host's perspective => sink for mtp server
+    android::base::unique_fd mBulkIn;
+    // "out" from the host's perspective => source for mtp server
+    android::base::unique_fd mBulkOut;
+    android::base::unique_fd mIntr;
 
-	android::base::unique_fd mEventFd;
-	struct pollfd mPollFds[2];
+    aio_context_t mCtx;
 
-	struct io_buffer mIobuf[NUM_IO_BUFS];
+    android::base::unique_fd mEventFd;
+    struct pollfd mPollFds[2];
 
-	// Submit an io request of given length. Return amount submitted or -1.
-	int iobufSubmit(struct io_buffer *buf, int fd, unsigned length, bool read);
+    struct io_buffer mIobuf[NUM_IO_BUFS];
 
-	// Cancel submitted requests from start to end in the given array. Return 0 or -1.
-	int cancelEvents(struct iocb **iocb, struct io_event *events, unsigned start, unsigned end,
-						bool is_batch_cancel);
+    // Submit an io request of given length. Return amount submitted or -1.
+    int iobufSubmit(struct io_buffer *buf, int fd, unsigned length, bool read);
 
-	// Wait for at minimum the given number of events. Returns the amount of data in the returned
-	// events. Increments counter by the number of events returned.
-	int waitEvents(struct io_buffer *buf, int min_events, struct io_event *events, int *counter);
+    // Cancel submitted requests from start to end in the given array. Return 0 or -1.
+    int cancelEvents(struct iocb **iocb, struct io_event *events, unsigned start, unsigned end,
+		     bool is_batch_cancel);
+
+    // Wait for at minimum the given number of events. Returns the amount of data in the returned
+    // events. Increments counter by the number of events returned.
+    int waitEvents(struct io_buffer *buf, int min_events, struct io_event *events, int *counter);
 
 public:
-	int read(void *data, size_t len) override;
-	int write(const void *data, size_t len) override;
+    int read(void *data, size_t len) override;
+    int write(const void *data, size_t len) override;
 
-	int receiveFile(mtp_file_range mfr, bool zero_packet) override;
-	int sendFile(mtp_file_range mfr) override;
-	int sendEvent(mtp_event me) override;
+    int receiveFile(mtp_file_range mfr, bool zero_packet) override;
+    int sendFile(mtp_file_range mfr) override;
+    int sendEvent(mtp_event me) override;
 
-	int start(bool ptp) override;
-	void close() override;
+    int start(bool ptp) override;
+    void close() override;
 
-	bool writeDescriptors(bool ptp);
+    bool writeDescriptors(bool ptp);
 
-	MtpFfsHandle(int controlFd);
-	~MtpFfsHandle();
+    MtpFfsHandle(int controlFd);
+    ~MtpFfsHandle();
 };
 
 struct mtp_data_header {
-	/* length of packet, including this header */
-	__le32 length;
-	/* container type (2 for data packet) */
-	__le16 type;
-	/* MTP command code */
-	__le16 command;
-	/* MTP transaction ID */
-	__le32 transaction_id;
+    /* length of packet, including this header */
+    __le32 length;
+    /* container type (2 for data packet) */
+    __le16 type;
+    /* MTP command code */
+    __le16 command;
+    /* MTP transaction ID */
+    __le32 transaction_id;
 };
 
 #endif // _MTP_FFS_HANDLE_H

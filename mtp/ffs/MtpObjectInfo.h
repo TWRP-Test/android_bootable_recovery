@@ -23,34 +23,34 @@ class MtpDataPacket;
 
 class MtpObjectInfo {
 public:
-	MtpObjectHandle		mHandle;
-	MtpStorageID		mStorageID;
-	MtpObjectFormat		mFormat;
-	uint16_t			mProtectionStatus;
-	uint32_t			mCompressedSize;
-	MtpObjectFormat		mThumbFormat;
-	uint32_t			mThumbCompressedSize;
-	uint32_t			mThumbPixWidth;
-	uint32_t			mThumbPixHeight;
-	uint32_t			mImagePixWidth;
-	uint32_t			mImagePixHeight;
-	uint32_t			mImagePixDepth;
-	MtpObjectHandle		mParent;
-	uint16_t			mAssociationType;
-	uint32_t			mAssociationDesc;
-	uint32_t			mSequenceNumber;
-	char*				mName;
-	time_t				mDateCreated;
-	time_t				mDateModified;
-	char*				mKeywords;
+    MtpObjectHandle     mHandle;
+    MtpStorageID        mStorageID;
+    MtpObjectFormat     mFormat;
+    uint16_t            mProtectionStatus;
+    uint32_t            mCompressedSize;
+    MtpObjectFormat     mThumbFormat;
+    uint32_t            mThumbCompressedSize;
+    uint32_t            mThumbPixWidth;
+    uint32_t            mThumbPixHeight;
+    uint32_t            mImagePixWidth;
+    uint32_t            mImagePixHeight;
+    uint32_t            mImagePixDepth;
+    MtpObjectHandle     mParent;
+    uint16_t            mAssociationType;
+    uint32_t            mAssociationDesc;
+    uint32_t            mSequenceNumber;
+    char*               mName;
+    time_t              mDateCreated;
+    time_t              mDateModified;
+    char*               mKeywords;
 
 public:
-	explicit			MtpObjectInfo(MtpObjectHandle handle);
-	virtual				~MtpObjectInfo();
+    explicit            MtpObjectInfo(MtpObjectHandle handle);
+    virtual             ~MtpObjectInfo();
 
-	bool				read(MtpDataPacket& packet);
+    bool                read(MtpDataPacket& packet);
 
-	void				print();
+    void                print();
 };
 
 #endif // _MTP_OBJECT_INFO_H

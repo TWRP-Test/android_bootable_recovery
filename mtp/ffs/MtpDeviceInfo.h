@@ -23,28 +23,28 @@ class MtpDataPacket;
 
 class MtpDeviceInfo {
 public:
-	uint16_t				mStandardVersion;
-	uint32_t				mVendorExtensionID;
-	uint16_t				mVendorExtensionVersion;
-	char*					mVendorExtensionDesc;
-	uint16_t				mFunctionalMode;
-	UInt16List*				mOperations;
-	UInt16List*				mEvents;
-	MtpDevicePropertyList*	mDeviceProperties;
-	MtpObjectFormatList*	mCaptureFormats;
-	MtpObjectFormatList*	mPlaybackFormats;
-	char*					mManufacturer;
-	char*					mModel;
-	char*					mVersion;
-	char*					mSerial;
+    uint16_t                mStandardVersion;
+    uint32_t                mVendorExtensionID;
+    uint16_t                mVendorExtensionVersion;
+    char*                   mVendorExtensionDesc;
+    uint16_t                mFunctionalMode;
+    UInt16List*             mOperations;
+    UInt16List*             mEvents;
+    MtpDevicePropertyList*  mDeviceProperties;
+    MtpObjectFormatList*    mCaptureFormats;
+    MtpObjectFormatList*    mPlaybackFormats;
+    char*                   mManufacturer;
+    char*                   mModel;
+    char*                   mVersion;
+    char*                   mSerial;
 
 public:
-							MtpDeviceInfo();
-	virtual					~MtpDeviceInfo();
+                            MtpDeviceInfo();
+    virtual                 ~MtpDeviceInfo();
 
-	bool					read(MtpDataPacket& packet);
+    bool                    read(MtpDataPacket& packet);
 
-	void					print();
+    void                    print();
 };
 
 #endif // _MTP_DEVICE_INFO_H

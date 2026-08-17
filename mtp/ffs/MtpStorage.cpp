@@ -90,36 +90,36 @@ MtpStorage::~MtpStorage() {
 }
 
 int MtpStorage::getType() const {
-	return (mRemovable ? MTP_STORAGE_REMOVABLE_RAM :  MTP_STORAGE_FIXED_RAM);
+    return (mRemovable ? MTP_STORAGE_REMOVABLE_RAM :  MTP_STORAGE_FIXED_RAM);
 }
 
 int MtpStorage::getFileSystemType() const {
-	return MTP_STORAGE_FILESYSTEM_HIERARCHICAL;
+    return MTP_STORAGE_FILESYSTEM_HIERARCHICAL;
 }
 
 int MtpStorage::getAccessCapability() const {
-	return MTP_STORAGE_READ_WRITE;
+    return MTP_STORAGE_READ_WRITE;
 }
 
 uint64_t MtpStorage::getMaxCapacity() {
-	if (mMaxCapacity == 0) {
-		struct statfs	stat;
-		if (statfs(getPath(), &stat))
-			return -1;
-		mMaxCapacity = (uint64_t)stat.f_blocks * (uint64_t)stat.f_bsize;
-	}
-	return mMaxCapacity;
+    if (mMaxCapacity == 0) {
+        struct statfs   stat;
+        if (statfs(getPath(), &stat))
+            return -1;
+        mMaxCapacity = (uint64_t)stat.f_blocks * (uint64_t)stat.f_bsize;
+    }
+    return mMaxCapacity;
 }
 
 uint64_t MtpStorage::getFreeSpace() {
-	struct statfs	stat;
-	if (statfs(getPath(), &stat))
-		return -1;
-	return (uint64_t)stat.f_bavail * (uint64_t)stat.f_bsize;
+    struct statfs   stat;
+    if (statfs(getPath(), &stat))
+        return -1;
+    return (uint64_t)stat.f_bavail * (uint64_t)stat.f_bsize;
 }
 
 const char* MtpStorage::getDescription() const {
-	return (const char *)mDescription;
+    return (const char *)mDescription;
 }
 
 int MtpStorage::renameObject(MtpObjectHandle handle, std::string newName) {

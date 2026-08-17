@@ -20,9 +20,11 @@
 #include <log/log.h>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 
 // Max Character number of a MTP String
-#define MTP_STRING_MAX_CHARACTER_NUMBER				255
+#define MTP_STRING_MAX_CHARACTER_NUMBER             255
+
 
 class MtpDataPacket;
 
@@ -30,37 +32,38 @@ class MtpDataPacket;
 class MtpStringBuffer {
 
 private:
-	std::string		mString;
+    std::string     mString;
 
 public:
-					MtpStringBuffer() {};
-					~MtpStringBuffer() {};
+                    MtpStringBuffer() {};
+                    ~MtpStringBuffer() {};
 
-	explicit		MtpStringBuffer(const char* src);
-	explicit		MtpStringBuffer(const uint16_t* src);
-					MtpStringBuffer(const MtpStringBuffer& src);
+    explicit        MtpStringBuffer(const char* src);
+    explicit        MtpStringBuffer(const uint16_t* src);
+                    MtpStringBuffer(const MtpStringBuffer& src);
 
-	void			set(const char* src);
-	void			set(const uint16_t* src);
+    void            set(const char* src);
+    void            set(const uint16_t* src);
 
-	inline void		append(const char* other);
-	inline void		append(MtpStringBuffer &other);
+    inline void     append(const char* other);
+    inline void     append(MtpStringBuffer &other);
 
-	bool			readFromPacket(MtpDataPacket* packet);
-	void			writeToPacket(MtpDataPacket* packet) const;
+    bool            readFromPacket(MtpDataPacket* packet);
+    void            writeToPacket(MtpDataPacket* packet) const;
 
-	inline bool		isEmpty() const { return mString.empty(); }
-	inline int		size() const { return mString.length(); }
+    inline bool     isEmpty() const { return mString.empty(); }
+    inline int      size() const { return mString.length(); }
 
-	inline operator const char*() const { return mString.c_str(); }
+    inline operator const char*() const { return mString.c_str(); }
+    operator std::string_view() const { return mString; }
 };
 
 inline void MtpStringBuffer::append(const char* other) {
-	mString += other;
+    mString += other;
 }
 
 inline void MtpStringBuffer::append(MtpStringBuffer &other) {
-	mString += other.mString;
+    mString += other.mString;
 }
 
 #endif // _MTP_STRING_BUFFER_H
