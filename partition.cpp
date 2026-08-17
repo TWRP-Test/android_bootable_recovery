@@ -3155,7 +3155,42 @@ void TWPartition::Update_Data_Size_Async() {
 
 	std::thread([this, exclusions, path]() mutable {
 		if (Is_Mounted()) {
-			unsigned long long size = exclusions.Get_Folder_Size(path);
+			unsigned long long size = 0;
+			// f2fs fast path: dump.f2fs reports filesystem-wide used blocks,
+			// so subtract the excluded directories from it.
+			uint64_t es = exclusions.Get_Exclusions_Folder_Size();
+			string dev = Decrypted_Block_Device.empty() ? Actual_Block_Device : Decrypted_Block_Device;
+			if (es > 0 && !dev.empty()) {
+				char cmdBuf[256];
+				const char _cmd[] = "dump.f2fs -d1 %s | grep %s | awk -F ': ' '{print $2}' | awk -F ']' '{print $1}'";
+				int64_t _Used = 0;
+				snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_block_count");
+				string result;
+				if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
+					uint64_t USCount = strtoull(result.c_str(), NULL, 10);
+					if (USCount > 0 && USCount <= 354674688ULL) {
+						_Used = USCount * 4096LLU;
+						if ((int64_t)(_Used - es) > 0) {
+							snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_inode_count");
+							result.clear();
+							if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
+								uint64_t UICount = strtoull(result.c_str(), NULL, 10);
+								if (UICount > 0 && _Used > UICount * 4096ULL)
+									_Used -= UICount * 4096ULL;
+							}
+							if ((int64_t)(_Used - es) > 0)
+								size = _Used - es;
+						}
+					}
+				}
+				LOGINFO("Data size: f2fs fast path %s (exclusions %llu bytes).\n",
+						size > 0 ? "hit" : "miss", (unsigned long long)es);
+			}
+			if (size == 0) {
+				// dump.f2fs is unavailable or unusable; keep the old walk.
+				LOGINFO("Data size: falling back to folder walk.\n");
+				size = exclusions.Get_Folder_Size(path);
+			}
 			Used = size;
 			Backup_Size = size;
 			Backup_Size_Provisional = false;

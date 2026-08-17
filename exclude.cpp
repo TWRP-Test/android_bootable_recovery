@@ -89,6 +89,43 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path) {
 	return dusize;
 }
 
+// Same recursive stat walk as Get_Folder_Size, but without skip-dir checks;
+// used to measure the exact size of each absolute exclusion directory.
+static uint64_t _Get_Folder_Size(const string& Path) {
+	DIR* d;
+	struct dirent* de;
+	struct stat st;
+	uint64_t dusize = 0;
+	string FullPath;
+
+	d = opendir(Path.c_str());
+	if (d == NULL) return 0;
+
+	while ((de = readdir(d)) != NULL) {
+		if(!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..") || !strcmp(de->d_name, "lost+found"))
+			continue;
+		FullPath = Path + "/";
+		FullPath += de->d_name;
+		if (lstat(FullPath.c_str(), &st)) continue;
+		if ((st.st_mode & S_IFDIR) && de->d_type != DT_SOCK) {
+			dusize += _Get_Folder_Size(FullPath);
+		} else if (st.st_mode & S_IFREG || st.st_mode & S_IFLNK) {
+			dusize += (uint64_t)(st.st_size);
+		}
+	}
+	closedir(d);
+	return dusize;
+}
+
+uint64_t TWExclude::Get_Exclusions_Folder_Size() {
+	uint64_t dusize = 0;
+	for (size_t i = 0; i < absolutedir.size(); i++) {
+		string exclude_dir = absolutedir[i];
+		if (TWFunc::Path_Exists(exclude_dir)) dusize += _Get_Folder_Size(exclude_dir);
+	}
+	return dusize;
+}
+
 bool TWExclude::check_relative_skip_dirs(const string& dir) {
 	return std::find(relativedir.begin(), relativedir.end(), dir) != relativedir.end();
 }
