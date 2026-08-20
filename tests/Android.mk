@@ -135,7 +135,6 @@
 #     libbsdiff \
 #     libbspatch \
 #     libfusesideload \
-#     libotafault \
 #     librecovery \
 #     libupdater \
 #     libbootloader_message \
