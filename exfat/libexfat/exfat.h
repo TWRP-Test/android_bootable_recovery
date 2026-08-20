@@ -4,7 +4,7 @@
 	implementation.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2018  Andrew Nayenko
+	Copyright (C) 2010-2023  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -24,9 +24,8 @@
 #ifndef EXFAT_H_INCLUDED
 #define EXFAT_H_INCLUDED
 
-#if defined(__ANDROID__)
-#include "android_config.h"
-#else
+#ifndef ANDROID
+/* Android.bp is used instead of autotools when targeting Android */
 #include "config.h"
 #endif
 #include "compiler.h"
@@ -90,6 +89,7 @@ struct exfat_node
 	bool is_cached : 1;
 	bool is_dirty : 1;
 	bool is_unlinked : 1;
+	uint64_t valid_size;
 	uint64_t size;
 	time_t mtime, atime;
 	le16_t name[EXFAT_NAME_MAX + 1];

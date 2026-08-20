@@ -3,7 +3,7 @@
 	exFAT file system implementation library.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2018  Andrew Nayenko
+	Copyright (C) 2010-2023  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -426,9 +426,14 @@ int exfat_truncate(struct exfat* ef, struct exfat_node* node, uint64_t size,
 
 	if (erase)
 	{
-		rc = erase_range(ef, node, node->size, size);
+		rc = erase_range(ef, node, node->valid_size, size);
 		if (rc != 0)
 			return rc;
+		node->valid_size = size;
+	}
+	else
+	{
+		node->valid_size = MIN(node->valid_size, size);
 	}
 
 	exfat_update_mtime(node);

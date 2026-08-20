@@ -1,0 +1,25 @@
+cc_binary {
+    name: "exfat-fuse",
+
+    srcs: [
+        "main.c",
+    ],
+
+    shared_libs: [
+        "libfuse",
+        "libexfat_twrp",
+    ],
+
+    cflags: [
+        "-std=gnu99",
+        "-Wno-error",
+        "-DPACKAGE=\"exfat\"",
+        "-DVERSION=\"1.4.0\"",
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wno-sign-compare",
+        "-Wno-unused-parameter",
+        "-DFUSE_USE_VERSION=317",
+    ],
+
+    recovery_available: true,
+}

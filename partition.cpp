@@ -2387,10 +2387,10 @@ bool TWPartition::Wipe_EXFAT() {
 
 	if (!UnMount(true))
 		return false;
-	if (TWFunc::Path_Exists("/system/bin/mkexfatfs")) {
-		gui_msg(Msg("formatting_using=Formatting {1} using {2}...")(Display_Name)("mkexfatfs"));
+	if (TWFunc::Path_Exists("/system/bin/mkfs.exfat")) {
+		gui_msg(Msg("formatting_using=Formatting {1} using {2}...")(Display_Name)("mkfs.exfat"));
 		Find_Actual_Block_Device();
-		command = "mkexfatfs " + Actual_Block_Device;
+		command = "mkfs.exfat " + Actual_Block_Device;
 		if (TWFunc::Exec_Cmd(command) == 0) {
 			Recreate_AndSec_Folder();
 			gui_msg("done=Done.");

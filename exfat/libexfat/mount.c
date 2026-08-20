@@ -3,7 +3,7 @@
 	exFAT file system implementation library.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2018  Andrew Nayenko
+	Copyright (C) 2010-2023  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -198,7 +198,7 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 		mode = EXFAT_MODE_RW;
 	ef->dev = exfat_open(spec, mode);
 	if (ef->dev == NULL)
-		return -EIO;
+		return -ENODEV;
 	if (exfat_get_mode(ef->dev) == EXFAT_MODE_RO)
 	{
 		if (mode == EXFAT_MODE_ANY)
@@ -305,7 +305,7 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 	ef->root->start_cluster = le32_to_cpu(ef->sb->rootdir_cluster);
 	ef->root->fptr_cluster = ef->root->start_cluster;
 	ef->root->name[0] = cpu_to_le16('\0');
-	ef->root->size = rootdir_size(ef);
+	ef->root->valid_size = ef->root->size = rootdir_size(ef);
 	if (ef->root->size == 0)
 	{
 		exfat_free(ef);

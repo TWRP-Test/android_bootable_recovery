@@ -604,7 +604,7 @@ ifneq ($(wildcard external/unzip/Android.mk),)
 endif
 
 ifneq ($(TW_NO_EXFAT), true)
-    TWRP_REQUIRED_MODULES += mkexfatfs fsckexfat
+    TWRP_REQUIRED_MODULES += mkfs.exfat.recovery fsck.exfat.recovery
     ifneq ($(TW_NO_EXFAT_FUSE), true)
         TWRP_REQUIRED_MODULES += exfat-fuse
     endif
@@ -767,15 +767,6 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
 endif
 ifeq ($(BUILD_ID), GINGERBREAD)
     TW_NO_EXFAT := true
-endif
-ifneq ($(TW_NO_EXFAT), true)
-    include $(commands_TWRP_local_path)/exfat/mkfs/Android.mk \
-            $(commands_TWRP_local_path)/exfat/fsck/Android.mk \
-            $(commands_TWRP_local_path)/fuse/Android.mk \
-            $(commands_TWRP_local_path)/exfat/libexfat/Android.mk
-    ifneq ($(TW_NO_EXFAT_FUSE), true)
-        include $(commands_TWRP_local_path)/exfat/fuse/Android.mk
-    endif
 endif
 ifneq ($(TW_OEM_BUILD),true)
     include $(commands_TWRP_local_path)/orscmd/Android.mk

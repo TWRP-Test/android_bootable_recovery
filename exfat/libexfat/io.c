@@ -3,7 +3,7 @@
 	exFAT file system implementation library.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2018  Andrew Nayenko
+	Copyright (C) 2010-2023  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -390,27 +390,43 @@ ssize_t exfat_pwrite(struct exfat_dev* dev, const void* buffer, size_t size,
 ssize_t exfat_generic_pread(const struct exfat* ef, struct exfat_node* node,
 		void* buffer, size_t size, off_t offset)
 {
-	uint64_t newsize = offset;
+	uint64_t uoffset = offset;
 	cluster_t cluster;
 	char* bufp = buffer;
 	off_t lsize, loffset, remainder;
 
 	if (offset < 0)
 		return -EINVAL;
-	if (newsize >= node->size)
+	if (uoffset >= node->size)
 		return 0;
 	if (size == 0)
 		return 0;
 
-	cluster = exfat_advance_cluster(ef, node, newsize / CLUSTER_SIZE(*ef->sb));
+	if (uoffset + size > node->valid_size)
+	{
+		ssize_t bytes = 0;
+
+		if (uoffset < node->valid_size)
+		{
+			bytes = exfat_generic_pread(ef, node, buffer,
+					node->valid_size - uoffset, offset);
+			if (bytes < 0 || (size_t) bytes < node->valid_size - uoffset)
+				return bytes;
+		}
+		memset(buffer + bytes, 0,
+				MIN(size - bytes, node->size - node->valid_size));
+		return MIN(size, node->size - uoffset);
+	}
+
+	cluster = exfat_advance_cluster(ef, node, uoffset / CLUSTER_SIZE(*ef->sb));
 	if (CLUSTER_INVALID(*ef->sb, cluster))
 	{
 		exfat_error("invalid cluster 0x%x while reading", cluster);
 		return -EIO;
 	}
 
-	loffset = newsize % CLUSTER_SIZE(*ef->sb);
-	remainder = MIN(size, node->size - newsize);
+	loffset = uoffset % CLUSTER_SIZE(*ef->sb);
+	remainder = MIN(size, node->size - uoffset);
 	while (remainder > 0)
 	{
 		if (CLUSTER_INVALID(*ef->sb, cluster))
@@ -432,13 +448,13 @@ ssize_t exfat_generic_pread(const struct exfat* ef, struct exfat_node* node,
 	}
 	if (!(node->attrib & EXFAT_ATTRIB_DIR) && !ef->ro && !ef->noatime)
 		exfat_update_atime(node);
-	return MIN(size, node->size - newsize) - remainder;
+	return MIN(size, node->size - uoffset) - remainder;
 }
 
 ssize_t exfat_generic_pwrite(struct exfat* ef, struct exfat_node* node,
 		const void* buffer, size_t size, off_t offset)
 {
-	uint64_t newsize = offset;
+	uint64_t uoffset = offset;
 	int rc;
 	cluster_t cluster;
 	const char* bufp = buffer;
@@ -446,29 +462,29 @@ ssize_t exfat_generic_pwrite(struct exfat* ef, struct exfat_node* node,
 
 	if (offset < 0)
 		return -EINVAL;
-	if (newsize > node->size)
+	if (uoffset > node->size)
 	{
-		rc = exfat_truncate(ef, node, newsize, true);
+		rc = exfat_truncate(ef, node, uoffset, true);
 		if (rc != 0)
 			return rc;
 	}
-	if (newsize + size > node->size)
+	if (uoffset + size > node->size)
 	{
-		rc = exfat_truncate(ef, node, newsize + size, false);
+		rc = exfat_truncate(ef, node, uoffset + size, false);
 		if (rc != 0)
 			return rc;
 	}
 	if (size == 0)
 		return 0;
 
-	cluster = exfat_advance_cluster(ef, node, newsize / CLUSTER_SIZE(*ef->sb));
+	cluster = exfat_advance_cluster(ef, node, uoffset / CLUSTER_SIZE(*ef->sb));
 	if (CLUSTER_INVALID(*ef->sb, cluster))
 	{
 		exfat_error("invalid cluster 0x%x while writing", cluster);
 		return -EIO;
 	}
 
-	loffset = newsize % CLUSTER_SIZE(*ef->sb);
+	loffset = uoffset % CLUSTER_SIZE(*ef->sb);
 	remainder = size;
 	while (remainder > 0)
 	{
@@ -487,6 +503,7 @@ ssize_t exfat_generic_pwrite(struct exfat* ef, struct exfat_node* node,
 		bufp += lsize;
 		loffset = 0;
 		remainder -= lsize;
+		node->valid_size = MAX(node->valid_size, uoffset + size - remainder);
 		cluster = exfat_next_cluster(ef, node, cluster);
 	}
 	if (!(node->attrib & EXFAT_ATTRIB_DIR))

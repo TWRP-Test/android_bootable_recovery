@@ -1,0 +1,34 @@
+cc_library {
+    name: "libexfat_twrp",
+
+    srcs: [
+        "cluster.c",
+        "io.c",
+        "log.c",
+        "lookup.c",
+        "mount.c",
+        "node.c",
+        "repair.c",
+        "time.c",
+        "utf.c",
+        "utils.c",
+    ],
+
+    shared_libs: [
+        "liblog",
+    ],
+
+    cflags: [
+        "-std=gnu99",
+        "-Wno-error",
+        "-D_FILE_OFFSET_BITS=64",
+        "-DPACKAGE=\"exfat\"",
+        "-DVERSION=\"1.4.0\"",
+    ],
+
+    export_include_dirs: [
+        ".",
+    ],
+
+    recovery_available: true,
+}

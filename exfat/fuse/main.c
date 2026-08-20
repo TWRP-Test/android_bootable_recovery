@@ -3,7 +3,7 @@
 	FUSE-based exFAT implementation. Requires FUSE 2.6 or later.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2018  Andrew Nayenko
+	Copyright (C) 2010-2023  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 #include <exfat.h>
-#define FUSE_USE_VERSION 26
 #include <fuse.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -55,7 +54,11 @@ static void set_node(struct fuse_file_info* fi, struct exfat_node* node)
 	fi->keep_cache = 1;
 }
 
-static int fuse_exfat_getattr(const char* path, struct stat* stbuf)
+static int fuse_exfat_getattr(const char* path, struct stat* stbuf
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_file_info* fi
+#endif
+		)
 {
 	struct exfat_node* node;
 	int rc;
@@ -71,7 +74,11 @@ static int fuse_exfat_getattr(const char* path, struct stat* stbuf)
 	return 0;
 }
 
-static int fuse_exfat_truncate(const char* path, off_t size)
+static int fuse_exfat_truncate(const char* path, off_t size
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_file_info* fi
+#endif
+		)
 {
 	struct exfat_node* node;
 	int rc;
@@ -96,7 +103,11 @@ static int fuse_exfat_truncate(const char* path, off_t size)
 
 static int fuse_exfat_readdir(const char* path, void* buffer,
 		fuse_fill_dir_t filler, UNUSED off_t offset,
-		UNUSED struct fuse_file_info* fi)
+		UNUSED struct fuse_file_info* fi
+#if FUSE_USE_VERSION >= 30
+		, UNUSED enum fuse_readdir_flags flags
+#endif
+		)
 {
 	struct exfat_node* parent;
 	struct exfat_node* node;
@@ -117,8 +128,13 @@ static int fuse_exfat_readdir(const char* path, void* buffer,
 		return -ENOTDIR;
 	}
 
+#if FUSE_USE_VERSION < 30
 	filler(buffer, ".", NULL, 0);
 	filler(buffer, "..", NULL, 0);
+#else
+	filler(buffer, ".", NULL, 0, 0);
+	filler(buffer, "..", NULL, 0, 0);
+#endif
 
 	rc = exfat_opendir(&ef, parent, &it);
 	if (rc != 0)
@@ -134,7 +150,11 @@ static int fuse_exfat_readdir(const char* path, void* buffer,
 				name, node->is_contiguous ? "contiguous" : "fragmented",
 				node->size, node->start_cluster);
 		exfat_stat(&ef, node, &stbuf);
+#if FUSE_USE_VERSION < 30
 		filler(buffer, name, &stbuf, 0);
+#else
+		filler(buffer, name, &stbuf, 0, 0);
+#endif
 		exfat_put_node(&ef, node);
 	}
 	exfat_closedir(&ef, &it);
@@ -147,11 +167,28 @@ static int fuse_exfat_open(const char* path, struct fuse_file_info* fi)
 	struct exfat_node* node;
 	int rc;
 
-	exfat_debug("[%s] %s", __func__, path);
+	exfat_debug("[%s] %s flags %#x%s%s%s%s%s", __func__, path, fi->flags,
+			fi->flags & O_RDONLY ? " O_RDONLY" : "",
+			fi->flags & O_WRONLY ? " O_WRONLY" : "",
+			fi->flags & O_RDWR   ? " O_RDWR"   : "",
+			fi->flags & O_APPEND ? " O_APPEND" : "",
+			fi->flags & O_TRUNC  ? " O_TRUNC"  : "");
 
 	rc = exfat_lookup(&ef, &node, path);
 	if (rc != 0)
 		return rc;
+	/* FUSE 2.x will call fuse_exfat_truncate() explicitly */
+#if FUSE_USE_VERSION >= 30
+	if (fi->flags & O_TRUNC)
+	{
+		rc = exfat_truncate(&ef, node, 0, true);
+		if (rc != 0)
+		{
+			exfat_put_node(&ef, node);
+			return rc;
+		}
+	}
+#endif
 	set_node(fi, node);
 	return 0;
 }
@@ -195,14 +232,14 @@ static int fuse_exfat_flush(UNUSED const char* path, struct fuse_file_info* fi)
 	   This handler may be called by FUSE on close() syscall. FUSE also deals
 	   with removals of open files, so we don't free clusters on close but
 	   only on rmdir and unlink. If the FUSE implementation does not call this
-	   handler we will flush node on release. See fuse_exfat_relase() above.
+	   handler we will flush node on release. See fuse_exfat_release() above.
 	*/
 	exfat_debug("[%s] %s", __func__, path);
 	return exfat_flush_node(&ef, get_node(fi));
 }
 
 static int fuse_exfat_fsync(UNUSED const char* path, UNUSED int datasync,
-		UNUSED struct fuse_file_info *fi)
+		UNUSED struct fuse_file_info* fi)
 {
 	int rc;
 
@@ -279,13 +316,21 @@ static int fuse_exfat_mkdir(const char* path, UNUSED mode_t mode)
 	return exfat_mkdir(&ef, path);
 }
 
-static int fuse_exfat_rename(const char* old_path, const char* new_path)
+static int fuse_exfat_rename(const char* old_path, const char* new_path
+#if FUSE_USE_VERSION >= 30
+		, UNUSED unsigned int flags
+#endif
+		)
 {
 	exfat_debug("[%s] %s => %s", __func__, old_path, new_path);
 	return exfat_rename(&ef, old_path, new_path);
 }
 
-static int fuse_exfat_utimens(const char* path, const struct timespec tv[2])
+static int fuse_exfat_utimens(const char* path, const struct timespec tv[2]
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_file_info* fi
+#endif
+		)
 {
 	struct exfat_node* node;
 	int rc;
@@ -302,7 +347,11 @@ static int fuse_exfat_utimens(const char* path, const struct timespec tv[2])
 	return rc;
 }
 
-static int fuse_exfat_chmod(UNUSED const char* path, mode_t mode)
+static int fuse_exfat_chmod(UNUSED const char* path, mode_t mode
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_file_info* fi
+#endif
+		)
 {
 	const mode_t VALID_MODE_MASK = S_IFREG | S_IFDIR |
 			S_IRWXU | S_IRWXG | S_IRWXO;
@@ -313,7 +362,11 @@ static int fuse_exfat_chmod(UNUSED const char* path, mode_t mode)
 	return 0;
 }
 
-static int fuse_exfat_chown(UNUSED const char* path, uid_t uid, gid_t gid)
+static int fuse_exfat_chown(UNUSED const char* path, uid_t uid, gid_t gid
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_file_info* fi
+#endif
+		)
 {
 	exfat_debug("[%s] %s %u:%u", __func__, path, uid, gid);
 	if (uid != ef.uid || gid != ef.gid)
@@ -345,7 +398,16 @@ static int fuse_exfat_statfs(UNUSED const char* path, struct statvfs* sfs)
 	return 0;
 }
 
-static void* fuse_exfat_init(struct fuse_conn_info* fci)
+static void* fuse_exfat_init(
+#ifdef FUSE_CAP_BIG_WRITES
+		struct fuse_conn_info* fci
+#else
+		UNUSED struct fuse_conn_info* fci
+#endif
+#if FUSE_USE_VERSION >= 30
+		, UNUSED struct fuse_config* cfg
+#endif
+		)
 {
 	exfat_debug("[%s]", __func__);
 #ifdef FUSE_CAP_BIG_WRITES
@@ -550,10 +612,10 @@ int main(int argc, char* argv[])
 	int opt;
 	int rc;
 
-	printf("FUSE exfat %s\n", VERSION);
+	printf("FUSE exfat %s (libfuse%d)\n", VERSION, FUSE_USE_VERSION / 10);
 
 	fuse_options = strdup("allow_other,"
-#if defined(__linux__) || defined(__FreeBSD__)
+#if FUSE_USE_VERSION < 30 && (defined(__linux__) || defined(__FreeBSD__))
 			"big_writes,"
 #endif
 #if defined(__linux__)
@@ -600,7 +662,7 @@ int main(int argc, char* argv[])
 		case 'V':
 			free(exfat_options);
 			free(fuse_options);
-			puts("Copyright (C) 2010-2018  Andrew Nayenko");
+			puts("Copyright (C) 2010-2023  Andrew Nayenko");
 			return 0;
 		case 'v':
 			break;
