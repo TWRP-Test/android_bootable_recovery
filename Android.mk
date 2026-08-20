@@ -621,9 +621,6 @@ endif
 ifneq ($(TW_EXCLUDE_ENCRYPTED_BACKUPS),)
     TWRP_REQUIRED_MODULES += openaes openaes_license
 endif
-ifeq ($(TW_INCLUDE_FB2PNG), true)
-    TWRP_REQUIRED_MODULES += fb2png
-endif
 ifneq ($(TW_OEM_BUILD),true)
     TWRP_REQUIRED_MODULES += orscmd
 endif
@@ -792,9 +789,5 @@ ifneq ($(TW_OEM_BUILD),true)
     include $(commands_TWRP_local_path)/orscmd/Android.mk
 endif
 
-# FB2PNG
-ifeq ($(TW_INCLUDE_FB2PNG), true)
-    include $(commands_TWRP_local_path)/fb2png/Android.mk
-endif
 
 commands_TWRP_local_path :=
