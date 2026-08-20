@@ -81,8 +81,7 @@ protected:
 	static int GetMagicValue(const string& varName, string& value);
 
 private:
-	static void sanitize_device_id(char* device_id);
-	static void get_device_id(void);
+	static void get_device_id();
 
 	static pthread_mutex_t m_valuesLock;
 };

@@ -291,9 +291,6 @@ endif
 ifeq ($(TW_SDEXT_NO_EXT4), true)
     LOCAL_CFLAGS += -DTW_SDEXT_NO_EXT4
 endif
-ifeq ($(TW_FORCE_CPUINFO_FOR_DEVICE_ID), true)
-    LOCAL_CFLAGS += -DTW_FORCE_CPUINFO_FOR_DEVICE_ID
-endif
 ifeq ($(TW_NO_EXFAT_FUSE), true)
     LOCAL_CFLAGS += -DTW_NO_EXFAT_FUSE
 endif
@@ -401,9 +398,6 @@ endif
 
 WITH_CRYPTO_UTILS := \
     $(if $(wildcard system/core/libcrypto_utils/android_pubkey.c),true)
-ifeq ($(TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID), true)
-    LOCAL_CFLAGS += -DTW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID
-endif
 ifeq ($(TW_USE_SERIALNO_PROPERTY_FOR_DEVICE_ID), true)
     LOCAL_CFLAGS += -DTW_USE_SERIALNO_PROPERTY_FOR_DEVICE_ID
 endif

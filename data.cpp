@@ -23,6 +23,7 @@
 #include <fstream>
 #include <cctype>
 #include <cutils/properties.h>
+#include <fstab/fstab.h>
 #include <unistd.h>
 
 #include "variables.h"
@@ -36,9 +37,6 @@
 #include "set_metadata.h"
 #include "gui/gui.hpp"
 #include "infomanager.hpp"
-
-#define DEVID_MAX 64
-#define HWID_MAX 32
 
 extern "C"
 {
@@ -66,164 +64,17 @@ pthread_mutex_t DataManager::m_valuesLock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 pthread_mutex_t DataManager::m_valuesLock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 #endif
 
-// Device ID functions
-void DataManager::sanitize_device_id(char* device_id) {
-	const char* whitelist ="-._";
-	char str[DEVID_MAX];
-	char* c = str;
+void DataManager::get_device_id() {
+	std::string serialno;
 
-	snprintf(str, DEVID_MAX, "%s", device_id);
-	memset(device_id, 0, strlen(device_id));
-	while (*c) {
-		if (isalnum(*c) || strchr(whitelist, *c))
-			strncat(device_id, c, 1);
-		c++;
-	}
-	return;
-}
-
-#define CMDLINE_SERIALNO		"androidboot.serialno="
-#define CMDLINE_SERIALNO_LEN	(strlen(CMDLINE_SERIALNO))
-#define CPUINFO_SERIALNO		"Serial"
-#define CPUINFO_SERIALNO_LEN	(strlen(CPUINFO_SERIALNO))
-#define CPUINFO_HARDWARE		"Hardware"
-#define CPUINFO_HARDWARE_LEN	(strlen(CPUINFO_HARDWARE))
-
-void DataManager::get_device_id(void) {
-	FILE *fp;
-	char line[2048];
-	char hardware_id[HWID_MAX] = { 0 };
-	char device_id[DEVID_MAX] = { 0 };
-	char* token;
-
-#ifdef TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID
-	// Use (product_model)_(hardware_id) as device id
-	char model_id[PROPERTY_VALUE_MAX];
-	property_get("ro.product.model", model_id, "error");
-	if (strcmp(model_id, "error") != 0) {
-		LOGINFO("=> product model: '%s'\n", model_id);
-		// Replace spaces with underscores
-		for (size_t i = 0; i < strlen(model_id); i++) {
-			if (model_id[i] == ' ')
-				model_id[i] = '_';
-		}
-		snprintf(device_id, DEVID_MAX, "%s", model_id);
-
-		if (strlen(device_id) < DEVID_MAX) {
-			fp = fopen("proc_cpuinfo.txt", "rt");
-			if (fp != NULL) {
-				while (fgets(line, sizeof(line), fp) != NULL) {
-					if (memcmp(line, CPUINFO_HARDWARE,
-							CPUINFO_HARDWARE_LEN) == 0) {
-						// skip past "Hardware", spaces, and colon
-						token = line + CPUINFO_HARDWARE_LEN;
-						while (*token && (!isgraph(*token) || *token == ':'))
-							token++;
-
-						if (*token && *token != '\n'
-								&& strcmp("UNKNOWN\n", token)) {
-							snprintf(hardware_id, HWID_MAX, "%s", token);
-							if (hardware_id[strlen(hardware_id)-1] == '\n')
-								hardware_id[strlen(hardware_id)-1] = 0;
-							LOGINFO("=> hardware id from cpuinfo: '%s'\n",
-									hardware_id);
-						}
-						break;
-					}
-				}
-				fclose(fp);
-			}
-		}
-
-		if (hardware_id[0] != 0)
-			snprintf(device_id, DEVID_MAX, "%s_%s", model_id, hardware_id);
-
-		sanitize_device_id(device_id);
-		mConst.SetValue("device_id", device_id);
-		LOGINFO("=> using device id: '%s'\n", device_id);
-		return;
-	}
-#endif
-
-#ifndef TW_FORCE_CPUINFO_FOR_DEVICE_ID
 #ifdef TW_USE_SERIALNO_PROPERTY_FOR_DEVICE_ID
-	// Check serial number system property
-	if (property_get("ro.serialno", line, "")) {
-		snprintf(device_id, DEVID_MAX, "%s", line);
-		sanitize_device_id(device_id);
-		mConst.SetValue("device_id", device_id);
-		return;
-	}
+	// Get serial number from system property
+	serialno = android::base::GetProperty("ro.serialno", "");
+#else
+	// Get serial number from bootconfig
+	android::fs_mgr::GetBootconfig("androidboot.serialno", &serialno);
 #endif
-
-	// Check the cmdline to see if the serial number was supplied
-	fp = fopen("/proc/cmdline", "rt");
-	if (fp != NULL) {
-		fgets(line, sizeof(line), fp);
-		fclose(fp); // cmdline is only one line long
-
-		token = strtok(line, " ");
-		while (token) {
-			if (memcmp(token, CMDLINE_SERIALNO, CMDLINE_SERIALNO_LEN) == 0) {
-				token += CMDLINE_SERIALNO_LEN;
-				snprintf(device_id, DEVID_MAX, "%s", token);
-				sanitize_device_id(device_id); // also removes newlines
-				mConst.SetValue("device_id", device_id);
-				return;
-			}
-			token = strtok(NULL, " ");
-		}
-	}
-#endif
-	// Check cpuinfo for serial number; if found, use as device_id
-	// If serial number is not found, fallback to hardware_id for the device_id
-	fp = fopen("/proc/cpuinfo", "rt");
-	if (fp != NULL) {
-		while (fgets(line, sizeof(line), fp) != NULL) {
-			if (memcmp(line, CPUINFO_SERIALNO, CPUINFO_SERIALNO_LEN) == 0) {
-				// skip past "Serial", spaces, and colon
-				token = line + CPUINFO_SERIALNO_LEN;
-				while (*token && (!isgraph(*token) || *token == ':'))
-					token++;
-
-				if (*token && *token != '\n') {
-					snprintf(device_id, DEVID_MAX, "%s", token);
-					sanitize_device_id(device_id); // also removes newlines
-					LOGINFO("=> serial from cpuinfo: '%s'\n", device_id);
-					mConst.SetValue("device_id", device_id);
-					fclose(fp);
-					return;
-				}
-			} else if (memcmp(line, CPUINFO_HARDWARE,
-					CPUINFO_HARDWARE_LEN) == 0) {
-				// skip past "Hardware", spaces, and colon
-				token = line + CPUINFO_HARDWARE_LEN;
-				while (*token && (!isgraph(*token) || *token == ':'))
-					token++;
-
-				if (*token && *token != '\n') {
-					snprintf(hardware_id, HWID_MAX, "%s", token);
-					if (hardware_id[strlen(hardware_id)-1] == '\n')
-						hardware_id[strlen(hardware_id)-1] = 0;
-					LOGINFO("=> hardware id from cpuinfo: '%s'\n", hardware_id);
-				}
-			}
-		}
-		fclose(fp);
-	}
-
-	if (hardware_id[0] != 0) {
-		LOGINFO("\nusing hardware id for device id: '%s'\n", hardware_id);
-		snprintf(device_id, DEVID_MAX, "%s", hardware_id);
-		sanitize_device_id(device_id);
-		mConst.SetValue("device_id", device_id);
-		return;
-	}
-
-	strcpy(device_id, "serialno");
-	LOGINFO("=> device id not found, using '%s'\n", device_id);
-	mConst.SetValue("device_id", device_id);
-	return;
+	mConst.SetValue("device_id", serialno);
 }
 
 int DataManager::ResetDefaults()
