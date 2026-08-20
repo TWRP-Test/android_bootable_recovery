@@ -294,9 +294,6 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 		if (ret_val != VERIFY_SUCCESS) {
 			LOGINFO("Zip signature verification failed: %i\n", ret_val);
 			gui_err("verify_zip_fail=Zip signature verification failed!");
-#ifdef USE_MINZIP
-			sysReleaseMap(&map);
-#endif
 			return -1;
 		} else {
 			gui_msg("verify_zip_done=Zip signature verified successfully.");

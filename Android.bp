@@ -100,7 +100,6 @@ cc_library_shared {
         "bootable/recovery/otautil/include",
         "bootable/recovery/minadbd",
         "bootable/recovery/minadbd/include",
-        "bootable/recovery/minzip",
         "bootable/recovery/twrpinstall/include",
         "system/libvintf/include"
     ],
