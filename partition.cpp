@@ -648,11 +648,10 @@ bool TWPartition::Process_Fstab_Line(const char *fstab_line, bool Display_Error,
 	}
 
 	if (Mount_Point == TW_PERSIST_ROOT && Can_Be_Mounted) {
-		bool mounted = Is_Mounted();
-		if (mounted || Mount(false)) {
+		bool mounted = Mount(false);
+		if (mounted) {
 			TWFunc::Fixup_Time_On_Boot(TW_PERSIST_ROOT "/time/");
-			if (!mounted)
-				UnMount(false);
+			UnMount(false);
 		}
 	}
 
