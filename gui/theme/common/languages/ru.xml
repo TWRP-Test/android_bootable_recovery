@@ -652,7 +652,6 @@
 		<string name="need_new_adb">Вам необходим ADB 1.0.32 или новее для выполнения sideload на этом устр-ве.</string>
 		<string name="no_pwd">Не предоставлен пароль.</string>
 		<string name="done_ors">Завершено выполнение файла сценария</string>
-		<string name="injecttwrp">Введение TWRP в образ boot...</string>
 		<string name="zip_err">Ошибка при установке ZIP-файла '{1}'</string>
 		<string name="installing_zip">Установка ZIP-файла '{1}'</string>
 		<string name="select_backup_opt">Установка опций резервного копирования:</string>

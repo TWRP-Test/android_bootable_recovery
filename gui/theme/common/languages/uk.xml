@@ -580,7 +580,6 @@
 		<string name="need_new_adb">Вам необхідний adb 1.0.32 чи новіший для завантаження цього пристрою.</string>
 		<string name="no_pwd">Пароль не надано.</string>
 		<string name="done_ors">Завершено виконання файлу сценарію</string>
-		<string name="injecttwrp">Введення TWRP до образу boot...</string>
 		<string name="zip_err">Помилка встановлення zip файлу '{1}'</string>
 		<string name="installing_zip">Встановлення zip файлу '{1}'</string>
 		<string name="select_backup_opt">Налаштування резервного копіювання:</string>

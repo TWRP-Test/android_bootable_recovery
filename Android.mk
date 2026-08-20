@@ -119,8 +119,8 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/minuitwrp/include \
     $(LOCAL_PATH)/twinstall/include
 
-LOCAL_STATIC_LIBRARIES += libguitwrp libvold
-LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libmtdutils libtwadbbu
+LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts
+LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libtwadbbu
 LOCAL_SHARED_LIBRARIES += libbootloader_message libcrecovery libtwrpdigest libc++ libaosprecovery libcrypto libbase 
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
 
@@ -269,9 +269,6 @@ ifeq ($(TW_NEVER_UNMOUNT_SYSTEM), true)
 endif
 ifeq ($(TW_NO_USB_STORAGE), true)
     LOCAL_CFLAGS += -DTW_NO_USB_STORAGE
-endif
-ifeq ($(TW_INCLUDE_INJECTTWRP), true)
-    LOCAL_CFLAGS += -DTW_INCLUDE_INJECTTWRP
 endif
 ifeq ($(TW_INCLUDE_BLOBPACK), true)
     LOCAL_CFLAGS += -DTW_INCLUDE_BLOBPACK
@@ -512,9 +509,6 @@ TWRP_REQUIRED_MODULES += \
     relink_vendor_hw_binaries \
     twrp_ramdisk \
     bc \
-    dump_image \
-    erase_image \
-    flash_image \
     mke2fs.conf \
     pigz \
     teamwin \
@@ -632,12 +626,6 @@ ifeq ($(TW_INCLUDE_FB2PNG), true)
 endif
 ifneq ($(TW_OEM_BUILD),true)
     TWRP_REQUIRED_MODULES += orscmd
-endif
-ifeq ($(BOARD_USES_BML_OVER_MTD),true)
-    TWRP_REQUIRED_MODULES += bml_over_mtd
-endif
-ifeq ($(TW_INCLUDE_INJECTTWRP), true)
-    TWRP_REQUIRED_MODULES += injecttwrp
 endif
 ifneq ($(TW_EXCLUDE_DEFAULT_USB_INIT), true)
     TWRP_REQUIRED_MODULES += init.recovery.usb.rc
@@ -765,12 +753,8 @@ include $(commands_TWRP_local_path)/mtp/ffs/Android.mk \
     $(commands_TWRP_local_path)/minui/Android.mk
 
 #includes for TWRP
-include $(commands_TWRP_local_path)/injecttwrp/Android.mk \
-    $(commands_TWRP_local_path)/mmcutils/Android.mk \
-    $(commands_TWRP_local_path)/bmlutils/Android.mk \
+include $(commands_TWRP_local_path)/mmcutils/Android.mk \
     $(commands_TWRP_local_path)/prebuilt/Android.mk \
-    $(commands_TWRP_local_path)/mtdutils/Android.mk \
-    $(commands_TWRP_local_path)/flashutils/Android.mk \
     $(commands_TWRP_local_path)/pigz/Android.mk \
     $(commands_TWRP_local_path)/libtar/Android.mk \
     $(commands_TWRP_local_path)/libcrecovery/Android.mk \

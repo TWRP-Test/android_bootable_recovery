@@ -658,7 +658,6 @@
 		<string name="need_new_adb">Za stransko nalaganje na to napravo potrebujete ADB 1.0.32 ali novejši.</string>
 		<string name="no_pwd">Geslo ni bilo navedeno.</string>
 		<string name="done_ors">Obdelava datoteke skripta je končana.</string>
-		<string name="injecttwrp">Vstavljanje TWRP-ja v zagonski odtis …</string>
 		<string name="zip_err">Napaka pri nameščanju datoteke ZIP \'{1}\'.</string>
 		<string name="installing_zip">Nameščanje datoteke ZIP \'{1}\'</string>
 		<string name="select_backup_opt">Nastavljanje možnosti varnostnega kopiranja:</string>

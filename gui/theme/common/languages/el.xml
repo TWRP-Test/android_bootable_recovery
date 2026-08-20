@@ -585,7 +585,6 @@
         <string name="need_new_adb">Χρειάζεστε adb 1.0.32 ή νεότερο για sideload σε αυτήν τη συσκευή.</string>
         <string name="no_pwd">Δεν παρέχεται κωδικός.</string>
         <string name="done_ors">Έγινε επεξεργασία του αρχείου script</string>
-        <string name="injecttwrp">Εισαγωγή TWRP στην εικόνα εκκίνησης...</string>
         <string name="zip_err">Σφάλμα κατά την εγκατάσταση του zip '{1}'</string>
         <string name="installing_zip">Εγκατάσταση αρχείου zip '{1}'</string>
         <string name="select_backup_opt">Ρύθμιση της δημιουργίας αντιγράφων ασφαλείας:</string>

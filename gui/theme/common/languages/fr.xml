@@ -570,7 +570,6 @@
         <string name="need_new_adb">Vous avez besoin d'adb 1.0.32 ou plus récent pour utiliser le transfert (sideload) sur cet appareil.</string>
         <string name="no_pwd">Aucun mot de passe fourni.</string>
         <string name="done_ors">Traitement du fichier de script terminé</string>
-        <string name="injecttwrp">Injection de TWRP dans l'image de démarrage...</string>
         <string name="zip_err">Erreur lors de l'installation du fichier zip '{1}'</string>
         <string name="installing_zip">Installation du fichier zip '{1}'</string>
         <string name="select_backup_opt">Définition des options de sauvegarde:</string>

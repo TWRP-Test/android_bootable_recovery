@@ -111,7 +111,6 @@ enum Backup_Method_enum {
 	BM_NONE = 0,
 	BM_FILES = 1,
 	BM_DD = 2,
-	BM_FLASH_UTILS = 3,
 };
 
 // Partition class
@@ -145,7 +144,7 @@ public:
 	string Backup_Method_By_Name();                                           // Returns a string of the backup method for human readable output
 	bool Decrypt(string Password);                                            // Decrypts the partition, return 0 for failure and -1 for success
 	bool Wipe_Encryption();                                                   // Ignores wipe commands for /data/media devices and formats the original block device
-	void Check_FS_Type();                                                     // Checks the fs type using blkid, does not do anything on MTD / yaffs2 because this crashes on some devices
+	void Check_FS_Type();                                                     // Checks the filesystem type using blkid
 	bool Update_Size(bool Display_Error, bool Defer_Folder_Size = false);     // Updates size information, Defer_Folder_Size leaves the data/media walk to Update_Data_Size_Async()
 	void Update_Data_Size_Async();                                            // Walks data/media off the UI thread and publishes the size once it finishes
 	static bool Data_Is_Locked();                                             // True while user 0's CE storage is still locked
@@ -172,7 +171,6 @@ public:
 	string Current_File_System;                                               // Current file system
 	string Actual_Block_Device;                                               // Actual block device (one of primary, alternate, or decrypted)
 	string Backup_Display_Name;                                               // Name displayed in the partition list for backup selection
-	string MTD_Name;                                                          // Name of the partition for MTD devices
 	bool Is_Present;                                                          // Indicates if the partition is currently present as a block device
 	string Crypto_Key_Location;                                               // Location of the crypto key used for decrypting encrypted data partitions
 	unsigned int MTP_Storage_ID;
@@ -209,7 +207,6 @@ private:
 	bool Wipe_EXT4();                                                         // Formats using ext4, uses make_ext4fs when present
 	bool Wipe_FAT();                                                          // Formats as FAT if mkfs.fat exits otherwise rm -rf wipe
 	bool Wipe_EXFAT();                                                        // Formats as EXFAT
-	bool Wipe_MTD();                                                          // Formats as yaffs2 for MTD memory types
 	bool Wipe_RMRF();                                                         // Uses rm -rf to wipe
 	bool Wipe_F2FS();                                                         // Uses make_f2fs to wipe
 	bool Wipe_NTFS();                                                         // Uses mkntfs to wipe
@@ -219,7 +216,6 @@ private:
 	bool Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_pid);   // Backs up using tar for file systems
 	bool Backup_Image(PartitionSettings *part_settings);                      // Backs up using raw read/write for emmc memory types
 	bool Raw_Read_Write(PartitionSettings *part_settings);
-	bool Backup_Dump_Image(PartitionSettings *part_settings);                 // Backs up using dump_image for MTD memory types
 	string Get_Restore_File_System(PartitionSettings *part_settings);         // Returns the file system that was in place at the time of the backup
 	bool Restore_Tar(PartitionSettings *part_settings);                       // Restore using tar for file systems
 	bool Restore_Image(PartitionSettings *part_settings);                     // Restore using dd for images
@@ -227,12 +223,10 @@ private:
 	bool Get_Size_Via_statfs(bool Display_Error);                             // Get Partition size, used, and free space using statfs
 	bool Get_Size_Via_df(bool Display_Error);                                 // Get Partition size, used, and free space using df command
 	bool Make_Dir(string Path, bool Display_Error);                           // Creates a directory if it doesn't already exist
-	bool Find_MTD_Block_Device(string MTD_Name);                              // Finds the mtd block device based on the name from the fstab
 	void Recreate_AndSec_Folder(void);                                        // Recreates the .android_secure folder
 	bool Mount_Storage_Retry(bool Display_Error);                             // Tries multiple times with a half second delay to mount a device in case storage is slow to mount
 	bool Is_Sparse_Image(const string& Filename);                             // Determines if a file is in sparse image format
 	bool Flash_Sparse_Image(const string& Filename);                          // Flashes a sparse image using simg2img
-	bool Flash_Image_FI(const string& Filename, ProgressTracking *progress);  // Flashes an image to the partition using flash_image for mtd nand
 	void ExcludeAll(const string& path);                                      // Adds an exclusion for path to both the backup and wipe exclusion lists
 
 private:

@@ -37,8 +37,6 @@
 #include <android-base/unique_fd.h>
 
 #include "twcommon.h"
-#include "mtdutils/mounts.h"
-#include "mtdutils/mtdutils.h"
 
 #include "otautil/sysutil.h"
 #include <ziparchive/zip_archive.h>
@@ -305,7 +303,7 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 		return INSTALL_CORRUPT;
 	}
 
-	bool _isUpdatePkg = isUpdatePkg(Zip), _isABUpdatePkg = false;
+	bool _isUpdatePkg = isUpdatePkg(Zip);
 
 	if (unmount_system) {
 		gui_msg("unmount_system=Unmounting System...");
@@ -338,7 +336,6 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 		ZipEntry64 ab_binary_entry;
 		if (FindEntry(Zip, ab_binary_name, &ab_binary_entry) == 0) {
 			LOGINFO("AB zip\n");
-			_isABUpdatePkg = true;
 			gui_msg(Msg(msg::kHighlight, "flash_ab_inactive=Flashing A/B zip to inactive slot: {1}")(PartitionManager.Get_Active_Slot_Display()=="A"?"B":"A"));
 			// We need this so backuptool can do its magic
 			bool system_mount_state = PartitionManager.Is_Mounted_By_Path(PartitionManager.Get_Android_Root_Path());

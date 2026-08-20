@@ -658,7 +658,6 @@
 		<string name="need_new_adb">Wymagane ADB 1.0.32 lub nowsze, aby użyć sideload na tym urządzeniu.</string>
 		<string name="no_pwd">Hasło nie zostało podane.</string>
 		<string name="done_ors">Zakończono przetwarzanie skryptu</string>
-		<string name="injecttwrp">Zaszczepianie TWRP w obrazie boot...</string>
 		<string name="zip_err">Błąd instalowania pliku zip '{1}'</string>
 		<string name="installing_zip">Instalowanie pliku zip '{1}'</string>
 		<string name="select_backup_opt">Ustawienia kopii zapasowych:</string>

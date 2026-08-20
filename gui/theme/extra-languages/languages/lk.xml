@@ -656,7 +656,6 @@
 		<string name="need_new_adb">sideload කරන්න adb 1.0.32 හධ අභත් එකක් ථන</string>
 		<string name="no_pwd">Sassword එකක් දීලා නෑ.</string>
 		<string name="done_ors">Script file එක processe කරා</string>
-		<string name="injecttwrp">TWRP එක boot image එකට Inject කරන ගමන්...</string>
 		<string name="zip_err">Zip file එක install කරන එෙක් Error එකක් '{1}'</string>
 		<string name="installing_zip">Zip file එක Install කරනවා '{1}'</string>
 		<string name="select_backup_opt">Backup options Set කරන්න:</string>

@@ -571,7 +571,6 @@
 		<string name="need_new_adb">Necesitas de adb 1.0.32 o más nuevo para poder realizar la carga lateral en este dispositivo.</string>
 		<string name="no_pwd">No se ha proporcionado contraseña.</string>
 		<string name="done_ors">Procesamiento de comando de archivos hecho</string>
-		<string name="injecttwrp">Inyectando TWRP en imagen boot...</string>
 		<string name="zip_err">Error instalando archivo zip \'{1}\'</string>
 		<string name="installing_zip">Instalando archivo zip '{1}'</string>
 		<string name="select_backup_opt">Ajustando opciones de copia de seguridad:</string>

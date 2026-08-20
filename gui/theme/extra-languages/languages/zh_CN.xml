@@ -656,7 +656,6 @@
 		<string name="need_new_adb">您需要 1.0.32 或更高版本的 adb 才可以使用。</string>
 		<string name="no_pwd">未提供密码。</string>
 		<string name="done_ors">脚本执行完毕</string>
-		<string name="injecttwrp">正在注入 TWRP 到 Boot 镜像…</string>
 		<string name="zip_err">安装 Zip 刷机包“{1}”时出错</string>
 		<string name="installing_zip">正在安装 Zip 刷机包“{1}”</string>
 		<string name="select_backup_opt">设置备份选项：</string>

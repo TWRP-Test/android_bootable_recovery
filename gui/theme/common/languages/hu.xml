@@ -600,7 +600,6 @@
 		<string name="need_new_adb">Adb 1.0.32, vagy frissebbre van szüksége ahhoz, hogy a sideload funkciót használhassa ehhez a készülékhez.</string>
 		<string name="no_pwd">Nincs megadott jelszó.</string>
 		<string name="done_ors">Kész feldolgozó script fájl</string>
-		<string name="injecttwrp">TWRP injektálása a boot lemezképbe...</string>
 		<string name="zip_err">'{1}' zip fájl telepítési hiba</string>
 		<string name="installing_zip">'{1}' zip fájl telepítése</string>
 		<string name="select_backup_opt">Biztonsági mentési beállítások:</string>

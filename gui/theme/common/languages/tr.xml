@@ -601,7 +601,6 @@
 		<string name="need_new_adb">Bu cihaza sideload eklemek için adb 1.0.32 veya daha yenisine ihtiyacınız var.</string>
 		<string name="no_pwd">Parola sağlanmadı.</string>
 		<string name="done_ors">Komut dosyası işleme tamamlandı</string>
-		<string name="injecttwrp">TWRP boot imajına ekleniyor...</string>
 		<string name="zip_err">'{1}' zip dosyası yüklenemiyor</string>
 		<string name="installing_zip">'{1}' zip dosyası yükleniyor</string>
 		<string name="select_backup_opt">Yedekleme seçeneklerini ayarlama:</string>

@@ -649,7 +649,6 @@
 		<string name="need_new_adb">Anda memerlukan adb 1.0.32 atau lebih baru pada perangkat ini.</string>
 		<string name="no_pwd">Sandi tidak tersedia.</string>
 		<string name="done_ors">Memproses file skripsi selesai.</string>
-		<string name="injecttwrp">Menyuntik TWRP kedalam image boot...</string>
 		<string name="zip_err">Kesalahan Menginstal file zip '{1}'</string>
 		<string name="installing_zip">Menginstal file zip '{1}'</string>
 		<string name="select_backup_opt">Pengaturan opsi pencadangan:</string>

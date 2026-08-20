@@ -558,7 +558,6 @@
 		<string name="need_new_adb">Pre použitie sideload na toto zariadenie potrebujete ADB 1.0.32 alebo novšie.</string>
 		<string name="no_pwd">Heslo nebolo zadané.</string>
 		<string name="done_ors">Vykonávanie skriptu dokončené</string>
-		<string name="injecttwrp">Vkladanie TWRP do boot.img...</string>
 		<string name="zip_err">Chyba pri inštalácií zip súboru \'{1}\'</string>
 		<string name="installing_zip">Inštalácia zip súboru \'{1}\'</string>
 		<string name="select_backup_opt">Nastavenie možností zálohy:</string>

@@ -558,7 +558,6 @@
 		<string name="need_new_adb">Você precisa adb 1.0.32 ou mais recente para sideload para este dispositivo.</string>
 		<string name="no_pwd">Nenhuma senha fornecida.</string>
 		<string name="done_ors">Arquivo de script de processamento feito</string>
-		<string name="injecttwrp">Injetando TWRP na imagem de inicialização...</string>
 		<string name="zip_err">Erro ao instalar o arquivo zip \'{1}\'</string>
 		<string name="installing_zip">Instalando o arquivo zip \'{1}\'</string>
 		<string name="select_backup_opt">Definir opções da cópia de segurança:</string>

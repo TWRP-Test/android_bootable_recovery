@@ -658,7 +658,6 @@
 		<string name="need_new_adb">You need adb 1.0.32 or newer to sideload to this device.</string>
 		<string name="no_pwd">No password provided.</string>
 		<string name="done_ors">Done processing script file</string>
-		<string name="injecttwrp">Injecting TWRP into boot image...</string>
 		<string name="zip_err">Error installing zip file '{1}'</string>
 		<string name="installing_zip">Installing zip file '{1}'</string>
 		<string name="select_backup_opt">Setting backup options:</string>

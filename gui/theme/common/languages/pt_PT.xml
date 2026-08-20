@@ -633,7 +633,6 @@
 		<string name="need_new_adb">É necessário o adb 1.0.32, ou mais recente, para fazer sideload a este dispositivo.</string>
 		<string name="no_pwd">Não foi fornecida uma palavra-passe.</string>
 		<string name="done_ors">O ficheiro de script foi processado</string>
-		<string name="injecttwrp">A injetar a TWRP na imagem de Boot...</string>
 		<string name="zip_err">Erro ao instalar o ficheiro zip '{1}'</string>
 		<string name="installing_zip">A instalar o ficheiro zip '{1}'</string>
 		<string name="select_backup_opt">A definir opções para o Backup:</string>

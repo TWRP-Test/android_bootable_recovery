@@ -823,8 +823,6 @@ void TWPartitionManager::Output_Partition(TWPartition* Part) {
 		printf("   Fstab_File_System: %s\n", Part->Fstab_File_System.c_str());
 	if (Part->Format_Block_Size != 0)
 		printf("   Format_Block_Size: %lu\n", Part->Format_Block_Size);
-	if (!Part->MTD_Name.empty())
-		printf("   MTD_Name: %s\n", Part->MTD_Name.c_str());
 	printf("   Backup_Method: %s\n", Part->Backup_Method_By_Name().c_str());
 	if (Part->Mount_Flags || !Part->Mount_Options.empty())
 		printf("   Mount_Flags: %i, Mount_Options: %s\n", Part->Mount_Flags, Part->Mount_Options.c_str());

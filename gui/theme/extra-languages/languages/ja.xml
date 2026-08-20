@@ -584,7 +584,6 @@
 		<string name="need_new_adb">Sideload 機能を使うには、adb 1.0.32 以降が必要です。</string>
 		<string name="no_pwd">パスワードが指定されていません。</string>
 		<string name="done_ors">スクリプトファイルの処理が完了しました</string>
-		<string name="injecttwrp">boot イメージに TWRP を組み込み中...</string>
 		<string name="zip_err">ZIPファイル \'{1}\' のインストール中にエラーが発生しました</string>
 		<string name="installing_zip">ZIP ファイル \'{1}\' をインストール中</string>
 		<string name="select_backup_opt">バックアップオプションの設定中:</string>

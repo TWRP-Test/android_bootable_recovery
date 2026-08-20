@@ -647,7 +647,6 @@
 		<string name="need_new_adb">adb 1.0.32 of nieuwer is vereist om te sideloaden naar dit apparaat.</string>
 		<string name="no_pwd">Geen wachtwoord opgegeven.</string>
 		<string name="done_ors">Uitvoeren scriptbestand voltooid</string>
-		<string name="injecttwrp">TWRP wordt in het bootimage ingelast...</string>
 		<string name="zip_err">Fout bij het installeren van zipbestand '{1}'</string>
 		<string name="installing_zip">Zipbestand '{1}' wordt geïnstalleerd</string>
 		<string name="select_backup_opt">Instellen van back-upopties:</string>

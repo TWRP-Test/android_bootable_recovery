@@ -643,7 +643,6 @@
 		<string name="need_new_adb">Für dieses Gerät wird ADB 1.0.32 oder neuer benötigt.</string>
 		<string name="no_pwd">Kein Passwort angegeben.</string>
 		<string name="done_ors">Skript wurde verarbeitet</string>
-		<string name="injecttwrp">Injiziere TWRP in das Boot-Image...</string>
 		<string name="zip_err">Fehler beim Installieren von ZIP '{1}'</string>
 		<string name="installing_zip">Installiere ZIP '{1}'</string>
 		<string name="select_backup_opt">Setze Sicherungs-Optionen:</string>

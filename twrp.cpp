@@ -210,18 +210,6 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	TWFunc::check_and_run_script("/system/bin/runatboot.sh", "boot");
 	TWFunc::check_and_run_script("/system/bin/postrecoveryboot.sh", "recovery");
 
-#ifdef TW_INCLUDE_INJECTTWRP
-	// Back up TWRP Ramdisk if needed:
-	TWPartition* Boot = PartitionManager.Find_Partition_By_Path("/boot");
-	LOGINFO("Backing up TWRP ramdisk...\n");
-	if (Boot == NULL || Boot->Current_File_System != "emmc")
-		TWFunc::Exec_Cmd("injecttwrp --backup /tmp/backup_recovery_ramdisk.img");
-	else {
-		string injectcmd = "injecttwrp --backup /tmp/backup_recovery_ramdisk.img bd=" + Boot->Actual_Block_Device;
-		TWFunc::Exec_Cmd(injectcmd);
-	}
-	LOGINFO("Backup of TWRP ramdisk done.\n");
-#endif
 #ifdef TW_INCLUDE_CRYPTO
 	android::keystore::syncKeystoreDb();
 #endif

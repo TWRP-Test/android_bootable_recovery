@@ -707,13 +707,6 @@ void DataManager::SetDefaultValues()
 		mData.SetValue(TW_HAS_USB_STORAGE, "1");
 	}
 #endif
-#ifdef TW_INCLUDE_INJECTTWRP
-	printf("TW_INCLUDE_INJECTTWRP := true\n");
-	mConst.SetValue(TW_HAS_INJECTTWRP, "1");
-	mPersist(TW_INJECT_AFTER_ZIP, "1");
-#else
-	mConst.SetValue(TW_HAS_INJECTTWRP, "0");
-#endif
 #ifdef TW_HAS_DOWNLOAD_MODE
 	printf("TW_HAS_DOWNLOAD_MODE := true\n");
 	mConst.SetValue(TW_DOWNLOAD_MODE, "1");

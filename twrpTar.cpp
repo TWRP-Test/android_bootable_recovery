@@ -1479,7 +1479,7 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 		if (!result.empty()) {
 			/* Expected output:
 			compressed original  reduced name
-			95855838   179403776 -1.3%   data.yaffs2.win
+			95855838   179403776 -1.3%   data.<filesystem>.win
 			^
 			split[5]
 			*/
@@ -1505,7 +1505,7 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 				LOGINFO("result was: '%s'\n", result.c_str());
 				/* Expected output:
 				compressed original  reduced name
-				95855838   179403776 -1.3%   data.yaffs2.win
+				95855838   179403776 -1.3%   data.<filesystem>.win
 				^
 				split[5]
 				*/
