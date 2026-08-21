@@ -13,8 +13,8 @@
 		You should have received a copy of the GNU General Public License
 		along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef _LIBTWADBBU_HPP
-#define _LIBTWADBBU_HPP
+#ifndef _LIBTWRPADBBU_HPP
+#define _LIBTWRPADBBU_HPP
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +32,7 @@
 #include <fstream>
 #include <sstream>
 
-#include "twadbstream.h"
+#include "twrpadbstream.h"
 
 class twadbbu {
 public:
@@ -48,4 +48,4 @@ public:
 	static bool Write_TWDATA(FILE* adbd_fp);                                                       //Write TWDATA separator
 };
 
-#endif //__LIBTWADBBU_HPP
+#endif //_LIBTWRPADBBU_HPP

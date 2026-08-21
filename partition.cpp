@@ -52,7 +52,7 @@
 #include "infomanager.hpp"
 #include "set_metadata.h"
 #include "gui/gui.hpp"
-#include "adbbu/libtwadbbu.hpp"
+#include "twrpadbbu/libtwrpadbbu.hpp"
 #ifdef TW_INCLUDE_CRYPTO
 	// #include "crypto/fde/cryptfs.h"
 	#include "cryptfs.h"

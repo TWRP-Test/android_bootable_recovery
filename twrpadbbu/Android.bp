@@ -1,0 +1,40 @@
+cc_library_shared {
+    name: "libtwrpadbbu",
+    recovery_available: true,
+
+    srcs: [
+        "libtwrpadbbu.cpp",
+        "twrpback.cpp",
+    ],
+
+    shared_libs: [
+        "libc++",
+        "libtwrpdigest",
+        "libz",
+    ],
+
+    header_libs: [
+        "libutils_headers",
+    ],
+
+    cflags: [
+        "-fno-strict-aliasing",
+        "-D_LARGFILE_SOURCE",
+    ],
+}
+
+cc_binary {
+    name: "twrpbu",
+    stem: "bu",
+    recovery: true,
+
+    srcs: [
+        "twrpbumain.cpp",
+    ],
+
+    shared_libs: [
+        "libc++",
+        "libtwrpadbbu",
+        "libz",
+    ],
+}

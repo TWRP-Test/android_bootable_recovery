@@ -43,7 +43,7 @@ extern "C" {
 #include "twrpTar.hpp"
 #include "twcommon.h"
 #include "variables.h"
-#include "adbbu/libtwadbbu.hpp"
+#include "twrpadbbu/libtwrpadbbu.hpp"
 #include "twrp-functions.hpp"
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"

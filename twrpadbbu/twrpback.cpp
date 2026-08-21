@@ -34,9 +34,9 @@
 #include <utils/threads.h>
 #include <pthread.h>
 
-#include "twadbstream.h"
+#include "twrpadbstream.h"
 #include "twrpback.hpp"
-#include "libtwadbbu.hpp"
+#include "libtwrpadbbu.hpp"
 #include "../twrpdigest/twrpMD5.hpp"
 #include "../twrpAdbBuFifo.hpp"
 

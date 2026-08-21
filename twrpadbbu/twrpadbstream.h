@@ -13,8 +13,8 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __TWADBSTREAM_H
-#define __TWADBSTREAM_H
+#ifndef __TWRPADBSTREAM_H
+#define __TWRPADBSTREAM_H
 
 #define TWRPARG "--twrp"
 #define TWRP_BACKUP_ARG "backup"
@@ -109,4 +109,4 @@ struct AdbBackupStreamHeader {
 	char space[468];				//stores space to align the struct to 512 bytes
 };
 
-#endif //__TWADBSTREAM_H
+#endif //__TWRPADBSTREAM_H

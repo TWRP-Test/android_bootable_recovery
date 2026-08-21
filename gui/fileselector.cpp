@@ -38,7 +38,7 @@ extern "C" {
 #include "objects.hpp"
 #include "../data.hpp"
 #include "../twrp-functions.hpp"
-#include "../adbbu/libtwadbbu.hpp"
+#include "../twrpadbbu/libtwrpadbbu.hpp"
 
 #include "../partitions.hpp"
 

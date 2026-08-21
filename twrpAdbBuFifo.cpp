@@ -32,8 +32,8 @@
 #include "gui/gui.hpp"
 #include "gui/objects.hpp"
 #include "gui/pages.hpp"
-#include "adbbu/twadbstream.h"
-#include "adbbu/libtwadbbu.hpp"
+#include "twrpadbbu/twrpadbstream.h"
+#include "twrpadbbu/libtwrpadbbu.hpp"
 
 twrpAdbBuFifo::twrpAdbBuFifo(void) {
 	unlink(TW_ADB_FIFO);

@@ -74,7 +74,7 @@
 #include "progresstracking.hpp"
 #include "twrpDigestDriver.hpp"
 #include "twrpRepacker.hpp"
-#include "adbbu/libtwadbbu.hpp"
+#include "twrpadbbu/libtwrpadbbu.hpp"
 
 #ifdef TW_LOAD_VENDOR_MODULES
 #include "kernel_module_loader.hpp"
