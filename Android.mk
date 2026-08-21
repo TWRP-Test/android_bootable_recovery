@@ -124,10 +124,7 @@ LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts
 LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libtwrpadbbu
 LOCAL_SHARED_LIBRARIES += libbootloader_message libcrecovery libtwrpdigest libc++ libaosprecovery libcrypto libbase 
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
-
-ifneq ($(wildcard system/core/libsparse/Android.mk),)
 LOCAL_SHARED_LIBRARIES += libsparse
-endif
 
 ifeq ($(TW_OEM_BUILD),true)
     LOCAL_CFLAGS += -DTW_OEM_BUILD
