@@ -97,10 +97,10 @@ int GUIPartitionList::Update(void)
 		int listSize = mList.size();
 		for (int i = 0; i < listSize; i++) {
 			if (PartitionManager.Is_Mounted_By_Path(mList.at(i).Mount_Point) && !mList.at(i).selected) {
-				mList.at(i).selected = 1;
+				mList.at(i).selected = true;
 				mUpdate = 1;
 			} else if (!PartitionManager.Is_Mounted_By_Path(mList.at(i).Mount_Point) && mList.at(i).selected) {
-				mList.at(i).selected = 0;
+				mList.at(i).selected = false;
 				mUpdate = 1;
 			}
 		}
@@ -187,11 +187,11 @@ void GUIPartitionList::MatchList(void) {
 		searchvalue = mList.at(i).Mount_Point + ";";
 		pos = variablelist.find(searchvalue);
 		if (pos != string::npos) {
-			mList.at(i).selected = 1;
+			mList.at(i).selected = true;
 			TWPartition* t_part = PartitionManager.Find_Partition_By_Path(mList.at(i).Mount_Point);
 			DataManager::SetValue("tw_is_slot_part", t_part != NULL ? (int) t_part->SlotSelect : 0);
 		} else {
-			mList.at(i).selected = 0;
+			mList.at(i).selected = false;
 		}
 	}
 }
@@ -202,10 +202,10 @@ void GUIPartitionList::SetPosition() {
 	SetVisibleListLocation(0);
 	for (int i = 0; i < listSize; i++) {
 		if (mList.at(i).Mount_Point == currentValue) {
-			mList.at(i).selected = 1;
+			mList.at(i).selected = true;
 			SetVisibleListLocation(i);
 		} else {
-			mList.at(i).selected = 0;
+			mList.at(i).selected = false;
 		}
 	}
 }
@@ -232,13 +232,13 @@ void GUIPartitionList::NotifySelect(size_t item_selected)
 		if (ListType == "mount") {
 			if (!mList.at(item_selected).selected) {
 				if (PartitionManager.Mount_By_Path(mList.at(item_selected).Mount_Point, true)) {
-					mList.at(item_selected).selected = 1;
+					mList.at(item_selected).selected = true;
 					PartitionManager.Add_MTP_Storage(mList.at(item_selected).Mount_Point);
 					mUpdate = 1;
 				}
 			} else {
 				if (PartitionManager.UnMount_By_Path(mList.at(item_selected).Mount_Point, true)) {
-					mList.at(item_selected).selected = 0;
+					mList.at(item_selected).selected = false;
 					mUpdate = 1;
 				}
 			}
@@ -260,7 +260,7 @@ void GUIPartitionList::NotifySelect(size_t item_selected)
 					// Do Nothing
 				} else {
 					for (i=0; i<listSize; i++)
-						mList.at(i).selected = 0;
+						mList.at(i).selected = false;
 
 					if (update_size) {
 						char free_space[255];
@@ -269,19 +269,19 @@ void GUIPartitionList::NotifySelect(size_t item_selected)
 						mList.at(item_selected).Display_Name += free_space;
 						mList.at(item_selected).Display_Name += "MB)";
 					}
-					mList.at(item_selected).selected = 1;
+					mList.at(item_selected).selected = true;
 					mUpdate = 1;
 					DataManager::SetValue(mVariable, str);
 				}
 			} else {
 				if (ListType == "flashimg") { // only one item can be selected for flashing images
 					for (int i=0; i<listSize; i++)
-						mList.at(i).selected = 0;
+						mList.at(i).selected = false;
 				}
 				if (mList.at(item_selected).selected)
-					mList.at(item_selected).selected = 0;
+					mList.at(item_selected).selected = false;
 				else {
-					mList.at(item_selected).selected = 1;
+					mList.at(item_selected).selected = true;
 					TWPartition* t_part = PartitionManager.Find_Partition_By_Path(mList.at(item_selected).Mount_Point);
 					DataManager::SetValue("tw_is_slot_part", t_part != NULL ? (int) t_part->SlotSelect : 0);
 				}

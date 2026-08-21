@@ -60,7 +60,7 @@ BasePartition* make_partition();
 struct PartitionList {
 	std::string Display_Name;
 	std::string Mount_Point;
-	unsigned int selected;
+	bool selected;
 };
 
 struct Uevent_Block_Data {

@@ -32,6 +32,7 @@
 #include <pwd.h>
 #include <zlib.h>
 #include <iostream>
+#include <format>
 #include <iomanip>
 #include <sys/wait.h>
 #include <linux/fs.h>
@@ -2646,157 +2647,146 @@ int TWPartitionManager::Partition_SDCard(void) {
 }
 
 void TWPartitionManager::Get_Partition_List(string ListType, std::vector<PartitionList> *Partition_List) {
-	std::vector<TWPartition*>::iterator iter;
 	if (ListType == "mount") {
-		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
+		for (TWPartition *partition : Partitions) {
 			// Setup_File_System() calls everything mountable, so ask whether
 			// there is a device to mount as well.
-			if ((*iter)->Can_Be_Mounted && (*iter)->Is_Present) {
-				struct PartitionList part;
-				part.Display_Name = (*iter)->Display_Name;
-				part.Mount_Point = (*iter)->Mount_Point;
-				part.selected = (*iter)->Is_Mounted();
-				Partition_List->push_back(part);
+			if (partition->Can_Be_Mounted && partition->Is_Present) {
+				Partition_List->push_back({
+					.Display_Name = partition->Display_Name,
+					.Mount_Point = partition->Mount_Point,
+					.selected = partition->Is_Mounted(),
+				});
 			}
 		}
 	} else if (ListType == "storage") {
-		char free_space[255];
 		string Current_Storage = DataManager::GetCurrentStoragePath();
-		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
+		for (TWPartition *partition : Partitions) {
 			// A uevent entry with nothing plugged into it is a place to put a
 			// device, not a place to put files.
-			if ((*iter)->Is_Storage && (*iter)->Is_Present) {
-				struct PartitionList part;
-				sprintf(free_space, "%llu", (*iter)->Free / 1024 / 1024);
-				part.Display_Name = (*iter)->Storage_Name + " (";
-				part.Display_Name += free_space;
-				part.Display_Name += "MB)";
-				part.Mount_Point = (*iter)->Storage_Path;
-				if ((*iter)->Storage_Path == Current_Storage)
-					part.selected = 1;
-				else
-					part.selected = 0;
-				Partition_List->push_back(part);
+			if (partition->Is_Storage && partition->Is_Present) {
+				Partition_List->push_back({
+					.Display_Name = std::format("{} ({} MB)", partition->Storage_Name, partition->Free / (1024 * 1024)),
+					.Mount_Point = partition->Storage_Path,
+					.selected = partition->Storage_Path == Current_Storage,
+				});
 			}
 		}
 	} else if (ListType == "backup") {
-		char backup_size[255];
-		unsigned long long Backup_Size;
-		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Can_Be_Backed_Up && !(*iter)->Is_SubPartition && (*iter)->Is_Present) {
-				struct PartitionList part;
-				Backup_Size = (*iter)->Backup_Size;
-				if ((*iter)->Has_SubPartition) {
-					std::vector<TWPartition*>::iterator subpart;
-
-					for (subpart = Partitions.begin(); subpart != Partitions.end(); subpart++) {
-						if ((*subpart)->Is_SubPartition && (*subpart)->Can_Be_Backed_Up && (*subpart)->Is_Present && (*subpart)->SubPartition_Of == (*iter)->Mount_Point)
-							Backup_Size += (*subpart)->Backup_Size;
+		for (TWPartition *partition : Partitions) {
+			if (partition->Can_Be_Backed_Up && !partition->Is_SubPartition && partition->Is_Present) {
+				unsigned long long Backup_Size = partition->Backup_Size;
+				if (partition->Has_SubPartition) {
+					for (TWPartition *subpart : Partitions) {
+						if (subpart->Is_SubPartition && subpart->Can_Be_Backed_Up && subpart->Is_Present
+							&& subpart->SubPartition_Of == partition->Mount_Point) {
+							Backup_Size += subpart->Backup_Size;
+						}
 					}
 				}
-				part.Display_Name = (*iter)->Backup_Display_Name + " (";
-				if ((*iter)->Backup_Size_Provisional) {
+				std::string size_place;
+				if (partition->Backup_Size_Provisional) {
 					// The list is on screen, so someone wants the number now.
-					(*iter)->Update_Data_Size_Async();
-					part.Display_Name += gui_lookup("calculating", "calculating");
-					part.Display_Name += ")";
+					partition->Update_Data_Size_Async();
+          			size_place = gui_lookup("calculating", "calculating");
 				} else {
-					sprintf(backup_size, "%llu", Backup_Size / 1024 / 1024);
-					part.Display_Name += backup_size;
-					part.Display_Name += "MB)";
+					size_place = std::format("{} MB", Backup_Size / (1024 * 1024));
 				}
-				part.Mount_Point = (*iter)->Backup_Path;
-				part.selected = 0;
-				Partition_List->push_back(part);
+				Partition_List->push_back({
+					.Display_Name = std::format("{} ({})", partition->Backup_Display_Name, size_place),
+					.Mount_Point = partition->Backup_Path,
+					.selected = false,
+				});
 			}
 		}
 	} else if (ListType == "restore") {
-		string Restore_List, restore_path;
-		TWPartition* restore_part = NULL;
+		string Restore_List;
 
 		DataManager::GetValue("tw_restore_list", Restore_List);
 		if (!Restore_List.empty()) {
-			size_t start_pos = 0, end_pos = Restore_List.find(";", start_pos);
-			while (end_pos != string::npos && start_pos < Restore_List.size()) {
-				restore_path = Restore_List.substr(start_pos, end_pos - start_pos);
-				struct PartitionList part;
-				if (restore_path.compare("ADB_Backup") == 0) {
-					part.Display_Name = "ADB Backup";
-					part.Mount_Point = "ADB Backup";
-					part.selected = 1;
-					Partition_List->push_back(part);
+			for (const string& restore_path : android::base::Tokenize(Restore_List, ";")) {
+				if (restore_path == "ADB_Backup") {
+					Partition_List->push_back({
+						.Display_Name = "ADB Backup",
+						.Mount_Point = "ADB Backup",
+						.selected = true,
+					});
 					break;
 				}
-				if ((restore_part = Find_Partition_By_Path(restore_path)) != NULL) {
-					if ((restore_part->Backup_Name == "recovery" && !restore_part->Can_Be_Backed_Up) || restore_part->Is_SubPartition) {
-						// Don't allow restore of recovery (causes problems on some devices)
-						// Don't add subpartitions to the list of items
-					} else {
-						part.Display_Name = restore_part->Backup_Display_Name;
-						part.Mount_Point = restore_part->Backup_Path;
-						part.selected = 1;
-						Partition_List->push_back(part);
-					}
-				} else {
+				TWPartition* restore_part = Find_Partition_By_Path(restore_path);
+				if (restore_part == nullptr) {
 					gui_msg(Msg(msg::kError, "restore_unable_locate=Unable to locate '{1}' partition for restoring.")(restore_path));
+					continue;
 				}
-				start_pos = end_pos + 1;
-				end_pos = Restore_List.find(";", start_pos);
+				// Don't allow restore of recovery (causes problems on some devices)
+				// Don't add subpartitions to the list of items
+				if ((restore_part->Backup_Name == "recovery" && !restore_part->Can_Be_Backed_Up) || restore_part->Is_SubPartition) {
+					continue;
+				}
+				Partition_List->push_back({
+					.Display_Name = restore_part->Backup_Display_Name,
+					.Mount_Point = restore_part->Backup_Path,
+					.selected = true,
+				});
 			}
 		}
 	} else if (ListType == "wipe") {
-		struct PartitionList dalvik;
-		dalvik.Display_Name = gui_parse_text("{@dalvik}");
-		dalvik.Mount_Point = "DALVIK";
-		dalvik.selected = 0;
-		Partition_List->push_back(dalvik);
-		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Wipe_Available_in_GUI && !(*iter)->Is_SubPartition && (*iter)->Is_Present) {
-				struct PartitionList part;
-				part.Display_Name = (*iter)->Display_Name;
-				part.Mount_Point = (*iter)->Mount_Point;
-				part.selected = 0;
-				Partition_List->push_back(part);
+		// dalvik
+		Partition_List->push_back({
+			.Display_Name = gui_parse_text("{@dalvik}"),
+			.Mount_Point = "DALVIK",
+			.selected = false,
+		});
+		for (TWPartition *partition : Partitions) {
+			if (partition->Wipe_Available_in_GUI && !partition->Is_SubPartition && partition->Is_Present) {
+				Partition_List->push_back({
+					.Display_Name = partition->Display_Name,
+					.Mount_Point = partition->Mount_Point,
+					.selected = false,
+				});
 			}
-			if ((*iter)->Has_Android_Secure) {
-				struct PartitionList part;
-				part.Display_Name = (*iter)->Backup_Display_Name;
-				part.Mount_Point = (*iter)->Backup_Path;
-				part.selected = 0;
-				Partition_List->push_back(part);
+			if (partition->Has_Android_Secure) {
+				Partition_List->push_back({
+					.Display_Name = partition->Backup_Display_Name,
+					.Mount_Point = partition->Backup_Path,
+					.selected = false,
+				});
 			}
-			if ((*iter)->Has_Data_Media) {
-				struct PartitionList datamedia;
-				datamedia.Display_Name = (*iter)->Storage_Name;
-				datamedia.Mount_Point = "INTERNAL";
-				datamedia.selected = 0;
-				Partition_List->push_back(datamedia);
+			if (partition->Has_Data_Media) {
+				Partition_List->push_back({
+					.Display_Name = partition->Storage_Name,
+					.Mount_Point = "INTERNAL",
+					.selected = false,
+				});
 			}
 		}
 	} else if (ListType == "flashimg") {
-		for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
-			if ((*iter)->Can_Flash_Img && (*iter)->Is_Present) {
-				struct PartitionList part;
-				part.Display_Name = (*iter)->Backup_Display_Name;
-				part.Mount_Point = (*iter)->Backup_Path;
-				part.selected = 0;
-				Partition_List->push_back(part);
+		for (TWPartition *partition : Partitions) {
+			if (partition->Can_Flash_Img && partition->Is_Present) {
+				Partition_List->push_back({
+					.Display_Name = partition->Backup_Display_Name,
+					.Mount_Point = partition->Backup_Path,
+					.selected = false,
+				});
 			}
 		}
-		if (DataManager::GetIntValue("tw_has_repack_tools") != 0 && DataManager::GetIntValue("tw_has_boot_slots") != 0 && DataManager::GetIntValue("tw_include_install_recovery_ramdisk") != 0) {
+		if (DataManager::GetIntValue("tw_has_repack_tools") != 0 &&
+			DataManager::GetIntValue("tw_has_boot_slots") != 0 &&
+			DataManager::GetIntValue("tw_include_install_recovery_ramdisk") != 0) {
+#ifdef BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT
+			std::string dest_partition = "/vendor_boot";
+#else
 			std::string dest_partition = "/boot";
-			#ifdef BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT
-				dest_partition = "/vendor_boot";
-			#endif
+#endif
 
 			TWPartition* boot = Find_Partition_By_Path(dest_partition);
 			if (boot) {
 				// Allow flashing kernels and ramdisks
-				struct PartitionList repack_ramdisk;
-				repack_ramdisk.Display_Name = gui_lookup("install_twrp_ramdisk", "Install Recovery Ramdisk");
-				repack_ramdisk.Mount_Point = "/repack_ramdisk";
-				repack_ramdisk.selected = 0;
-				Partition_List->push_back(repack_ramdisk);
+				Partition_List->push_back({
+					.Display_Name = gui_lookup("install_twrp_ramdisk", "Install Recovery Ramdisk"),
+					.Mount_Point = "/repack_ramdisk",
+					.selected = false,
+				});
 				LOGINFO("Install Recovery Ramdisk: target partition=%s\n", dest_partition.c_str());
 				/*struct PartitionList repack_kernel; For now let's leave repacking kernels under advanced only
 				repack_kernel.Display_Name = gui_lookup("install_kernel", "Install Kernel");
