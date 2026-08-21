@@ -81,15 +81,9 @@
 #endif
 
 #ifdef TW_HAS_MTP
-#ifdef TW_HAS_LEGACY_MTP
-#include "mtp/legacy/mtp_MtpServer.hpp"
-#include "mtp/legacy/twrpMtp.hpp"
-#include "mtp/legacy/MtpMessage.hpp"
-#else
-#include "mtp/ffs/mtp_MtpServer.hpp"
-#include "mtp/ffs/twrpMtp.hpp"
 #include "mtp/ffs/MtpMessage.hpp"
-#endif
+#include "mtp/ffs/TwrpMtp.hpp"
+#include "mtp/ffs/TwrpMtpServer.hpp"
 #endif
 
 extern "C" {
@@ -2907,7 +2901,7 @@ bool TWPartitionManager::Enable_MTP(void) {
 	/* To enable MTP debug, use the twrp command line feature:
 	 * twrp set tw_mtp_debug 1
 	 */
-	twrpMtp *mtp = new twrpMtp(DataManager::GetIntValue("tw_mtp_debug"));
+	TwrpMtp *mtp = new TwrpMtp(DataManager::GetIntValue("tw_mtp_debug"));
 	mtppid = mtp->forkserver(mtppipe);
 	if (mtppid) {
 		close(mtppipe[0]); // Host closes read side

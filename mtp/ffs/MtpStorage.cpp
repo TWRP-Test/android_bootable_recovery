@@ -51,16 +51,6 @@ MtpStorage::MtpStorage(MtpStorageID id, const char* filePath,
 	inotify_thread_kill.set_value(0);
 	sendEvents = false;
 	handleCurrentlySending = 0;
-	use_mutex = true;
-	if (pthread_mutex_init(&mtpMutex, NULL) != 0) {
-			MTPE("Failed to init mtpMutex\n");
-			use_mutex = false;
-	}
-	if (pthread_mutex_init(&inMutex, NULL) != 0) {
-			MTPE("Failed to init inMutex\n");
-			pthread_mutex_destroy(&mtpMutex);
-			use_mutex = false;
-	}
 }
 
 MtpStorage::~MtpStorage() {
@@ -80,13 +70,6 @@ MtpStorage::~MtpStorage() {
 		// deleting all of the trees and nodes.
 		delete mtpmap[0];
 		mtpmap.clear();
-		if (use_mutex) {
-				use_mutex = false;
-				MTPD("~MtpStorage destroying mutexes\n");
-				pthread_mutex_destroy(&mtpMutex);
-				pthread_mutex_destroy(&inMutex);
-		}
-
 }
 
 int MtpStorage::getType() const {
@@ -189,18 +172,14 @@ int MtpStorage::createDB() {
 		mtpstorageparent = getPath();
 		// root directory is special: handle 0, parent 0, and empty path
 		mtpmap[0] = new Tree(0, 0, "");
-		if (use_mutex) {
-				sendEvents = true;
-				MTPD("inotify_init\n");
-				inotify_fd = inotify_init();
-				if (inotify_fd < 0) {
-						MTPE("Can't run inotify_init for mtp server: %s\n", strerror(errno));
-				} else {
-						MTPD("Starting inotify thread\n");
-						inotify_thread = inotify();
-				}
+		sendEvents = true;
+		MTPD("inotify_init\n");
+		inotify_fd = inotify_init();
+		if (inotify_fd < 0) {
+				MTPE("Can't run inotify_init for mtp server: %s\n", strerror(errno));
 		} else {
-				MTPD("NOT starting inotify thread\n");
+				MTPD("Starting inotify thread\n");
+				inotify_thread = inotify();
 		}
 		// for debugging and caching purposes, read the root dir already now
 		readDir(mtpstorageparent, mtpmap[0]);
@@ -396,9 +375,7 @@ int MtpStorage::inotify_t(void) {
 						struct inotify_event *event = (struct inotify_event *) &buf[i];
 						if (event->len) {
 								MTPD("inotify event: wd: %i, mask: %x, name: %s\n", event->wd, event->mask, event->name);
-								lockMutex(1);
 								handleInotifyEvent(event);
-								unlockMutex(1);
 						}
 						i += EVENT_SIZE + event->len;
 				}
@@ -487,35 +464,6 @@ void MtpStorage::handleInotifyEvent(struct inotify_event* event)
 		} else if (event->mask & IN_DELETE_SELF || event->mask & IN_MOVE_SELF) {
 				// TODO: is this always already handled by IN_DELETE for the parent dir?
 		}
-}
-
-void MtpStorage::lockMutex(int thread_type) {
-		if (!use_mutex)
-				return; // mutex is disabled
-		if (thread_type) {
-				// inotify thread
-				pthread_mutex_lock(&inMutex);
-				while (pthread_mutex_trylock(&mtpMutex)) {
-						pthread_mutex_unlock(&inMutex);
-						usleep(32000);
-						pthread_mutex_lock(&inMutex);
-				}
-		} else {
-				// main mtp thread
-				pthread_mutex_lock(&mtpMutex);
-				while (pthread_mutex_trylock(&inMutex)) {
-						pthread_mutex_unlock(&mtpMutex);
-						usleep(13000);
-						pthread_mutex_lock(&mtpMutex);
-				}
-		}
-}
-
-void MtpStorage::unlockMutex( __attribute__((unused)) int thread_type) {
-		if (!use_mutex)
-				return; // mutex is disabled
-		pthread_mutex_unlock(&inMutex);
-		pthread_mutex_unlock(&mtpMutex);
 }
 
 int MtpStorage::getObjectPropertyValue(MtpObjectHandle handle, MtpObjectProperty property, MtpStorage::PropEntry& pe) {

@@ -18,22 +18,15 @@
 
 #include <utils/Log.h>
 
-#include <assert.h>
-#include <cutils/properties.h>
-#include <dirent.h>
-#include <errno.h>
+#include <android-base/properties.h>
 #include <fcntl.h>
-#include <libgen.h>
-#include <limits.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
+
 #include <map>
 #include <string>
 
+#include "TwrpMtpDatabase.hpp"
 #include "MtpDataPacket.h"
-#include "MtpDatabase.h"
 #include "MtpDebug.h"
 #include "MtpObjectInfo.h"
 #include "MtpProperty.h"
@@ -41,35 +34,30 @@
 #include "MtpStringBuffer.h"
 #include "MtpUtils.h"
 #include "mtp.h"
-#include "mtp_MtpDatabase.hpp"
 
-IMtpDatabase::IMtpDatabase() {
-  storagenum = 0;
-  count = -1;
-}
+TwrpMtpDatabase::TwrpMtpDatabase() {}
 
-IMtpDatabase::~IMtpDatabase() {
+TwrpMtpDatabase::~TwrpMtpDatabase() {
   std::map<int, MtpStorage*>::iterator i;
   for (i = storagemap.begin(); i != storagemap.end(); i++) {
 	delete i->second;
   }
 }
 
-int IMtpDatabase::DEVICE_PROPERTIES[3] = { MTP_DEVICE_PROPERTY_SYNCHRONIZATION_PARTNER,
+int TwrpMtpDatabase::DEVICE_PROPERTIES[3] = { MTP_DEVICE_PROPERTY_SYNCHRONIZATION_PARTNER,
 										   MTP_DEVICE_PROPERTY_DEVICE_FRIENDLY_NAME,
 										   MTP_DEVICE_PROPERTY_IMAGE_SIZE };
 
-int IMtpDatabase::FILE_PROPERTIES[10] = {
+int TwrpMtpDatabase::FILE_PROPERTIES[11] = {
   // NOTE must match beginning of AUDIO_PROPERTIES, VIDEO_PROPERTIES
   // and IMAGE_PROPERTIES below
   MTP_PROPERTY_STORAGE_ID, MTP_PROPERTY_OBJECT_FORMAT, MTP_PROPERTY_PROTECTION_STATUS,
   MTP_PROPERTY_OBJECT_SIZE, MTP_PROPERTY_OBJECT_FILE_NAME, MTP_PROPERTY_DATE_MODIFIED,
   MTP_PROPERTY_PARENT_OBJECT, MTP_PROPERTY_PERSISTENT_UID, MTP_PROPERTY_NAME,
-  // TODO: why is DISPLAY_NAME not here?
-  MTP_PROPERTY_DATE_ADDED
+  MTP_PROPERTY_DISPLAY_NAME, MTP_PROPERTY_DATE_ADDED
 };
 
-int IMtpDatabase::AUDIO_PROPERTIES[19] = {
+int TwrpMtpDatabase::AUDIO_PROPERTIES[19] = {
   // NOTE must match FILE_PROPERTIES above
   MTP_PROPERTY_STORAGE_ID, MTP_PROPERTY_OBJECT_FORMAT, MTP_PROPERTY_PROTECTION_STATUS,
   MTP_PROPERTY_OBJECT_SIZE, MTP_PROPERTY_OBJECT_FILE_NAME, MTP_PROPERTY_DATE_MODIFIED,
@@ -82,7 +70,7 @@ int IMtpDatabase::AUDIO_PROPERTIES[19] = {
   MTP_PROPERTY_COMPOSER
 };
 
-int IMtpDatabase::VIDEO_PROPERTIES[15] = {
+int TwrpMtpDatabase::VIDEO_PROPERTIES[15] = {
   // NOTE must match FILE_PROPERTIES above
   MTP_PROPERTY_STORAGE_ID, MTP_PROPERTY_OBJECT_FORMAT, MTP_PROPERTY_PROTECTION_STATUS,
   MTP_PROPERTY_OBJECT_SIZE, MTP_PROPERTY_OBJECT_FILE_NAME, MTP_PROPERTY_DATE_MODIFIED,
@@ -93,7 +81,7 @@ int IMtpDatabase::VIDEO_PROPERTIES[15] = {
   MTP_PROPERTY_ARTIST, MTP_PROPERTY_ALBUM_NAME, MTP_PROPERTY_DURATION, MTP_PROPERTY_DESCRIPTION
 };
 
-int IMtpDatabase::IMAGE_PROPERTIES[12] = {
+int TwrpMtpDatabase::IMAGE_PROPERTIES[12] = {
   // NOTE must match FILE_PROPERTIES above
   MTP_PROPERTY_STORAGE_ID, MTP_PROPERTY_OBJECT_FORMAT, MTP_PROPERTY_PROTECTION_STATUS,
   MTP_PROPERTY_OBJECT_SIZE, MTP_PROPERTY_OBJECT_FILE_NAME, MTP_PROPERTY_DATE_MODIFIED,
@@ -104,7 +92,7 @@ int IMtpDatabase::IMAGE_PROPERTIES[12] = {
   MTP_PROPERTY_DESCRIPTION
 };
 
-int IMtpDatabase::ALL_PROPERTIES[25] = {
+int TwrpMtpDatabase::ALL_PROPERTIES[25] = {
   // NOTE must match FILE_PROPERTIES above
   MTP_PROPERTY_STORAGE_ID, MTP_PROPERTY_OBJECT_FORMAT, MTP_PROPERTY_PROTECTION_STATUS,
   MTP_PROPERTY_OBJECT_SIZE, MTP_PROPERTY_OBJECT_FILE_NAME, MTP_PROPERTY_DATE_MODIFIED,
@@ -126,7 +114,7 @@ int IMtpDatabase::ALL_PROPERTIES[25] = {
   MTP_PROPERTY_DESCRIPTION
 };
 
-int IMtpDatabase::SUPPORTED_PLAYBACK_FORMATS[26] = { SUPPORTED_PLAYBACK_FORMAT_UNDEFINED,
+int TwrpMtpDatabase::SUPPORTED_PLAYBACK_FORMATS[26] = { SUPPORTED_PLAYBACK_FORMAT_UNDEFINED,
 													 SUPPORTED_PLAYBACK_FORMAT_ASSOCIATION,
 													 SUPPORTED_PLAYBACK_FORMAT_TEXT,
 													 SUPPORTED_PLAYBACK_FORMAT_HTML,
@@ -153,17 +141,21 @@ int IMtpDatabase::SUPPORTED_PLAYBACK_FORMATS[26] = { SUPPORTED_PLAYBACK_FORMAT_U
 													 SUPPORTED_PLAYBACK_FORMAT_XML_DOCUMENT,
 													 SUPPORTED_PLAYBACK_FORMAT_FLAC };
 
-MtpObjectHandle IMtpDatabase::beginSendObject(const char* path, MtpObjectFormat format,
-											  MtpObjectHandle parent, MtpStorageID storageID,
-											  uint64_t size, time_t modified) {
+MtpObjectHandle TwrpMtpDatabase::beginSendObject(const char* path, MtpObjectFormat format,
+											  MtpObjectHandle parent, MtpStorageID storageID) {
   if (storagemap.find(storageID) == storagemap.end()) return kInvalidObjectHandle;
-  return storagemap[storageID]->beginSendObject(path, format, parent, size, modified);
+  return storagemap[storageID]->beginSendObject(path, format, parent, 0, 0);
 }
 
-void IMtpDatabase::endSendObject(const char* path, MtpObjectHandle handle, MtpObjectFormat format,
-								 bool succeeded) {
+void TwrpMtpDatabase::endSendObject(MtpObjectHandle handle, bool succeeded) {
+  MtpStringBuffer pathBuf;
+  int64_t fileLength = 0;
+  MtpObjectFormat format = 0;
+  const char* path = "";
+  if (getObjectFilePath(handle, pathBuf, fileLength, format) == MTP_RESPONSE_OK)
+	path = (const char*)pathBuf;
   MTPD("endSendObject() %s\n", path);
-  if (!succeeded) {
+  if (!succeeded && path[0]) {
 	MTPE("endSendObject() failed, unlinking %s\n", path);
 	unlink(path);
   }
@@ -172,27 +164,21 @@ void IMtpDatabase::endSendObject(const char* path, MtpObjectHandle handle, MtpOb
 	storit->second->endSendObject(path, handle, format, succeeded);
 }
 
-void IMtpDatabase::createDB(MtpStorage* storage, MtpStorageID storageID) {
+void TwrpMtpDatabase::createDB(MtpStorage* storage, MtpStorageID storageID) {
   storagemap[storageID] = storage;
   storage->createDB();
 }
 
-void IMtpDatabase::destroyDB(MtpStorageID storageID) {
-  MtpStorage* storage = storagemap[storageID];
-  storagemap.erase(storageID);
-  delete storage;
-}
-
-MtpObjectHandleList* IMtpDatabase::getObjectList(MtpStorageID storageID,
+MtpObjectHandleList* TwrpMtpDatabase::getObjectList(MtpStorageID storageID,
 												 __attribute__((unused)) MtpObjectFormat format,
 												 MtpObjectHandle parent) {
-  MTPD("IMtpDatabase::getObjectList::storageID: %d\n", storageID);
+  MTPD("TwrpMtpDatabase::getObjectList::storageID: %d\n", storageID);
   MtpObjectHandleList* list = storagemap[storageID]->getObjectList(storageID, parent);
-  MTPD("IMtpDatabase::getObjectList::list size: %d\n", list->size());
+  MTPD("TwrpMtpDatabase::getObjectList::list size: %d\n", list->size());
   return list;
 }
 
-int IMtpDatabase::getNumObjects(MtpStorageID storageID,
+int TwrpMtpDatabase::getNumObjects(MtpStorageID storageID,
 								__attribute__((unused)) MtpObjectFormat format,
 								MtpObjectHandle parent) {
   MtpObjectHandleList* list = storagemap[storageID]->getObjectList(storageID, parent);
@@ -201,11 +187,11 @@ int IMtpDatabase::getNumObjects(MtpStorageID storageID,
   return size;
 }
 
-MtpObjectFormatList* IMtpDatabase::getSupportedPlaybackFormats() {
+MtpObjectFormatList* TwrpMtpDatabase::getSupportedPlaybackFormats() {
   // This function tells the host PC which file formats the device supports
   MtpObjectFormatList* list = new MtpObjectFormatList();
   int length = sizeof(SUPPORTED_PLAYBACK_FORMATS) / sizeof(SUPPORTED_PLAYBACK_FORMATS[0]);
-  MTPD("IMtpDatabase::getSupportedPlaybackFormats length: %i\n", length);
+  MTPD("TwrpMtpDatabase::getSupportedPlaybackFormats length: %i\n", length);
   for (int i = 0; i < length; i++) {
 	MTPD("supported playback format: %x\n", SUPPORTED_PLAYBACK_FORMATS[i]);
 	list->push_back(SUPPORTED_PLAYBACK_FORMATS[i]);
@@ -213,16 +199,16 @@ MtpObjectFormatList* IMtpDatabase::getSupportedPlaybackFormats() {
   return list;
 }
 
-MtpObjectFormatList* IMtpDatabase::getSupportedCaptureFormats() {
+MtpObjectFormatList* TwrpMtpDatabase::getSupportedCaptureFormats() {
   // Android OS implementation of this function returns NULL
   // so we are not implementing this function either.
   MTPD(
-	  "IMtpDatabase::getSupportedCaptureFormats returning NULL (This is what Android does as "
+	  "TwrpMtpDatabase::getSupportedCaptureFormats returning NULL (This is what Android does as "
 	  "well).\n");
   return NULL;
 }
 
-MtpObjectPropertyList* IMtpDatabase::getSupportedObjectProperties(MtpObjectFormat format) {
+MtpObjectPropertyList* TwrpMtpDatabase::getSupportedObjectProperties(MtpObjectFormat format) {
   int* properties;
   MtpObjectPropertyList* list = new MtpObjectPropertyList();
   int length = 0;
@@ -256,7 +242,7 @@ MtpObjectPropertyList* IMtpDatabase::getSupportedObjectProperties(MtpObjectForma
 	  properties = FILE_PROPERTIES;
 	  length = sizeof(FILE_PROPERTIES) / sizeof(FILE_PROPERTIES[0]);
   }
-  MTPD("IMtpDatabase::getSupportedObjectProperties length is: %i, format: %x", length, format);
+  MTPD("TwrpMtpDatabase::getSupportedObjectProperties length is: %i, format: %x", length, format);
   for (int i = 0; i < length; i++) {
 	MTPD("supported object property: %x\n", properties[i]);
 	list->push_back(properties[i]);
@@ -264,23 +250,23 @@ MtpObjectPropertyList* IMtpDatabase::getSupportedObjectProperties(MtpObjectForma
   return list;
 }
 
-MtpDevicePropertyList* IMtpDatabase::getSupportedDeviceProperties() {
+MtpDevicePropertyList* TwrpMtpDatabase::getSupportedDeviceProperties() {
   MtpDevicePropertyList* list = new MtpDevicePropertyList();
   int length = sizeof(DEVICE_PROPERTIES) / sizeof(DEVICE_PROPERTIES[0]);
-  MTPD("IMtpDatabase::getSupportedDeviceProperties length was: %i\n", length);
+  MTPD("TwrpMtpDatabase::getSupportedDeviceProperties length was: %i\n", length);
   for (int i = 0; i < length; i++) list->push_back(DEVICE_PROPERTIES[i]);
   return list;
 }
 
-MtpResponseCode IMtpDatabase::getObjectPropertyValue(MtpObjectHandle handle,
+MtpResponseCode TwrpMtpDatabase::getObjectPropertyValue(MtpObjectHandle handle,
 													 MtpObjectProperty property,
 													 MtpDataPacket& packet) {
-  MTPD("IMtpDatabase::getObjectPropertyValue mtpid: %u, property: %x\n", handle, property);
+  MTPD("TwrpMtpDatabase::getObjectPropertyValue mtpid: %u, property: %x\n", handle, property);
   int type;
   MtpResponseCode result = MTP_RESPONSE_INVALID_OBJECT_HANDLE;
   MtpStorage::PropEntry prop;
   if (!getObjectPropertyInfo(property, type)) {
-	MTPE("IMtpDatabase::getObjectPropertyValue returning MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED\n");
+	MTPE("TwrpMtpDatabase::getObjectPropertyValue returning MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED\n");
 	return MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED;
   }
   std::map<int, MtpStorage*>::iterator storit;
@@ -292,7 +278,7 @@ MtpResponseCode IMtpDatabase::getObjectPropertyValue(MtpObjectHandle handle,
   }
 
   if (result != MTP_RESPONSE_OK) {
-	MTPE("IMtpDatabase::getObjectPropertyValue unable to locate handle: %u\n", handle);
+	MTPE("TwrpMtpDatabase::getObjectPropertyValue unable to locate handle: %u\n", handle);
 	return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
   }
 
@@ -362,16 +348,16 @@ out:
   return result;
 }
 
-MtpResponseCode IMtpDatabase::setObjectPropertyValue(MtpObjectHandle handle,
+MtpResponseCode TwrpMtpDatabase::setObjectPropertyValue(MtpObjectHandle handle,
 													 MtpObjectProperty property,
 													 MtpDataPacket& packet) {
   int type;
-  MTPD("IMtpDatabase::setObjectPropertyValue start\n");
+  MTPD("TwrpMtpDatabase::setObjectPropertyValue start\n");
   if (!getObjectPropertyInfo(property, type)) {
-	MTPE("IMtpDatabase::setObjectPropertyValue returning MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED\n");
+	MTPE("TwrpMtpDatabase::setObjectPropertyValue returning MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED\n");
 	return MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED;
   }
-  MTPD("IMtpDatabase::setObjectPropertyValue continuing\n");
+  MTPD("TwrpMtpDatabase::setObjectPropertyValue continuing\n");
 
   int8_t int8_t_value;
   uint8_t uint8_t_value;
@@ -424,7 +410,7 @@ MtpResponseCode IMtpDatabase::setObjectPropertyValue(MtpObjectHandle handle,
 	  break;
 	}
 	default:
-	  MTPE("IMtpDatabase::setObjectPropertyValue unsupported type %i in getObjectPropertyValue\n",
+	  MTPE("TwrpMtpDatabase::setObjectPropertyValue unsupported type %i in getObjectPropertyValue\n",
 		   type);
 	  return MTP_RESPONSE_INVALID_OBJECT_PROP_FORMAT;
   }
@@ -433,7 +419,7 @@ MtpResponseCode IMtpDatabase::setObjectPropertyValue(MtpObjectHandle handle,
 
   switch (property) {
 	case MTP_PROPERTY_OBJECT_FILE_NAME: {
-	  MTPD("IMtpDatabase::setObjectPropertyValue renaming file, handle: %d, new name: '%s'\n",
+	  MTPD("TwrpMtpDatabase::setObjectPropertyValue renaming file, handle: %d, new name: '%s'\n",
 		   handle, stringValue.c_str());
 	  std::map<int, MtpStorage*>::iterator storit;
 	  for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
@@ -446,20 +432,19 @@ MtpResponseCode IMtpDatabase::setObjectPropertyValue(MtpObjectHandle handle,
 	} break;
 
 	default:
-	  MTPE("IMtpDatabase::setObjectPropertyValue property %x not supported.\n", property);
+	  MTPE("TwrpMtpDatabase::setObjectPropertyValue property %x not supported.\n", property);
 	  result = MTP_RESPONSE_OBJECT_PROP_NOT_SUPPORTED;
   }
-  MTPD("IMtpDatabase::setObjectPropertyValue returning %d\n", result);
+  MTPD("TwrpMtpDatabase::setObjectPropertyValue returning %d\n", result);
   return result;
 }
 
-MtpResponseCode IMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
+MtpResponseCode TwrpMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
 													 MtpDataPacket& packet) {
   int type, result = 0;
-  char prop_value[PROPERTY_VALUE_MAX];
   MTPD("property %s\n", MtpDebug::getDevicePropCodeName(property));
   if (!getDevicePropertyInfo(property, type)) {
-	MTPE("IMtpDatabase::getDevicePropertyValue MTP_RESPONSE_DEVICE_PROP_NOT_SUPPORTED\n");
+	MTPE("TwrpMtpDatabase::getDevicePropertyValue MTP_RESPONSE_DEVICE_PROP_NOT_SUPPORTED\n");
 	return MTP_RESPONSE_DEVICE_PROP_NOT_SUPPORTED;
   }
   MTPD("property %s\n", MtpDebug::getDevicePropCodeName(property));
@@ -471,7 +456,7 @@ MtpResponseCode IMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
 	  result = MTP_RESPONSE_OK;
 	  break;
 	default: {
-	  MTPE("IMtpDatabase::getDevicePropertyValue property %x not supported\n", property);
+	  MTPE("TwrpMtpDatabase::getDevicePropertyValue property %x not supported\n", property);
 	  result = MTP_RESPONSE_DEVICE_PROP_NOT_SUPPORTED;
 	  break;
 	}
@@ -483,7 +468,8 @@ MtpResponseCode IMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
   }
 
   long longValue = 0;
-  property_get("ro.build.product", prop_value, "unknown manufacturer");
+  std::string prop_value =
+	  android::base::GetProperty("ro.build.product", "unknown manufacturer");
   switch (type) {
 	case MTP_TYPE_INT8: {
 	  MTPD("MTP_TYPE_INT8\n");
@@ -537,12 +523,11 @@ MtpResponseCode IMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
 	}
 	case MTP_TYPE_STR: {
 	  MTPD("MTP_TYPE_STR\n");
-	  char* str = prop_value;
-	  packet.putString(str);
+	  packet.putString(prop_value.c_str());
 	  break;
 	}
 	default:
-	  MTPE("IMtpDatabase::getDevicePropertyValue unsupported type %i in getDevicePropertyValue\n",
+	  MTPE("TwrpMtpDatabase::getDevicePropertyValue unsupported type %i in getDevicePropertyValue\n",
 		   type);
 	  return MTP_RESPONSE_INVALID_DEVICE_PROP_FORMAT;
   }
@@ -550,39 +535,39 @@ MtpResponseCode IMtpDatabase::getDevicePropertyValue(MtpDeviceProperty property,
   return MTP_RESPONSE_OK;
 }
 
-MtpResponseCode IMtpDatabase::setDevicePropertyValue(__attribute__((unused))
+MtpResponseCode TwrpMtpDatabase::setDevicePropertyValue(__attribute__((unused))
 													 MtpDeviceProperty property,
 													 __attribute__((unused))
 													 MtpDataPacket& packet) {
-  MTPE("IMtpDatabase::setDevicePropertyValue not implemented, returning 0\n");
+  MTPE("TwrpMtpDatabase::setDevicePropertyValue not implemented, returning 0\n");
   return 0;
 }
 
-MtpResponseCode IMtpDatabase::resetDeviceProperty(__attribute__((unused))
+MtpResponseCode TwrpMtpDatabase::resetDeviceProperty(__attribute__((unused))
 												  MtpDeviceProperty property) {
-  MTPE("IMtpDatabase::resetDeviceProperty not implemented, returning -1\n");
+  MTPE("TwrpMtpDatabase::resetDeviceProperty not implemented, returning -1\n");
   return -1;
 }
 
-MtpResponseCode IMtpDatabase::getObjectPropertyList(MtpObjectHandle handle, uint32_t format,
+MtpResponseCode TwrpMtpDatabase::getObjectPropertyList(MtpObjectHandle handle, uint32_t format,
 													uint32_t property, int groupCode, int depth,
 													MtpDataPacket& packet) {
   MTPD("getObjectPropertyList()\n");
   MTPD("property: %x\n", property);
   std::map<int, MtpStorage*>::iterator storit;
   for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
-	MTPD("IMtpDatabase::getObjectPropertyList calling getObjectPropertyList\n");
+	MTPD("TwrpMtpDatabase::getObjectPropertyList calling getObjectPropertyList\n");
 	if (storit->second->getObjectPropertyList(handle, format, property, groupCode, depth, packet) ==
 		0) {
 	  MTPD("MTP_RESPONSE_OK\n");
 	  return MTP_RESPONSE_OK;
 	}
   }
-  MTPE("IMtpDatabase::getObjectPropertyList MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
+  MTPE("TwrpMtpDatabase::getObjectPropertyList MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
 
-MtpResponseCode IMtpDatabase::getObjectInfo(MtpObjectHandle handle, MtpObjectInfo& info) {
+MtpResponseCode TwrpMtpDatabase::getObjectInfo(MtpObjectHandle handle, MtpObjectInfo& info) {
   std::map<int, MtpStorage*>::iterator storit;
   for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
 	if (storit->second->getObjectInfo(handle, info) == 0) {
@@ -590,44 +575,31 @@ MtpResponseCode IMtpDatabase::getObjectInfo(MtpObjectHandle handle, MtpObjectInf
 	  return MTP_RESPONSE_OK;
 	}
   }
-  MTPE("IMtpDatabase::getObjectInfo MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
+  MTPE("TwrpMtpDatabase::getObjectInfo MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
 
-void* IMtpDatabase::getThumbnail(__attribute__((unused)) MtpObjectHandle handle,
+void* TwrpMtpDatabase::getThumbnail(__attribute__((unused)) MtpObjectHandle handle,
 								 __attribute__((unused)) size_t& outThumbSize) {
-  MTPE("IMtpDatabase::getThumbnail not implemented, returning 0\n");
+  MTPE("TwrpMtpDatabase::getThumbnail not implemented, returning 0\n");
   return 0;
 }
 
-MtpResponseCode IMtpDatabase::getObjectFilePath(MtpObjectHandle handle,
+MtpResponseCode TwrpMtpDatabase::getObjectFilePath(MtpObjectHandle handle,
 												MtpStringBuffer& outFilePath,
 												int64_t& outFileLength,
 												MtpObjectFormat& outFormat) {
   std::map<int, MtpStorage*>::iterator storit;
   for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
-	MTPD("IMtpDatabase::getObjectFilePath calling getObjectFilePath\n");
+	MTPD("TwrpMtpDatabase::getObjectFilePath calling getObjectFilePath\n");
 	if (storit->second->getObjectFilePath(handle, outFilePath, outFileLength, outFormat) == 0) {
 	  MTPD("MTP_RESPONSE_OK\n");
 	  return MTP_RESPONSE_OK;
 	}
   }
-  MTPE("IMtpDatabase::getObjectFilePath MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
+  MTPE("TwrpMtpDatabase::getObjectFilePath MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
-
-// MtpResponseCode IMtpDatabase::deleteFile(MtpObjectHandle handle) {
-//	MTPD("IMtpDatabase::deleteFile\n");
-//	std::map<int, MtpStorage*>::iterator storit;
-//	for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
-//		if (storit->second->deleteFile(handle) == 0) {
-//			MTPD("MTP_RESPONSE_OK\n");
-//			return MTP_RESPONSE_OK;
-//		}
-//	}
-//	MTPE("IMtpDatabase::deleteFile MTP_RESPONSE_INVALID_OBJECT_HANDLE %i\n", handle);
-//	return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
-// }
 
 struct PropertyTableEntry {
   MtpObjectProperty property;
@@ -663,10 +635,10 @@ static const PropertyTableEntry kDevicePropertyTable[] = {
   { MTP_DEVICE_PROPERTY_IMAGE_SIZE, MTP_TYPE_STR },
 };
 
-bool IMtpDatabase::getObjectPropertyInfo(MtpObjectProperty property, int& type) {
+bool TwrpMtpDatabase::getObjectPropertyInfo(MtpObjectProperty property, int& type) {
   int count = sizeof(kObjectPropertyTable) / sizeof(kObjectPropertyTable[0]);
   const PropertyTableEntry* entry = kObjectPropertyTable;
-  MTPD("IMtpDatabase::getObjectPropertyInfo size is: %i\n", count);
+  MTPD("TwrpMtpDatabase::getObjectPropertyInfo size is: %i\n", count);
   for (int i = 0; i < count; i++, entry++) {
 	if (entry->property == property) {
 	  type = entry->type;
@@ -676,10 +648,10 @@ bool IMtpDatabase::getObjectPropertyInfo(MtpObjectProperty property, int& type) 
   return false;
 }
 
-bool IMtpDatabase::getDevicePropertyInfo(MtpDeviceProperty property, int& type) {
+bool TwrpMtpDatabase::getDevicePropertyInfo(MtpDeviceProperty property, int& type) {
   int count = sizeof(kDevicePropertyTable) / sizeof(kDevicePropertyTable[0]);
   const PropertyTableEntry* entry = kDevicePropertyTable;
-  MTPD("IMtpDatabase::getDevicePropertyInfo count is: %i\n", count);
+  MTPD("TwrpMtpDatabase::getDevicePropertyInfo count is: %i\n", count);
   for (int i = 0; i < count; i++, entry++) {
 	if (entry->property == property) {
 	  type = entry->type;
@@ -690,10 +662,10 @@ bool IMtpDatabase::getDevicePropertyInfo(MtpDeviceProperty property, int& type) 
   return false;
 }
 
-MtpObjectHandleList* IMtpDatabase::getObjectReferences(MtpObjectHandle handle) {
+MtpObjectHandleList* TwrpMtpDatabase::getObjectReferences(MtpObjectHandle handle) {
   // call function and place files with associated handles into int array
   MTPD(
-	  "IMtpDatabase::getObjectReferences returning null, this seems to be what Android always "
+	  "TwrpMtpDatabase::getObjectReferences returning null, this seems to be what Android always "
 	  "does.\n");
   MTPD("handle: %d\n", handle);
   // Windows + Android seems to always return a NULL in this function, c == null path
@@ -701,16 +673,16 @@ MtpObjectHandleList* IMtpDatabase::getObjectReferences(MtpObjectHandle handle) {
   return NULL;
 }
 
-MtpResponseCode IMtpDatabase::setObjectReferences(__attribute__((unused)) MtpObjectHandle handle,
+MtpResponseCode TwrpMtpDatabase::setObjectReferences(__attribute__((unused)) MtpObjectHandle handle,
 												  __attribute__((unused))
 												  MtpObjectHandleList* references) {
-  MTPE("IMtpDatabase::setObjectReferences not implemented, returning 0\n");
+  MTPE("TwrpMtpDatabase::setObjectReferences not implemented, returning 0\n");
   return 0;
 }
 
-MtpProperty* IMtpDatabase::getObjectPropertyDesc(MtpObjectProperty property,
+MtpProperty* TwrpMtpDatabase::getObjectPropertyDesc(MtpObjectProperty property,
 												 MtpObjectFormat format) {
-  MTPD("IMtpDatabase::getObjectPropertyDesc start\n");
+  MTPD("TwrpMtpDatabase::getObjectPropertyDesc start\n");
   MtpProperty* result = NULL;
   switch (property) {
 	case MTP_PROPERTY_OBJECT_FORMAT:
@@ -756,12 +728,12 @@ MtpProperty* IMtpDatabase::getObjectPropertyDesc(MtpObjectProperty property,
   return result;
 }
 
-int IMtpDatabase::openFilePath(const char* path, bool transcode) {
+int TwrpMtpDatabase::openFilePath(const char* path, bool transcode) {
   ALOGD("MtpDatabase %s: filePath=%s transcode=%d\n", __func__, path, transcode);
   return open(path, O_RDONLY);
 }
 
-MtpProperty* IMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
+MtpProperty* TwrpMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
   MtpProperty* result = NULL;
   switch (property) {
 	case MTP_DEVICE_PROPERTY_SYNCHRONIZATION_PARTNER:
@@ -780,74 +752,48 @@ MtpProperty* IMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
   return result;
 }
 
-void IMtpDatabase::sessionStarted() {
-  MTPD("IMtpDatabase::sessionStarted not implemented or does nothing, returning\n");
-  return;
-}
-
-void IMtpDatabase::sessionEnded() {
-  MTPD("IMtpDatabase::sessionEnded not implemented or does nothing, returning\n");
-  return;
-}
-
-// ----------------------------------------------------------------------------
-
-void IMtpDatabase::lockMutex(void) {
-  std::map<int, MtpStorage*>::iterator storit;
-  for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
-	storit->second->lockMutex(0);
-  }
-}
-
-void IMtpDatabase::unlockMutex(void) {
-  std::map<int, MtpStorage*>::iterator storit;
-  for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
-	storit->second->unlockMutex(0);
-  }
-}
-
-MtpResponseCode IMtpDatabase::beginDeleteObject(MtpObjectHandle handle) {
+MtpResponseCode TwrpMtpDatabase::beginDeleteObject(MtpObjectHandle handle) {
   MTPD("IMtoDatabase::beginDeleteObject handle: %u\n", handle);
   std::map<int, MtpStorage*>::iterator storit;
   for (storit = storagemap.begin(); storit != storagemap.end(); storit++) {
 	if (storit->second->deleteFile(handle) == 0) {
-	  MTPD("IMtpDatabase::beginDeleteObject::MTP_RESPONSE_OK\n");
+	  MTPD("TwrpMtpDatabase::beginDeleteObject::MTP_RESPONSE_OK\n");
 	  return MTP_RESPONSE_OK;
 	}
   }
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
 
-void IMtpDatabase::endDeleteObject(MtpObjectHandle handle __unused, bool succeeded __unused) {
-  MTPD("IMtpDatabase::endDeleteObject not implemented yet\n");
+void TwrpMtpDatabase::endDeleteObject(MtpObjectHandle handle __unused, bool succeeded __unused) {
+  MTPD("TwrpMtpDatabase::endDeleteObject not implemented yet\n");
 }
 
-void IMtpDatabase::rescanFile(const char* path __unused, MtpObjectHandle handle __unused,
+void TwrpMtpDatabase::rescanFile(const char* path __unused, MtpObjectHandle handle __unused,
 							  MtpObjectFormat format __unused) {
-  MTPD("IMtpDatabase::rescanFile not implemented yet\n");
+  MTPD("TwrpMtpDatabase::rescanFile not implemented yet\n");
 }
 
-MtpResponseCode IMtpDatabase::beginMoveObject(MtpObjectHandle handle __unused,
+MtpResponseCode TwrpMtpDatabase::beginMoveObject(MtpObjectHandle handle __unused,
 											  MtpObjectHandle newParent __unused,
 											  MtpStorageID newStorage __unused) {
-  MTPD("IMtpDatabase::beginMoveObject not implemented yet\n");
+  MTPD("TwrpMtpDatabase::beginMoveObject not implemented yet\n");
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
 
-void IMtpDatabase::endMoveObject(MtpObjectHandle oldParent __unused,
+void TwrpMtpDatabase::endMoveObject(MtpObjectHandle oldParent __unused,
 								 MtpObjectHandle newParent __unused,
 								 MtpStorageID oldStorage __unused, MtpStorageID newStorage __unused,
 								 MtpObjectHandle handle __unused, bool succeeded __unused) {
-  MTPD("IMtpDatabase::endMoveObject not implemented yet\n");
+  MTPD("TwrpMtpDatabase::endMoveObject not implemented yet\n");
 }
 
-MtpResponseCode IMtpDatabase::beginCopyObject(MtpObjectHandle handle __unused,
+MtpResponseCode TwrpMtpDatabase::beginCopyObject(MtpObjectHandle handle __unused,
 											  MtpObjectHandle newParent __unused,
 											  MtpStorageID newStorage __unused) {
-  MTPD("IMtpDatabase::beginCopyObject not implemented yet\n");
+  MTPD("TwrpMtpDatabase::beginCopyObject not implemented yet\n");
   return MTP_RESPONSE_INVALID_OBJECT_HANDLE;
 }
 
-void IMtpDatabase::endCopyObject(MtpObjectHandle handle __unused, bool succeeded __unused) {
-  MTPD("IMtpDatabase::endCopyObject not implemented yet\n");
+void TwrpMtpDatabase::endCopyObject(MtpObjectHandle handle __unused, bool succeeded __unused) {
+  MTPD("TwrpMtpDatabase::endCopyObject not implemented yet\n");
 }

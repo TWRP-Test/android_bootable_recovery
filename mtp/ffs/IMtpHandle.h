@@ -32,8 +32,6 @@ public:
 	// Return 0 if operation is successful, or -1 else
 	virtual int start(bool ptp) = 0;
 
-	virtual bool writeDescriptors(bool ptp) = 0;
-
 	virtual void close() = 0;
 
 	virtual ~IMtpHandle() {}

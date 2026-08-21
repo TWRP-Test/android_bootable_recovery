@@ -16,21 +16,15 @@
  * Copyright (C) 2014 TeamWin - bigbiff and Dees_Troy mtp database conversion to C++
  */
 
-#ifndef MTP_MTPSERVER_HPP
-#define MTP_MTPSERVER_HPP
-#include <utils/Log.h>
+#ifndef TWRP_MTP_SERVER_HPP
+#define TWRP_MTP_SERVER_HPP
 
 #include <string>
-#include <stdio.h>
-#include <assert.h>
-#include <limits.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <utils/threads.h>
+#include <vector>
 
 #include "MtpServer.h"
 #include "MtpStorage.h"
-#include "mtp_MtpDatabase.hpp"
+#include "MtpStringBuffer.h"
 
 typedef struct Storage {
 	std::string display;
@@ -48,7 +42,7 @@ struct mtp_info {
 	MtpStringBuffer deviceInfoSerialNumber;
 };
 
-class twmtp_MtpServer {
+class TwrpMtpServer {
 	public:
 		void start();
 		void cleanup();
@@ -63,16 +57,12 @@ class twmtp_MtpServer {
 		void set_device_info();
 
 	private:
-		typedef int (twmtp_MtpServer::*ThreadPtr)(void);
+		typedef int (TwrpMtpServer::*ThreadPtr)(void);
 		typedef void* (*PThreadPtr)(void *);
 		int mtppipe_thread(void);
 		bool usePtp;
 		MtpServer* server;
 		MtpServer* refserver;
 		int mtp_read_pipe;
-                MtpStringBuffer deviceInfoManufacturer;
-                MtpStringBuffer deviceInfoModel;
-                MtpStringBuffer deviceInfoDeviceVersion;
-                MtpStringBuffer deviceInfoSerialNumber;
 };
 #endif

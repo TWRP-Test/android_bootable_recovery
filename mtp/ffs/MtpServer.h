@@ -24,13 +24,13 @@
 #include "MtpStringBuffer.h"
 #include "mtp.h"
 #include "MtpUtils.h"
+#include "IMtpDatabase.h"
 #include "IMtpHandle.h"
 
 #include <memory>
 #include <mutex>
 #include <queue>
 
-class IMtpDatabase;
 class MtpStorage;
 
 class MtpServer {

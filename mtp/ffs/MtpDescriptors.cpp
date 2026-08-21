@@ -15,8 +15,8 @@
  */
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <sys/types.h>
-#include <cutils/properties.h>
 
 #include "MtpDescriptors.h"
 #include "MtpDebug.h"
@@ -277,6 +277,6 @@ bool writeDescriptors(int fd, bool ptp) {
         PLOG(ERROR) << fd << "Writing strings failed";
         return false;
     }
-	property_set("sys.usb.ffs.mtp.ready", "1");
+    android::base::SetProperty("sys.usb.ffs.mtp.ready", "1");
     return true;
 }

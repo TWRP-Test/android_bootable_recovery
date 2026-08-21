@@ -16,45 +16,38 @@
  * Additional Copyright (C) 2018 TeamWin
  */
 
-#include <utils/Log.h>
-
-#include <stdio.h>
-#include <assert.h>
-#include <limits.h>
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
-#include <vector>
-#include <utils/threads.h>
 #include <pthread.h>
-#include <cutils/properties.h>
+#include <unistd.h>
 
-#include "mtp_MtpServer.hpp"
-#include "MtpServer.h"
-#include "MtpStorage.h"
+#include <android-base/properties.h>
+#include <utils/threads.h>
+
 #include "MtpDebug.h"
 #include "MtpDescriptors.h"
 #include "MtpMessage.hpp"
-#include "mtp_MtpDatabase.hpp"
+#include "MtpServer.h"
+#include "MtpStorage.h"
+#include "TwrpMtpDatabase.hpp"
+#include "TwrpMtpServer.hpp"
 
-#include <string>
-
-void twmtp_MtpServer::set_device_info() {
-	char property[512];
-	property_get("ro.build.product", property, "unknown manufacturer");
-	mtpinfo.deviceInfoManufacturer = MtpStringBuffer(property);
-	property_get("ro.product.model", property, "unknown model");
-	mtpinfo.deviceInfoModel = MtpStringBuffer(property);
+void TwrpMtpServer::set_device_info() {
+	mtpinfo.deviceInfoManufacturer = MtpStringBuffer(
+			android::base::GetProperty("ro.build.product", "unknown manufacturer").c_str());
+	mtpinfo.deviceInfoModel = MtpStringBuffer(
+			android::base::GetProperty("ro.product.model", "unknown model").c_str());
 	mtpinfo.deviceInfoDeviceVersion = MtpStringBuffer("None");
-	property_get("ro.serialno", property, "unknown serial number");
-	mtpinfo.deviceInfoSerialNumber = MtpStringBuffer(property);
+	mtpinfo.deviceInfoSerialNumber = MtpStringBuffer(
+			android::base::GetProperty("ro.serialno", "unknown serial number").c_str());
 }
 
-void twmtp_MtpServer::start()
+void TwrpMtpServer::start()
 {
 	int controlFd = 0;
 
 	usePtp =  false;
-	IMtpDatabase* mtpdb = new IMtpDatabase();
+	IMtpDatabase* mtpdb = new TwrpMtpDatabase();
 	MTPD("launching server\n");
 		/* Sleep for a bit before we open the MTP USB device because some
 		 * devices are not ready due to the kernel not responding to our
@@ -94,7 +87,7 @@ void twmtp_MtpServer::start()
 	add_storage();
 	MTPD("Starting add / remove mtppipe monitor thread\n");
 	pthread_t thread;
-	ThreadPtr mtpptr = &twmtp_MtpServer::mtppipe_thread;
+	ThreadPtr mtpptr = &TwrpMtpServer::mtppipe_thread;
 	PThreadPtr p = *(PThreadPtr*)&mtpptr;
 	pthread_create(&thread, NULL, p, this);
 	// This loop restarts the MTP process if the device is unplugged and replugged in
@@ -104,11 +97,11 @@ void twmtp_MtpServer::start()
 	}
 }
 
-void twmtp_MtpServer::set_storages(storages* mtpstorages) {
+void TwrpMtpServer::set_storages(storages* mtpstorages) {
 	stores = mtpstorages;
 }
 
-void twmtp_MtpServer::cleanup()
+void TwrpMtpServer::cleanup()
 {
 	android::Mutex sMutex;
 	android::Mutex::Autolock autoLock(sMutex);
@@ -120,7 +113,7 @@ void twmtp_MtpServer::cleanup()
 	}
 }
 
-void twmtp_MtpServer::send_object_added(int handle)
+void TwrpMtpServer::send_object_added(int handle)
 {
 	android::Mutex sMutex;
 	android::Mutex::Autolock autoLock(sMutex);
@@ -131,7 +124,7 @@ void twmtp_MtpServer::send_object_added(int handle)
 		MTPD("server is null in send_object_added");
 }
 
-void twmtp_MtpServer::send_object_removed(int handle)
+void TwrpMtpServer::send_object_removed(int handle)
 {
 	android::Mutex sMutex;
 	android::Mutex::Autolock autoLock(sMutex);
@@ -142,12 +135,12 @@ void twmtp_MtpServer::send_object_removed(int handle)
 		MTPD("server is null in send_object_removed");
 }
 
-void twmtp_MtpServer::add_storage()
+void TwrpMtpServer::add_storage()
 {
 	android::Mutex sMutex;
 	android::Mutex::Autolock autoLock(sMutex);
 
-	MTPD("twmtp_MtpServer::add_storage count of storage devices: %i\n", stores->size());
+	MTPD("TwrpMtpServer::add_storage count of storage devices: %i\n", stores->size());
 	for (unsigned int i = 0; i < stores->size(); ++i) {
 			std::string pathStr = stores->at(i)->mount;
 
@@ -164,7 +157,7 @@ void twmtp_MtpServer::add_storage()
 	}
 }
 
-void twmtp_MtpServer::remove_storage(int storageId)
+void TwrpMtpServer::remove_storage(int storageId)
 {
 	android::Mutex sMutex;
 	android::Mutex::Autolock autoLock(sMutex);
@@ -172,21 +165,21 @@ void twmtp_MtpServer::remove_storage(int storageId)
 	if (server) {
 		MtpStorage* storage = server->getStorage(storageId);
 		if (storage) {
-			MTPD("twmtp_MtpServer::remove_storage calling removeStorage\n");
+			MTPD("TwrpMtpServer::remove_storage calling removeStorage\n");
 			server->removeStorage(storage);
 		}
 	} else
 		MTPD("server is null in remove_storage");
-	MTPD("twmtp_MtpServer::remove_storage DONE\n");
+	MTPD("TwrpMtpServer::remove_storage DONE\n");
 }
 
-int twmtp_MtpServer::mtppipe_thread(void)
+int TwrpMtpServer::mtppipe_thread(void)
 {
 	if (mtp_read_pipe == -1) {
 		MTPD("mtppipe_thread exiting because mtp_read_pipe not set\n");
 		return 0;
 	}
-	MTPD("Starting twmtp_MtpServer::mtppipe_thread\n");
+	MTPD("Starting TwrpMtpServer::mtppipe_thread\n");
 	int read_count;
 	struct mtpmsg mtp_message;
 	while (1) {
@@ -211,16 +204,16 @@ int twmtp_MtpServer::mtppipe_thread(void)
 				MTPE("Unknown mtppipe message value: %i\n", mtp_message.message_type);
 			}
 		} else {
-			MTPE("twmtp_MtpServer::mtppipe_thread unexpected read_count %i\n", read_count);
+			MTPE("TwrpMtpServer::mtppipe_thread unexpected read_count %i\n", read_count);
 			close(mtp_read_pipe);
 			break;
 		}
 	}
-	MTPD("twmtp_MtpServer::mtppipe_thread closing\n");
+	MTPD("TwrpMtpServer::mtppipe_thread closing\n");
 	return 0;
 }
 
-void twmtp_MtpServer::set_read_pipe(int pipe)
+void TwrpMtpServer::set_read_pipe(int pipe)
 {
 	mtp_read_pipe = pipe;
 }

@@ -17,30 +17,20 @@
 #ifndef TWRPMTP_HPP
 #define TWRPMTP_HPP
 
-#include <fcntl.h>
-#include <utils/Errors.h>
-#include <utils/threads.h>
-#include <string>
-#include <vector>
 #include <pthread.h>
-#include "MtpTypes.h"
-#include "MtpPacket.h"
-#include "MtpDataPacket.h"
-#include "MtpDatabase.h"
-#include "MtpRequestPacket.h"
-#include "MtpResponsePacket.h"
-#include "mtp_MtpDatabase.hpp"
-#include "mtp_MtpServer.hpp"
+#include <string>
 
-class twrpMtp {
+#include "TwrpMtpServer.hpp"
+
+class TwrpMtp {
 	public:
-		twrpMtp(int debug_enabled = 0);
+		TwrpMtp(int debug_enabled = 0);
 		pthread_t threadserver(void);
 		pid_t forkserver(int mtppipe[2]);
 		void addStorage(std::string display, std::string path, int mtpid, uint64_t maxFileSize);
 	private:
 		int start(void);
-		typedef int (twrpMtp::*ThreadPtr)(void);
+		typedef int (TwrpMtp::*ThreadPtr)(void);
 		typedef void* (*PThreadPtr)(void *);
 		storages *mtpstorages;
 		storage *s;

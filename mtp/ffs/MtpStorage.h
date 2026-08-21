@@ -25,8 +25,6 @@
 #include "btree.hpp"
 #include "tw_atomic.hpp"
 
-class MtpDatabase;
-
 class MtpStorage {
 
 public:
@@ -56,9 +54,6 @@ private:
 	MtpServer*				mServer;
 	typedef					int (MtpStorage::*ThreadPtr)(void);
 	typedef					void* (*PThreadPtr)(void *);
-	bool					use_mutex;
-	pthread_mutex_t			inMutex; // inotify mutex
-	pthread_mutex_t			mtpMutex; // main mtp mutex
 	TWAtomicInt				inotify_thread_kill;
 	pthread_t				inotify_thread;
 	Node*					findNode(MtpObjectHandle handle);
@@ -96,8 +91,6 @@ public:
 	int						createDB();
 	pthread_t				inotify();
 	int						inotify_t();
-	void					lockMutex(int thread_type);
-	void					unlockMutex(int thread_type);
 };
 
 #endif // _MTP_STORAGE_H

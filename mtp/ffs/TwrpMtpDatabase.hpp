@@ -16,65 +16,37 @@
  * Copyright (C) 2014 TeamWin - bigbiff and Dees_Troy mtp database conversion to C++
  */
 
-#ifndef MTP_MTPDATABASE_HPP
-#define MTP_MTPDATABASE_HPP
+#ifndef TWRP_MTP_DATABASE_HPP
+#define TWRP_MTP_DATABASE_HPP
 
-#include <utils/Log.h>
-
-#include <stdio.h>
-#include <assert.h>
-#include <limits.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <sys/types.h>
 #include <map>
 #include <string>
-#include <deque>
 
-#include "MtpDatabase.h"
-#include "MtpDataPacket.h"
-#include "MtpObjectInfo.h"
-#include "MtpProperty.h"
-#include "MtpStringBuffer.h"
-#include "MtpUtils.h"
-#include "mtp.h"
+#include "IMtpDatabase.h"
+#include "MtpStorage.h"
 
-class IMtpDatabase : public MtpDatabase {
+class TwrpMtpDatabase : public IMtpDatabase {
 private:
-	int* getSupportedObjectProperties(int format);
-
-	static int FILE_PROPERTIES[10];
+	static int FILE_PROPERTIES[11];
 	static int DEVICE_PROPERTIES[3];
 	static int AUDIO_PROPERTIES[19];
 	static int VIDEO_PROPERTIES[15];
 	static int IMAGE_PROPERTIES[12];
 	static int ALL_PROPERTIES[25];
 	static int SUPPORTED_PLAYBACK_FORMATS[26];
-	int storagenum;
-	int count;
-	std::string lastfile;
 	std::map<int, MtpStorage*> storagemap;
-	void countDirs(std::string path);
-	int readParentDirs(std::string path, int storageID);
 
 public:
-									IMtpDatabase();
-	virtual							~IMtpDatabase();
+									TwrpMtpDatabase();
+	virtual							~TwrpMtpDatabase();
 
 	virtual void					createDB(MtpStorage* storage, MtpStorageID storageID);
-	virtual void					destroyDB(MtpStorageID storageID);
 	virtual MtpObjectHandle			beginSendObject(const char* path,
 											MtpObjectFormat format,
 											MtpObjectHandle parent,
-											MtpStorageID storageID,
-											uint64_t size,
-											time_t modified);
+											MtpStorageID storageID);
 
-	virtual void					endSendObject(const char* path,
-											MtpObjectHandle handle,
-											MtpObjectFormat format,
+	virtual void					endSendObject(MtpObjectHandle handle,
 											bool succeeded);
 
 	virtual MtpObjectHandleList*	getObjectList(MtpStorageID storageID,
@@ -122,12 +94,11 @@ public:
 											MtpStringBuffer& outFilePath,
 											int64_t& outFileLength,
 											MtpObjectFormat& outFormat);
-	// virtual MtpResponseCode		   deleteFile(MtpObjectHandle handle);
 
 	bool							getObjectPropertyInfo(MtpObjectProperty property, int& type);
 	bool							getDevicePropertyInfo(MtpDeviceProperty property, int& type);
 
-  	virtual int						openFilePath(const char* path, bool transcode);
+	virtual int						openFilePath(const char* path, bool transcode);
 
 	virtual MtpObjectHandleList*	getObjectReferences(MtpObjectHandle handle);
 
@@ -139,15 +110,8 @@ public:
 
 	virtual MtpProperty*			getDevicePropertyDesc(MtpDeviceProperty property);
 
-	virtual void					sessionStarted();
-
-	virtual void					sessionEnded();
-	virtual void					lockMutex();
-	virtual void					unlockMutex();
-
 	virtual MtpResponseCode			beginDeleteObject(MtpObjectHandle handle);
 	virtual void					endDeleteObject(MtpObjectHandle handle, bool succeeded);
-	// Called to rescan a file, such as after an edit.
 	virtual void					rescanFile(const char* path,
 											MtpObjectHandle handle,
 											MtpObjectFormat format);
