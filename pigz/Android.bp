@@ -1,0 +1,25 @@
+cc_binary {
+    name: "pigz",
+    recovery: true,
+
+    // Disable the optional zopfli (-Z) mode; TWRP only needs parallel gzip.
+    cflags: [
+        "-DNOZOPFLI",
+    ],
+
+    srcs: [
+        "pigz.c",
+        "yarn.c",
+        "try.c",
+    ],
+
+    shared_libs: [
+        "libz",
+    ],
+
+    symlinks: [
+        "gzip",
+        "gunzip",
+        "unpigz",
+    ],
+}

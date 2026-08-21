@@ -731,7 +731,6 @@ include $(commands_TWRP_local_path)/minui/Android.mk
 
 #includes for TWRP
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
-    $(commands_TWRP_local_path)/pigz/Android.mk \
     $(commands_TWRP_local_path)/libtar/Android.mk \
     $(commands_TWRP_local_path)/libcrecovery/Android.mk \
     $(commands_TWRP_local_path)/openaes/Android.mk \

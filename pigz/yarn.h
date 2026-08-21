@@ -1,6 +1,6 @@
 /* yarn.h -- generic interface for thread operations
- * Copyright (C) 2008, 2011 Mark Adler
- * Version 1.3  13 Jan 2012  Mark Adler
+ * Copyright (C) 2008, 2011, 2012, 2015, 2018, 2019, 2020 Mark Adler
+ * Version 1.7  12 Apr 2020  Mark Adler
  */
 
 /*
@@ -32,7 +32,7 @@
 
    Assuming adequate system resources and proper use, none of these functions
    can fail.  As a result, any errors encountered will cause an exit() to be
-   executed.
+   executed, or the execution of your own optionally-provided abort function.
 
    These functions allow the simple launching and joining of threads, and the
    locking of objects and synchronization of changes of objects.  The latter is
@@ -63,10 +63,6 @@
         the count of the number of threads joined (join_all() should only be
         called from the main thread, and should only be called after any calls
         of join() have completed)
-   destruct(thread) - terminate the thread in mid-execution and join it
-        (depending on the implementation, the termination may not be immediate,
-        but may wait for the thread to execute certain thread or file i/o
-        operations)
 
    -- Lock functions --
 
@@ -115,20 +111,28 @@ extern void (*yarn_abort)(int);
 void yarn_mem(void *(*)(size_t), void (*)(void *));
 
 typedef struct thread_s thread;
-thread *launch(void (*)(void *), void *);
-void join(thread *);
-int join_all(void);
-void destruct(thread *);
+thread *launch_(void (*)(void *), void *, char const *, long);
+#define launch(a, b) launch_(a, b, __FILE__, __LINE__)
+void join_(thread *, char const *, long);
+#define join(a) join_(a, __FILE__, __LINE__)
+int join_all_(char const *, long);
+#define join_all() join_all_(__FILE__, __LINE__)
 
 typedef struct lock_s lock;
-lock *new_lock(long);
-void possess(lock *);
-void release(lock *);
+lock *new_lock_(long, char const *, long);
+#define new_lock(a) new_lock_(a, __FILE__, __LINE__)
+void possess_(lock *, char const *, long);
+#define possess(a) possess_(a, __FILE__, __LINE__)
+void release_(lock *, char const *, long);
+#define release(a) release_(a, __FILE__, __LINE__)
 enum twist_op { TO, BY };
-void twist(lock *, enum twist_op, long);
+void twist_(lock *, enum twist_op, long, char const *, long);
+#define twist(a, b, c) twist_(a, b, c, __FILE__, __LINE__)
 enum wait_op {
     TO_BE, /* or */ NOT_TO_BE, /* that is the question */
     TO_BE_MORE_THAN, TO_BE_LESS_THAN };
-void wait_for(lock *, enum wait_op, long);
+void wait_for_(lock *, enum wait_op, long, char const *, long);
+#define wait_for(a, b, c) wait_for_(a, b, c, __FILE__, __LINE__)
 long peek_lock(lock *);
-void free_lock(lock *);
+void free_lock_(lock *, char const *, long);
+#define free_lock(a) free_lock_(a, __FILE__, __LINE__)
