@@ -280,9 +280,6 @@ endif
 ifeq ($(TW_SDEXT_NO_EXT4), true)
     LOCAL_CFLAGS += -DTW_SDEXT_NO_EXT4
 endif
-ifeq ($(TW_NO_EXFAT_FUSE), true)
-    LOCAL_CFLAGS += -DTW_NO_EXFAT_FUSE
-endif
 ifeq ($(TW_NO_HAPTICS), true)
     LOCAL_CFLAGS += -DTW_NO_HAPTICS
 endif
@@ -572,12 +569,8 @@ TWRP_REQUIRED_MODULES += \
     plat_keystore2_key_contexts
 endif
 
-ifneq ($(TW_NO_EXFAT), true)
-    TWRP_REQUIRED_MODULES += mkfs.exfat.recovery fsck.exfat.recovery
-    ifneq ($(TW_NO_EXFAT_FUSE), true)
-        TWRP_REQUIRED_MODULES += exfat-fuse
-    endif
-endif
+TWRP_REQUIRED_MODULES += mkfs.exfat.recovery fsck.exfat.recovery
+
 ifeq ($(BOARD_HAS_NO_REAL_SDCARD),)
     TWRP_REQUIRED_MODULES += sgdisk
 endif
@@ -721,9 +714,6 @@ endif
 
 ifeq ($(TW_INCLUDE_CRYPTO), true)
     include $(commands_TWRP_local_path)/gpt/Android.mk
-endif
-ifeq ($(BUILD_ID), GINGERBREAD)
-    TW_NO_EXFAT := true
 endif
 
 commands_TWRP_local_path :=

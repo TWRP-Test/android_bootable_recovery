@@ -1545,21 +1545,15 @@ bool TWPartition::Mount(bool Display_Error) {
 
 	// Check the current file system before mounting
 	Check_FS_Type();
-	if (Current_File_System == "exfat" && TWFunc::Path_Exists("/system/bin/exfat-fuse")) {
-		string cmd = "/system/bin/exfat-fuse -o big_writes,max_read=131072,max_write=131072 " + Actual_Block_Device + " " + Mount_Point;
+	if (Current_File_System == "exfat") {
+		string cmd = "/system/bin/mount -t exfat " + Actual_Block_Device + " " + Mount_Point;
 		LOGINFO("cmd: %s\n", cmd.c_str());
 		string result;
 		if (TWFunc::Exec_Cmd(cmd, result, false) != 0) {
-			LOGINFO("exfat-fuse failed to mount with result '%s', trying vfat\n", result.c_str());
+			LOGINFO("exfat failed to mount with result '%s', trying vfat\n", result.c_str());
 			Current_File_System = "vfat";
 		} else {
-#ifdef TW_NO_EXFAT_FUSE
-			UnMount(false);
-			// We'll let the kernel handle it but using exfat-fuse to detect if the file system is actually exfat
-			// Some kernels let us mount vfat as exfat which doesn't work out too well
-#else
 			exfat_mounted = 1;
-#endif
 		}
 	}
 
@@ -1598,28 +1592,13 @@ bool TWPartition::Mount(bool Display_Error) {
 	if (!exfat_mounted &&
 		mount(Actual_Block_Device.c_str(), Mount_Point.c_str(), mount_fs.c_str(), flags, Mount_Options.c_str()) != 0 &&
 		mount(Actual_Block_Device.c_str(), Mount_Point.c_str(), mount_fs.c_str(), flags, NULL) != 0) {
-#ifdef TW_NO_EXFAT_FUSE
-		if (Current_File_System == "exfat") {
-			LOGINFO("Mounting exfat failed, trying vfat...\n");
-			if (mount(Actual_Block_Device.c_str(), Mount_Point.c_str(), "vfat", 0, NULL) != 0) {
-				if (Display_Error)
-					gui_msg(Msg(msg::kError, "fail_mount=Failed to mount '{1}' ({2})")(Mount_Point)(strerror(errno)));
-				else
-					LOGINFO("Unable to mount '%s'\n", Mount_Point.c_str());
-				LOGINFO("Actual block device: '%s', current file system: '%s', flags: 0x%8x, options: '%s'\n", Actual_Block_Device.c_str(), Current_File_System.c_str(), flags, Mount_Options.c_str());
-				return false;
-			}
-		} else {
-#endif
-			if (!Removable && Display_Error)
-				gui_msg(Msg(msg::kError, "fail_mount=Failed to mount '{1}' ({2})")(Mount_Point)(strerror(errno)));
-			else
-				LOGINFO("Unable to mount '%s'\n", Mount_Point.c_str());
-			LOGINFO("Actual block device: '%s', current file system: '%s'\n", Actual_Block_Device.c_str(), Current_File_System.c_str());
-			return false;
-#ifdef TW_NO_EXFAT_FUSE
-		}
-#endif
+		if (!Removable && Display_Error)
+			gui_msg(Msg(msg::kError, "fail_mount=Failed to mount '{1}' ({2})")(Mount_Point)(strerror(errno)));
+		else
+			LOGINFO("Unable to mount '%s'\n", Mount_Point.c_str());
+
+		LOGINFO("Actual block device: '%s', current file system: '%s'\n", Actual_Block_Device.c_str(), Current_File_System.c_str());
+		return false;
 	}
 
 	if (Removable)
