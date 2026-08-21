@@ -126,15 +126,6 @@ LOCAL_SHARED_LIBRARIES += libbootloader_message libcrecovery libtwrpdigest libc+
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
 LOCAL_SHARED_LIBRARIES += libsparse
 
-ifeq ($(TW_OEM_BUILD),true)
-    LOCAL_CFLAGS += -DTW_OEM_BUILD
-    BOARD_HAS_NO_REAL_SDCARD := true
-    TW_USE_TOOLBOX := true
-    TW_EXCLUDE_MTP := true
-    TW_EXCLUDE_TZDATA := true
-    TW_EXCLUDE_NANO := true
-    TW_EXCLUDE_BASH := true
-endif
 
 ifeq ($(AB_OTA_UPDATER),true)
     LOCAL_CFLAGS += -DAB_OTA_UPDATER=1
@@ -602,9 +593,7 @@ endif
 ifneq ($(TW_EXCLUDE_ENCRYPTED_BACKUPS),)
     TWRP_REQUIRED_MODULES += openaes openaes_license
 endif
-ifneq ($(TW_OEM_BUILD),true)
-    TWRP_REQUIRED_MODULES += orscmd
-endif
+TWRP_REQUIRED_MODULES += orscmd
 ifneq ($(TW_EXCLUDE_DEFAULT_USB_INIT), true)
     TWRP_REQUIRED_MODULES += init.recovery.usb.rc
 endif

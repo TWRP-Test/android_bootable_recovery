@@ -594,11 +594,9 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 		if (PartitionManager.uevent_pfd.fd > 0) {
 			FD_SET(PartitionManager.uevent_pfd.fd, &fdset);
 		}
-#ifndef TW_OEM_BUILD
 		if (ors_read_fd > 0 && !orsout) { // orsout is non-NULL if a command is still running
 			FD_SET(ors_read_fd, &fdset);
 		}
-#endif
 		// TODO: combine this select with the poll done by input handling
 		has_data = select(select_fd, &fdset, NULL, NULL, &timeout);
 		if (has_data > 0) {
@@ -793,7 +791,6 @@ extern "C" int gui_init(void)
 
 extern "C" int gui_loadResources(void)
 {
-#ifndef TW_OEM_BUILD
 	int check = 0;
 	DataManager::GetValue(TW_IS_ENCRYPTED, check);
 	if (check)
@@ -831,16 +828,13 @@ extern "C" int gui_loadResources(void)
 		theme_path += TWFunc::Check_For_TwrpFolder() + "/theme/ui.zip";
 		if (check || PageManager::LoadPackage("TWRP", theme_path, "main"))
 		{
-#endif // ifndef TW_OEM_BUILD
 			if (PageManager::LoadPackage("TWRP", TWRES "ui.xml", "main"))
 			{
 				gui_err("base_pkg_err=Failed to load base packages.");
 				goto error;
 			}
-#ifndef TW_OEM_BUILD
 		}
 	}
-#endif // ifndef TW_OEM_BUILD
 	// Set the default package
 	PageManager::SelectPackage("TWRP");
 
@@ -855,7 +849,6 @@ error:
 
 extern "C" int gui_loadCustomResources(void)
 {
-#ifndef TW_OEM_BUILD
 	if (!PartitionManager.Mount_Settings_Storage(false)) {
 		LOGINFO("Unable to mount settings storage during GUI startup.\n");
 		return -1;
@@ -876,15 +869,12 @@ extern "C" int gui_loadCustomResources(void)
 	}
 	// Set the default package
 	PageManager::SelectPackage("TWRP");
-#endif
 	return 0;
 
-#ifndef TW_OEM_BUILD
 error:
 	LOGERR("An internal error has occurred: unable to load theme.\n");
 	gGuiInitialized = 0;
 	return -1;
-#endif
 }
 
 extern "C" int gui_start(void)
@@ -901,7 +891,6 @@ extern "C" int gui_startPage(const char *page_name, __attribute__((unused)) cons
 	PageManager::SelectPackage("TWRP");
 
 	input_handler.init();
-#ifndef TW_OEM_BUILD
 	if (allow_commands)
 	{
 		if (ors_read_fd < 0)
@@ -912,7 +901,6 @@ extern "C" int gui_startPage(const char *page_name, __attribute__((unused)) cons
 			ors_read_fd = -1;
 		}
 	}
-#endif
 	return runPages(page_name, stop_on_page_done);
 }
 

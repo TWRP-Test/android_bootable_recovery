@@ -2132,9 +2132,7 @@ bool TWPartition::Wipe_Encryption() {
 	if (Wipe(Fstab_File_System)) {
 		Has_Data_Media = Save_Data_Media;
 		DataManager::SetValue(TW_IS_ENCRYPTED, 0);
-#ifndef TW_OEM_BUILD
 		gui_msg("format_data_msg=You may need to reboot recovery to be able to use /data again.");
-#endif
 		if (Is_FBE) {
 			gui_msg(Msg(msg::kWarning, "data_media_fbe_msg=TWRP will not recreate /data/media on an FBE device. Please reboot into your rom to create /data/media."));
 		} else {
@@ -2531,10 +2529,6 @@ bool TWPartition::Wipe_NTFS() {
 }
 
 bool TWPartition::Wipe_Data_Without_Wiping_Media() {
-#ifdef TW_OEM_BUILD
-	// In an OEM Build we want to do a full format
-	return Wipe_Encryption();
-#else
 	bool ret = false;
 
 	if (!Mount(true))
@@ -2545,7 +2539,6 @@ bool TWPartition::Wipe_Data_Without_Wiping_Media() {
 	if (ret)
 		gui_msg("done=Done.");
 	return ret;
-#endif // ifdef TW_OEM_BUILD
 }
 
 bool TWPartition::Wipe_Data_Without_Wiping_Media_Func(const string& parent __unused) {

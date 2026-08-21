@@ -1708,17 +1708,8 @@ int TWPartitionManager::Factory_Reset(void) {
 
 	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
 		if ((*iter)->Wipe_During_Factory_Reset && (*iter)->Is_Present) {
-#ifdef TW_OEM_BUILD
-			if ((*iter)->Mount_Point == "/data") {
-				if (!(*iter)->Wipe_Encryption())
-					ret = false;
-			} else {
-#endif
-				if (!(*iter)->Wipe())
-					ret = false;
-#ifdef TW_OEM_BUILD
-			}
-#endif
+			if (!(*iter)->Wipe())
+				ret = false;
 		} else if ((*iter)->Has_Android_Secure) {
 			if (!(*iter)->Wipe_AndSec())
 				ret = false;

@@ -131,7 +131,6 @@ int DataManager::Flush()
 
 int DataManager::SaveValues()
 {
-#ifndef TW_OEM_BUILD
 	if (mBackingFile.empty())
 		return -1;
 
@@ -147,7 +146,6 @@ int DataManager::SaveValues()
 
 	tw_set_default_metadata(mBackingFile.c_str());
 	LOGINFO("Saved settings file values to '%s'\n", mBackingFile.c_str());
-#endif // ifdef TW_OEM_BUILD
 	return 0;
 }
 
@@ -803,17 +801,10 @@ void DataManager::SetDefaultValues()
 	LOGINFO("TW_NO_LEGACY_PROPS := true\n");
 #endif
 
-#ifdef TW_OEM_BUILD
-	LOGINFO("TW_OEM_BUILD := true\n");
-	mConst.SetValue("tw_oem_build", "1");
-	mConst.SetValue("tw_app_installed_in_system", "0");
-#else
-	mConst.SetValue("tw_oem_build", "0");
 	mPersist.SetValue("tw_app_prompt", "1");
 	mPersist.SetValue("tw_app_install_system", "1");
 	mData.SetValue("tw_app_install_status", "0"); // 0 = no status, 1 = not installed, 2 = already installed
 	mData.SetValue("tw_app_installed_in_system", "0");
-#endif
 #ifndef TW_EXCLUDE_NANO
 	mConst.SetValue("tw_include_nano", "1");
 #else
@@ -909,7 +900,6 @@ int DataManager::GetMagicValue(const string& varName, string& value)
 
 void DataManager::Output_Version(void)
 {
-#ifndef TW_OEM_BUILD
 	string Path;
 	char version[255];
 
@@ -956,12 +946,10 @@ void DataManager::Output_Version(void)
 	PartitionManager.Output_Storage_Fstab();
 	sync();
 	LOGINFO("Version number saved to '%s'\n", verPath.c_str());
-#endif
 }
 
 void DataManager::ReadSettingsFile(void)
 {
-#ifndef TW_OEM_BUILD
 	// Load up the values for TWRP - Sleep to let the card be ready
 	//char mkdir_path[255], settings_file[255];
 	char settings_file[255];
@@ -990,7 +978,6 @@ void DataManager::ReadSettingsFile(void)
 	LOGINFO("Attempt to load settings from settings file...\n");
 	LoadValues(settings_file);
 	Output_Version();
-#endif // ifdef TW_OEM_BUILD
 	PartitionManager.Mount_All_Storage();
 	update_tz_environment_variables();
 	TWFunc::Set_Brightness(GetStrValue("tw_brightness"));

@@ -66,9 +66,6 @@ enum zip_type {
 };
 
 static int Install_Theme(const char* path, ZipArchiveHandle Zip) {
-#ifdef TW_OEM_BUILD // We don't do custom themes in OEM builds
-	return INSTALL_CORRUPT;
-#else
 	std::string binary_name("ui.xml");
 	ZipEntry64 binary_entry;
 	if (FindEntry(Zip, binary_name, &binary_entry) != 0) {
@@ -90,7 +87,6 @@ static int Install_Theme(const char* path, ZipArchiveHandle Zip) {
 	LOGINFO("Installing custom theme '%s' to '%s'\n", path, theme_path.c_str());
 	PageManager::RequestReload();
 	return INSTALL_SUCCESS;
-#endif
 }
 
 static int Prepare_Update_Binary(ZipArchiveHandle Zip) {
@@ -266,9 +262,7 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 
 	DataManager::GetValue(TW_UNMOUNT_SYSTEM, unmount_system);
 
-#ifndef TW_OEM_BUILD
 	DataManager::GetValue(TW_SIGNED_ZIP_VERIFY_VAR, zip_verify);
-#endif
 	DataManager::SetProgress(0);
 
 	auto package = Package::CreateMemoryPackage(path);
