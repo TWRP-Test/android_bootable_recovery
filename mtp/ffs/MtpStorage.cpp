@@ -48,14 +48,14 @@ MtpStorage::MtpStorage(MtpStorageID id, const char* filePath,
 	inotify_thread = 0;
 	inotify_fd = -1;
 	// Threading has not started yet so we should be safe to set these directly instead of using atomics
-	inotify_thread_kill.set_value(0);
+	inotify_thread_kill = false;
 	sendEvents = false;
 	handleCurrentlySending = 0;
 }
 
 MtpStorage::~MtpStorage() {
 	if (inotify_thread) {
-			inotify_thread_kill.set_value(1);
+			inotify_thread_kill = true;
 			MTPD("joining inotify_thread after sending the kill notification.\n");
 			pthread_join(inotify_thread, NULL); // There's not much we can do if there's an error here
 			inotify_thread = 0;
@@ -354,7 +354,7 @@ int MtpStorage::inotify_t(void) {
 
 		MTPD("inotify thread starting.\n");
 
-		while (inotify_thread_kill.get_value() == 0) {
+		while (!inotify_thread_kill) {
 				FD_ZERO(&fdset);
 				FD_SET(inotify_fd, &fdset);
 				seltmout.tv_sec = 0;
@@ -371,7 +371,7 @@ int MtpStorage::inotify_t(void) {
 						MTPE("inotify_t Can't read inotify events\n");
 				}
 
-				while (i < len && inotify_thread_kill.get_value() == 0) {
+				while (i < len && !inotify_thread_kill) {
 						struct inotify_event *event = (struct inotify_event *) &buf[i];
 						if (event->len) {
 								MTPD("inotify event: wd: %i, mask: %x, name: %s\n", event->wd, event->mask, event->name);

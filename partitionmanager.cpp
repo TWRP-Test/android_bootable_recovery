@@ -70,7 +70,6 @@
 #include "fixContexts.hpp"
 #include "exclude.hpp"
 #include "set_metadata.h"
-#include "tw_atomic.hpp"
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"
 #include "twrpDigestDriver.hpp"
@@ -128,7 +127,7 @@ TWPartitionManager::TWPartitionManager(void) {
 	mtp_was_enabled = false;
 	mtp_write_fd = -1;
 	uevent_pfd.fd = -1;
-	stop_backup.set_value(0);
+	stop_backup = false;
 #ifdef AB_OTA_UPDATER
 	char slot_suffix[PROPERTY_VALUE_MAX];
 	property_get("ro.boot.slot_suffix", slot_suffix, "error");
@@ -1086,13 +1085,13 @@ void TWPartitionManager::Clean_Backup_Folder(string Backup_Folder) {
 }
 
 int TWPartitionManager::Check_Backup_Cancel() {
-	return stop_backup.get_value();
+	return stop_backup;
 }
 
 int TWPartitionManager::Cancel_Backup() {
 	string Backup_Folder, Backup_Name, Full_Backup_Path;
 
-	stop_backup.set_value(1);
+	stop_backup = true;
 
 	if (tar_fork_pid != 0) {
 		DataManager::GetValue(TW_BACKUP_NAME, Backup_Name);
@@ -1122,7 +1121,7 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
 	time_t seconds, total_start, total_stop;
 	size_t start_pos = 0, end_pos = 0;
 	bool backup_folder_made = false;
-	stop_backup.set_value(0);
+	stop_backup = false;
 	seconds = time(0);
 	t = localtime(&seconds);
 
@@ -1265,7 +1264,7 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
 	start_pos = 0;
 	end_pos = Backup_List.find(";", start_pos);
 	while (end_pos != string::npos && start_pos < Backup_List.size()) {
-		if (stop_backup.get_value() != 0) {
+		if (stop_backup) {
 			discard_unfinished_backup();
 			return false;
 		}

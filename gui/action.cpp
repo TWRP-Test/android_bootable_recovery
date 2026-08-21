@@ -61,7 +61,6 @@ extern "C" {
 #include "rapidxml.hpp"
 #include "objects.hpp"
 #include "pages.hpp"
-#include "tw_atomic.hpp"
 #include <cstring>
 #include <vector>
 #include <stdint.h>
@@ -377,11 +376,11 @@ void GUIAction::simulate_progress_bar(void)
 	gui_msg("simulating=Simulating actions...");
 	for (int i = 0; i < 5; i++)
 	{
-		if (PartitionManager.stop_backup.get_value()) {
+		if (PartitionManager.stop_backup) {
 			DataManager::SetValue("tw_cancel_backup", 1);
 			gui_msg("backup_cancel=Backup Cancelled");
 			DataManager::SetValue("ui_progress", 0);
-			PartitionManager.stop_backup.set_value(0);
+			PartitionManager.stop_backup = false;
 			return;
 		}
 		usleep(500000);
@@ -1217,7 +1216,7 @@ int GUIAction::refreshsizes(std::string arg __unused)
 int GUIAction::nandroid(std::string arg)
 {
 	if (simulate) {
-		PartitionManager.stop_backup.set_value(0);
+		PartitionManager.stop_backup = 0;
 		DataManager::SetValue("tw_partition", "Simulation");
 		simulate_progress_bar();
 		operation_end(0);
@@ -1232,7 +1231,7 @@ int GUIAction::nandroid(std::string arg)
 			if (Backup_Name == auto_gen || Backup_Name == gui_lookup("curr_date", "(Current Date)") || Backup_Name == "0" || Backup_Name == "(" || PartitionManager.Check_Backup_Name(Backup_Name, true, true) == 0) {
 				ret = PartitionManager.Run_Backup(false);
 				DataManager::SetValue("tw_encrypt_backup", 0); // reset value so we don't encrypt every subsequent backup
-				if (!PartitionManager.stop_backup.get_value()) {
+				if (!PartitionManager.stop_backup) {
 					if (ret == false)
 						ret = 1; // 1 for failure
 					else
@@ -1280,7 +1279,7 @@ int GUIAction::nandroid(std::string arg)
 
 int GUIAction::cancelbackup(std::string arg __unused) {
 	if (simulate) {
-		PartitionManager.stop_backup.set_value(1);
+		PartitionManager.stop_backup = 1;
 	}
 	else {
 		int op_status = PartitionManager.Cancel_Backup();

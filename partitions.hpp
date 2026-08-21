@@ -19,12 +19,12 @@
 #ifndef __TWRP_Partition_Manager
 #define __TWRP_Partition_Manager
 
+#include <atomic>
 #include <map>
 #include <vector>
 #include <string>
 #include <sys/poll.h>
 #include "exclude.hpp"
-#include "tw_atomic.hpp"
 #include "progresstracking.hpp"
 #ifdef TW_INCLUDE_CRYPTO
 #include "fscrypt_policy.h"
@@ -383,7 +383,7 @@ public:
 	bool Prepare_All_Super_Volumes();										  // Prepare all known super volumes from super partition
 	bool Flash_Image(string& path, string& filename);                         // Flashes an image to a selected partition from the partition list
 	bool Restore_Partition(struct PartitionSettings *part_settings);          // Restore the partitions based on type
-	TWAtomicInt stop_backup;
+	std::atomic_bool stop_backup;
 	void Override_Active_Slot(const string& Slot);                            // Override the active slot for repacking
 	void Set_Active_Slot(const string& Slot);                                 // Sets the active slot to A or B
 	string Get_Active_Slot_Suffix();                                          // Returns active slot _a or _b

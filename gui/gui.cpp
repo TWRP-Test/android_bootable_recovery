@@ -33,6 +33,7 @@
 #include <sys/mount.h>
 #include <time.h>
 #include <unistd.h>
+#include <atomic>
 
 extern "C"
 {
@@ -50,7 +51,6 @@ extern "C"
 #include "../openrecoveryscript.hpp"
 #include "../orscmd/orscmd.h"
 #include "blanktimer.hpp"
-#include "tw_atomic.hpp"
 
 // Enable to print render time of each frame to the log file
 //#define PRINT_RENDER_TIME 1
@@ -65,7 +65,7 @@ using namespace rapidxml;
 
 // Global values
 static int gGuiInitialized = 0;
-static TWAtomicInt gForceRender;
+static std::atomic_bool gForceRender;
 blanktimer blankTimer;
 int ors_read_fd = -1;
 static FILE* orsout = NULL;
@@ -608,7 +608,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 				ors_command_read();
 		}
 
-		if (!gForceRender.get_value())
+		if (!gForceRender)
 		{
 			int ret = PageManager::Update();
 			if (ret == 0)
@@ -648,7 +648,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 		}
 		else
 		{
-			gForceRender.set_value(0);
+			gForceRender = false;
 			PageManager::Render();
 			flip();
 			input_timeout_ms = 0;
@@ -674,7 +674,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 
 int gui_forceRender(void)
 {
-	gForceRender.set_value(1);
+	gForceRender = true;
 	return 0;
 }
 
@@ -682,7 +682,7 @@ int gui_changePage(std::string newPage)
 {
 	LOGINFO("Set page: '%s'\n", newPage.c_str());
 	PageManager::ChangePage(newPage);
-	gForceRender.set_value(1);
+	gForceRender = true;
 	return 0;
 }
 
@@ -690,7 +690,7 @@ int gui_changeOverlay(std::string overlay)
 {
 	LOGINFO("Set overlay: '%s'\n", overlay.c_str());
 	PageManager::ChangeOverlay(overlay);
-	gForceRender.set_value(1);
+	gForceRender = true;
 	return 0;
 }
 

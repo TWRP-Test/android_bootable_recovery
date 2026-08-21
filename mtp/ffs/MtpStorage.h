@@ -23,7 +23,6 @@
 #include "MtpTypes.h"
 #include "mtp.h"
 #include "btree.hpp"
-#include "tw_atomic.hpp"
 
 class MtpStorage {
 
@@ -54,7 +53,7 @@ private:
 	MtpServer*				mServer;
 	typedef					int (MtpStorage::*ThreadPtr)(void);
 	typedef					void* (*PThreadPtr)(void *);
-	TWAtomicInt				inotify_thread_kill;
+	std::atomic_bool		inotify_thread_kill;
 	pthread_t				inotify_thread;
 	Node*					findNode(MtpObjectHandle handle);
 	std::string				getNodePath(Node* node);
