@@ -15,11 +15,11 @@
 
 /*
  * Solaris-x86 is always within primary dos partition (nested PT table).  The
- * solaris-x86 vtoc allows to split the entire partition to "slices". The
+ * solaris-x86 vtoc can be used to split the entire partition to "slices". The
  * offset (start) of the slice is always relatively to the primary dos
  * partition.
  *
- * Note that Solaris-SPARC uses entire disk with a different partitionning
+ * Note that Solaris-SPARC uses entire disk with a different partitioning
  * scheme.
  */
 
@@ -61,7 +61,7 @@ static int probe_solaris_pt(blkid_probe pr,
 		const struct blkid_idmag *mag __attribute__((__unused__)))
 {
 	struct solaris_vtoc *l;	/* disk label */
-	struct solaris_slice *p;	/* partitsion */
+	struct solaris_slice *p;	/* partition */
 	blkid_parttable tab = NULL;
 	blkid_partition parent;
 	blkid_partlist ls;
@@ -102,8 +102,8 @@ static int probe_solaris_pt(blkid_probe pr,
 
 	for (i = 1, p = &l->v_slice[0];	i < nparts; i++, p++) {
 
-		uint32_t start = le32_to_cpu(p->s_start);
-		uint32_t size = le32_to_cpu(p->s_size);
+		uint64_t start = le32_to_cpu(p->s_start);
+		uint64_t size = le32_to_cpu(p->s_size);
 		blkid_partition par;
 
 		if (size == 0 || le16_to_cpu(p->s_tag) == SOLARIS_TAG_WHOLEDISK)

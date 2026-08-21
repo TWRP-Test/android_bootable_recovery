@@ -1,11 +1,24 @@
-/* Compat code so unshare and setns can be used with older libcs */
+
+/*
+ * No copyright is claimed.  This code is in the public domain; do with
+ * it what you wish.
+ *
+ * Compat code to support older libcs.
+ */
 #ifndef UTIL_LINUX_NAMESPACE_H
 # define UTIL_LINUX_NAMESPACE_H
+
+/*
+ * Compat code for sched.h (unshare and setns)
+ */
 
 # include <sched.h>
 
 # ifndef CLONE_NEWNS
 #  define CLONE_NEWNS 0x00020000
+# endif
+# ifndef CLONE_NEWCGROUP
+#  define CLONE_NEWCGROUP 0x02000000
 # endif
 # ifndef CLONE_NEWUTS
 #  define CLONE_NEWUTS 0x04000000
@@ -21,6 +34,9 @@
 # endif
 # ifndef CLONE_NEWPID
 #  define CLONE_NEWPID 0x20000000
+# endif
+# ifndef CLONE_NEWTIME
+#  define CLONE_NEWTIME 0x00000080
 # endif
 
 # if !defined(HAVE_UNSHARE) || !defined(HAVE_SETNS)
@@ -39,6 +55,14 @@ static inline int setns(int fd, int nstype)
 {
 	return syscall(SYS_setns, fd, nstype);
 }
+# endif
+
+/*
+ * Compat code for sockios.h
+ */
+
+# ifndef SIOCGSKNS
+#  define SIOCGSKNS 0x894C
 # endif
 
 #endif	/* UTIL_LINUX_NAMESPACE_H */

@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -36,7 +35,7 @@ static int is_lvm_device(dev_t devno)
 static int probe_lvm_tp(blkid_probe pr,
 		const struct blkid_idmag *mag __attribute__((__unused__)))
 {
-	const char *paths[] = {
+	const char * const paths[] = {
 		"/usr/local/sbin/lvdisplay",
 		"/usr/sbin/lvdisplay",
 		"/sbin/lvdisplay"
@@ -83,11 +82,8 @@ static int probe_lvm_tp(blkid_probe pr,
 		if (lvpipe[1] != STDOUT_FILENO)
 			dup2(lvpipe[1], STDOUT_FILENO);
 
-		/* The libblkid library could linked with setuid programs */
-		if (setgid(getgid()) < 0)
-			 exit(1);
-		if (setuid(getuid()) < 0)
-			 exit(1);
+		if (drop_permissions() != 0)
+			 _exit(1);
 
 		lvargv[0] = cmd;
 		lvargv[1] = devname;
@@ -96,7 +92,7 @@ static int probe_lvm_tp(blkid_probe pr,
 		execv(lvargv[0], lvargv);
 
 		DBG(LOWPROBE, ul_debug("Failed to execute %s: errno=%d", cmd, errno));
-		exit(1);
+		_exit(1);
 	}
 	case -1:
 		DBG(LOWPROBE, ul_debug("Failed to forking: errno=%d", errno));
@@ -111,10 +107,10 @@ static int probe_lvm_tp(blkid_probe pr,
 
 	while (fgets(buf, sizeof(buf), stream) != NULL) {
 		if (!strncmp(buf, "Stripes", 7))
-			sscanf(buf, "Stripes %d", &stripes);
+			ignore_result( sscanf(buf, "Stripes %d", &stripes) );
 
 		if (!strncmp(buf, "Stripe size", 11))
-			sscanf(buf, "Stripe size (KByte) %d", &stripesize);
+			ignore_result( sscanf(buf, "Stripe size (KByte) %d", &stripesize) );
 	}
 
 	if (!stripes)

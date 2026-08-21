@@ -1,7 +1,13 @@
+/*
+ * No copyright is claimed.  This code is in the public domain; do with
+ * it what you wish.
+ */
 #ifndef UTIL_LINUX_STATFS_MAGIC_H
 #define UTIL_LINUX_STATFS_MAGIC_H
 
-#include <sys/statfs.h>
+#ifdef HAVE_SYS_STATFS_H
+# include <sys/statfs.h>
+#endif
 
 /*
  * If possible then don't depend on internal libc __SWORD_TYPE type.
@@ -13,7 +19,7 @@
 #endif
 
 /*
- *  Unfortunately, Linux kernel hedeader file <linux/magic.h> is incomplete
+ *  Unfortunately, Linux kernel header file <linux/magic.h> is incomplete
  *  mess and kernel returns by statfs f_type many numbers that are nowhere
  *  specified (in API).
  *
@@ -30,6 +36,7 @@
 #define STATFS_BTRFS_MAGIC	0x9123683E
 #define STATFS_CEPH_MAGIC	0x00c36400
 #define STATFS_CGROUP_MAGIC	0x27e0eb
+#define STATFS_CGROUP2_MAGIC	0x63677270
 #define STATFS_CIFS_MAGIC	0xff534d42
 #define STATFS_CODA_MAGIC	0x73757245
 #define STATFS_CONFIGFS_MAGIC	0x62656570
@@ -70,6 +77,7 @@
 #define STATFS_OCFS2_MAGIC	0x7461636f
 #define STATFS_OMFS_MAGIC	0xC2993D87
 #define STATFS_OPENPROMFS_MAGIC	0x9fa1
+#define STATFS_PIDFS_MAGIC	0x50494446
 #define STATFS_PIPEFS_MAGIC	0x50495045
 #define STATFS_PROC_MAGIC	0x9fa0
 #define STATFS_PSTOREFS_MAGIC	0x6165676C
@@ -94,6 +102,7 @@
 #define STATFS_VXFS_MAGIC	0xa501FCF5
 #define STATFS_XENFS_MAGIC	0xabba1974
 #define STATFS_XFS_MAGIC	0x58465342
+#define STATFS_ZFS_MAGIC	0x2FC12FC1
 
 #endif /* UTIL_LINUX_STATFS_MAGIC_H */
 

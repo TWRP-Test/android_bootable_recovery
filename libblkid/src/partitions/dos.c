@@ -14,10 +14,13 @@
 #include <stdint.h>
 
 #include "partitions.h"
+#include "superblocks/superblocks.h"
 #include "aix.h"
 
 /* see superblocks/vfat.c */
 extern int blkid_probe_is_vfat(blkid_probe pr);
+/* see superblocks/exfat.c */
+extern int blkid_probe_is_exfat(blkid_probe pr);
 
 static const struct dos_subtypes {
 	unsigned char type;
@@ -31,7 +34,7 @@ static const struct dos_subtypes {
 	{ MBR_MINIX_PARTITION, &minix_pt_idinfo }
 };
 
-static inline int is_extended(struct dos_partition *p)
+static inline int is_extended(const struct dos_partition *p)
 {
 	return (p->sys_ind == MBR_DOS_EXTENDED_PARTITION ||
 		p->sys_ind == MBR_W95_EXTENDED_PARTITION ||
@@ -43,13 +46,20 @@ static int parse_dos_extended(blkid_probe pr, blkid_parttable tab,
 {
 	blkid_partlist ls = blkid_probe_get_partlist(pr);
 	uint32_t cur_start = ex_start, cur_size = ex_size;
-	unsigned char *data;
+	uint64_t ex_end = (uint64_t) ex_start + ex_size;
+	const unsigned char *data;
 	int ct_nodata = 0;	/* count ext.partitions without data partitions */
 	int i;
 
+	DBG(LOWPROBE, ul_debug("parse EBR [start=%d, size=%d]", ex_start/ssf, ex_size/ssf));
+	if (ex_start == 0) {
+		DBG(LOWPROBE, ul_debug("Bad offset in primary extended partition -- ignore"));
+		return 0;
+	}
+
 	while (1) {
-		struct dos_partition *p, *p0;
-		uint32_t start, size;
+		const struct dos_partition *p, *p0;
+		uint64_t start = 0, size;
 
 		if (++ct_nodata > 100)
 			return BLKID_PROBE_OK;
@@ -79,24 +89,38 @@ static int parse_dos_extended(blkid_probe pr, blkid_parttable tab,
 		/* Parse data partition */
 		for (p = p0, i = 0; i < 4; i++, p++) {
 			uint32_t abs_start;
+			uint64_t abs;
 			blkid_partition par;
 
 			/* the start is relative to the parental ext.partition */
-			start = dos_partition_get_start(p) * ssf;
-			size = dos_partition_get_size(p) * ssf;
-			abs_start = cur_start + start;	/* absolute start */
+			start = (uint64_t) dos_partition_get_start(p) * ssf;
+			size = (uint64_t) dos_partition_get_size(p) * ssf;
 
 			if (!size || is_extended(p))
 				continue;
+
+			abs = (uint64_t) cur_start + start;
+
+			/* data partition must be within the extended area */
+			if (abs < ex_start || abs + size > ex_end) {
+				DBG(LOWPROBE, ul_debug("#%d: EBR data partition outside "
+					"extended -- ignore", i + 1));
+				continue;
+			}
+			abs_start = (uint32_t) abs;
+
 			if (i >= 2) {
-				/* extra checks to detect real data on
+				/* extra check to detect real data on
 				 * 3rd and 4th entries */
 				if (start + size > cur_size)
 					continue;
-				if (abs_start < ex_start)
-					continue;
-				if (abs_start + size > ex_start + ex_size)
-					continue;
+			}
+
+			/* Avoid recursive non-empty links, see ct_nodata counter */
+			if (blkid_partlist_get_partition_by_start(ls, abs_start)) {
+				DBG(LOWPROBE, ul_debug("#%d: EBR duplicate data partition [abs start=%u] -- ignore",
+							i + 1, abs_start));
+				continue;
 			}
 
 			par = blkid_partlist_add_partition(ls, tab, abs_start, size);
@@ -116,17 +140,56 @@ static int parse_dos_extended(blkid_probe pr, blkid_parttable tab,
 			start = dos_partition_get_start(p) * ssf;
 			size = dos_partition_get_size(p) * ssf;
 
-			if (size && is_extended(p))
-				break;
+			if (size && is_extended(p)) {
+				if (start == 0)
+					DBG(LOWPROBE, ul_debug("#%d: EBR link offset is zero -- ignore", i + 1));
+				else
+					break;
+			}
 		}
 		if (i == 4)
 			goto leave;
 
-		cur_start = ex_start + start;
-		cur_size = size;
+		{
+			uint64_t next = (uint64_t) ex_start + start;
+
+			if (next + size > ex_end) {
+				DBG(LOWPROBE, ul_debug("EBR link outside "
+					"extended area -- leave"));
+				goto leave;
+			}
+			if (next <= cur_start) {
+				DBG(LOWPROBE, ul_debug("EBR link does not "
+					"advance -- leave"));
+				goto leave;
+			}
+			cur_start = (uint32_t) next;
+			cur_size = size;
+		}
 	}
 leave:
 	return BLKID_PROBE_OK;
+}
+
+static inline int is_lvm(blkid_probe pr)
+{
+	struct blkid_prval *v = __blkid_probe_lookup_value(pr, "TYPE");
+
+	return (v && v->data && strcmp((char *) v->data, "LVM2_member") == 0);
+}
+
+static inline int is_empty_mbr(const unsigned char *mbr)
+{
+	const struct dos_partition *p = mbr_get_partition(mbr, 0);
+	int i, nparts = 0;
+
+	for (i = 0; i < 4; i++) {
+		if (dos_partition_get_size(p) > 0)
+			nparts++;
+		p++;
+	}
+
+	return nparts == 0;
 }
 
 static int probe_dos_pt(blkid_probe pr,
@@ -136,10 +199,11 @@ static int probe_dos_pt(blkid_probe pr,
 	int ssf;
 	blkid_parttable tab = NULL;
 	blkid_partlist ls;
-	struct dos_partition *p0, *p;
-	unsigned char *data;
-	uint32_t start, size, id;
-	char idstr[37];
+	const struct dos_partition *p0, *p;
+	const unsigned char *data;
+	uint64_t start, size;
+	uint32_t id;
+	char idstr[UUID_STR_LEN];
 
 
 	data = blkid_probe_get_sector(pr, 0);
@@ -152,16 +216,6 @@ static int probe_dos_pt(blkid_probe pr,
 	/* ignore disks with AIX magic number -- for more details see aix.c */
 	if (memcmp(data, BLKID_AIX_MAGIC_STRING, BLKID_AIX_MAGIC_STRLEN) == 0)
 		goto nothing;
-
-	/*
-	 * Now that the 55aa signature is present, this is probably
-	 * either the boot sector of a FAT filesystem or a DOS-type
-	 * partition table.
-	 */
-	if (blkid_probe_is_vfat(pr) == 1) {
-		DBG(LOWPROBE, ul_debug("probably FAT -- ignore"));
-		goto nothing;
-	}
 
 	p0 = mbr_get_partition(data, 0);
 
@@ -184,6 +238,32 @@ static int probe_dos_pt(blkid_probe pr,
 		}
 	}
 
+	/*
+	 * Now that the 55aa signature is present, this is probably
+	 * either the boot sector of a FAT filesystem or a DOS-type
+	 * partition table.
+	 */
+	if (blkid_probe_is_vfat(pr) == 1 || blkid_probe_is_exfat(pr) == 1) {
+		DBG(LOWPROBE, ul_debug("probably FAT -- ignore"));
+		goto nothing;
+	}
+
+	/* Another false positive is NTFS */
+	if (blkid_probe_is_ntfs(pr) == 1) {
+		DBG(LOWPROBE, ul_debug("probably NTFS -- ignore"));
+		goto nothing;
+	}
+
+	/*
+	 * Ugly exception, if the device contains a valid LVM physical volume
+	 * and empty MBR (=no partition defined) then it's LVM and MBR should
+	 * be ignored. Crazy people use it to boot from LVM devices.
+	 */
+	if (is_lvm(pr) && is_empty_mbr(data)) {
+		DBG(LOWPROBE, ul_debug("empty MBR on LVM device -- ignore"));
+		goto nothing;
+	}
+
 	blkid_probe_use_wiper(pr, MBR_PT_OFFSET, 512 - MBR_PT_OFFSET);
 
 	id = mbr_get_id(data);
@@ -191,11 +271,11 @@ static int probe_dos_pt(blkid_probe pr,
 		snprintf(idstr, sizeof(idstr), "%08x", id);
 
 	/*
-	 * Well, all checks pass, it's MS-DOS partiton table
+	 * Well, all checks pass, it's MS-DOS partition table
 	 */
 	if (blkid_partitions_need_typeonly(pr)) {
 		/* Non-binary interface -- caller does not ask for details
-		 * about partitions, just set generic varibles only. */
+		 * about partitions, just set generic variables only. */
 		if (id)
 			blkid_partitions_strcpy_ptuuid(pr, idstr);
 		return 0;
@@ -222,8 +302,8 @@ static int probe_dos_pt(blkid_probe pr,
 	for (p = p0, i = 0; i < 4; i++, p++) {
 		blkid_partition par;
 
-		start = dos_partition_get_start(p) * ssf;
-		size = dos_partition_get_size(p) * ssf;
+		start = (uint64_t) dos_partition_get_start(p) * ssf;
+		size = (uint64_t) dos_partition_get_size(p) * ssf;
 
 		if (!size) {
 			/* Linux kernel ignores empty partitions, but partno for
@@ -247,8 +327,8 @@ static int probe_dos_pt(blkid_probe pr,
 
 	/* Parse logical partitions */
 	for (p = p0, i = 0; i < 4; i++, p++) {
-		start = dos_partition_get_start(p) * ssf;
-		size = dos_partition_get_size(p) * ssf;
+		start = (uint64_t) dos_partition_get_start(p) * ssf;
+		size = (uint64_t) dos_partition_get_size(p) * ssf;
 
 		if (!size)
 			continue;
@@ -259,20 +339,31 @@ static int probe_dos_pt(blkid_probe pr,
 
 	/* Parse subtypes (nested partitions) on large disks */
 	if (!blkid_probe_is_tiny(pr)) {
-		for (p = p0, i = 0; i < 4; i++, p++) {
-			size_t n;
-			int rc;
+		int nparts = blkid_partlist_numof_partitions(ls);
 
-			if (!dos_partition_get_size(p) || is_extended(p))
+		DBG(LOWPROBE, ul_debug("checking for subtypes"));
+
+		for (i = 0; i < nparts; i++) {
+			size_t n;
+			int type;
+			blkid_partition pa = blkid_partlist_get_partition(ls, i);
+
+			if (pa == NULL
+			    || blkid_partition_get_size(pa) == 0
+			    || blkid_partition_is_extended(pa)
+			    || blkid_partition_is_logical(pa))
 				continue;
 
+			type = blkid_partition_get_type(pa);
+
 			for (n = 0; n < ARRAY_SIZE(dos_nested); n++) {
-				if (dos_nested[n].type != p->sys_ind)
+				int rc;
+
+				if (dos_nested[n].type != type)
 					continue;
 
-				rc = blkid_partitions_do_subprobe(pr,
-						blkid_partlist_get_partition(ls, i),
-						dos_nested[n].id);
+				rc = blkid_partitions_do_subprobe(pr, pa,
+							dos_nested[n].id);
 				if (rc < 0)
 					return rc;
 				break;

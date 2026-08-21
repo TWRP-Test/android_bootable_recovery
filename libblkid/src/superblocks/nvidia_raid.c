@@ -23,7 +23,23 @@ struct nv_metadata {
 	uint16_t	version;
 } __attribute__((packed));
 
-#define NVIDIA_SIGNATURE		"NVIDIA"
+#define NVIDIA_SIGNATURE		"NVIDIA  "
+#define NVIDIA_SUPERBLOCK_SIZE		120
+
+
+static int nvraid_verify_checksum(blkid_probe pr, const struct nv_metadata *nv,
+				  size_t bufsiz)
+{
+	uint32_t csum = le32_to_cpu(nv->chksum);
+	uint32_t count = le32_to_cpu(nv->size);
+
+	if (count > bufsiz / sizeof(uint32_t))
+		return 0;
+
+	for (size_t i = 0; i < count; i++)
+		csum += le32_to_cpu(((uint32_t *) nv)[i]);
+	return blkid_probe_verify_csum(pr, csum, le32_to_cpu(nv->chksum));
+}
 
 static int probe_nvraid(blkid_probe pr,
 		const struct blkid_idmag *mag __attribute__((__unused__)))
@@ -31,8 +47,6 @@ static int probe_nvraid(blkid_probe pr,
 	uint64_t off;
 	struct nv_metadata *nv;
 
-	if (pr->size < 0x10000)
-		return 1;
 	if (!S_ISREG(pr->mode) && !blkid_probe_is_wholedisk(pr))
 		return 1;
 
@@ -40,11 +54,15 @@ static int probe_nvraid(blkid_probe pr,
 	nv = (struct nv_metadata *)
 		blkid_probe_get_buffer(pr,
 				off,
-				sizeof(struct nv_metadata));
+				NVIDIA_SUPERBLOCK_SIZE);
 	if (!nv)
 		return errno ? -errno : 1;
 
 	if (memcmp(nv->vendor, NVIDIA_SIGNATURE, sizeof(NVIDIA_SIGNATURE)-1) != 0)
+		return 1;
+	if (le32_to_cpu(nv->size) != NVIDIA_SUPERBLOCK_SIZE / 4)
+		return 1;
+	if (!nvraid_verify_checksum(pr, nv, NVIDIA_SUPERBLOCK_SIZE))
 		return 1;
 	if (blkid_probe_sprintf_version(pr, "%u", le16_to_cpu(nv->version)) != 0)
 		return 1;
@@ -57,6 +75,7 @@ static int probe_nvraid(blkid_probe pr,
 const struct blkid_idinfo nvraid_idinfo = {
 	.name		= "nvidia_raid_member",
 	.usage		= BLKID_USAGE_RAID,
+	.minsz		= 0x10000,
 	.probefunc	= probe_nvraid,
 	.magics		= BLKID_NONE_MAGIC
 };

@@ -21,23 +21,14 @@ static blkid_tag blkid_new_tag(void)
 {
 	blkid_tag tag;
 
-	if (!(tag = (blkid_tag) calloc(1, sizeof(struct blkid_struct_tag))))
+	if (!(tag = calloc(1, sizeof(struct blkid_struct_tag))))
 		return NULL;
 
+	DBG(TAG, ul_debugobj(tag, "alloc"));
 	INIT_LIST_HEAD(&tag->bit_tags);
 	INIT_LIST_HEAD(&tag->bit_names);
 
 	return tag;
-}
-
-void blkid_debug_dump_tag(blkid_tag tag)
-{
-	if (!tag) {
-		fprintf(stderr, "    tag: NULL\n");
-		return;
-	}
-
-	fprintf(stderr, "    tag: %s=\"%s\"\n", tag->bit_name, tag->bit_val);
 }
 
 void blkid_free_tag(blkid_tag tag)
@@ -45,9 +36,7 @@ void blkid_free_tag(blkid_tag tag)
 	if (!tag)
 		return;
 
-	DBG(TAG, ul_debug("    freeing tag %s=%s", tag->bit_name,
-		   tag->bit_val ? tag->bit_val : "(NULL)"));
-	DBG(TAG, blkid_debug_dump_tag(tag));
+	DBG(TAG, ul_debugobj(tag, "freeing tag %s (%s)", tag->bit_name, tag->bit_val));
 
 	list_del(&tag->bit_tags);	/* list of tags for this device */
 	list_del(&tag->bit_names);	/* list of tags with this type */
@@ -84,7 +73,7 @@ int blkid_dev_has_tag(blkid_dev dev, const char *type,
 	tag = blkid_find_tag_dev(dev, type);
 	if (!value)
 		return (tag != NULL);
-	if (!tag || strcmp(tag->bit_val, value))
+	if (!tag || strcmp(tag->bit_val, value) != 0)
 		return 0;
 	return 1;
 }
@@ -104,7 +93,7 @@ static blkid_tag blkid_find_head_cache(blkid_cache cache, const char *type)
 	list_for_each(p, &cache->bic_tags) {
 		tmp = list_entry(p, struct blkid_struct_tag, bit_tags);
 		if (!strcmp(tmp->bit_name, type)) {
-			DBG(TAG, ul_debug("    found cache tag head %s", type));
+			DBG(TAG, ul_debug("found cache tag head %s", type));
 			head = tmp;
 			break;
 		}
@@ -115,14 +104,14 @@ static blkid_tag blkid_find_head_cache(blkid_cache cache, const char *type)
 /*
  * Set a tag on an existing device.
  *
- * If value is NULL, then delete the tagsfrom the device.
+ * If value is NULL, then delete the tags from the device.
  */
 int blkid_set_tag(blkid_dev dev, const char *name,
 		  const char *value, const int vlength)
 {
-	blkid_tag	t = 0, head = 0;
-	char		*val = 0;
-	char		**dev_var = 0;
+	blkid_tag	t = NULL, head = NULL;
+	char		*val = NULL;
+	char		**dev_var = NULL;
 
 	if (value && !(val = strndup(value, vlength)))
 		return -BLKID_ERR_MEM;
@@ -149,6 +138,7 @@ int blkid_set_tag(blkid_dev dev, const char *name,
 			free(val);
 			return 0;
 		}
+		DBG(TAG, ul_debugobj(t, "update (%s) '%s' -> '%s'", t->bit_name, t->bit_val, val));
 		free(t->bit_val);
 		t->bit_val = val;
 	} else {
@@ -159,6 +149,7 @@ int blkid_set_tag(blkid_dev dev, const char *name,
 		t->bit_val = val;
 		t->bit_dev = dev;
 
+		DBG(TAG, ul_debugobj(t, "setting (%s) '%s'", t->bit_name, t->bit_val));
 		list_add_tail(&t->bit_tags, &dev->bid_tags);
 
 		if (dev->bid_cache) {
@@ -169,7 +160,7 @@ int blkid_set_tag(blkid_dev dev, const char *name,
 				if (!head)
 					goto errout;
 
-				DBG(TAG, ul_debug("    creating new cache tag head %s", name));
+				DBG(TAG, ul_debugobj(head, "creating new cache tag head %s", name));
 				head->bit_name = strdup(name);
 				if (!head->bit_name)
 					goto errout;
@@ -211,27 +202,29 @@ errout:
  */
 int blkid_parse_tag_string(const char *token, char **ret_type, char **ret_val)
 {
-	char *name, *value, *cp;
+	char *name, *value;
+	const char *eq;
 
 	DBG(TAG, ul_debug("trying to parse '%s' as a tag", token));
 
-	if (!token || !(cp = strchr(token, '=')))
+	if (!token || !(eq = strchr(token, '=')))
 		return -1;
 
 	name = strdup(token);
 	if (!name)
 		return -1;
-	value = name + (cp - token);
+	value = name + (eq - token);
 	*value++ = '\0';
 	if (*value == '"' || *value == '\'') {
 		char c = *value++;
-		if (!(cp = strrchr(value, c)))
+		char *cp = strrchr(value, c);
+		if (!cp)
 			goto errout; /* missing closing quote */
 		*cp = '\0';
 	}
 
 	if (ret_val) {
-		value = value && *value ? strdup(value) : NULL;
+		value = *value ? strdup(value) : NULL;
 		if (!value)
 			goto errout;
 		*ret_val = value;
@@ -255,10 +248,10 @@ errout:
  *
  * These routines do not expose the list.h implementation, which are a
  * contamination of the namespace, and which force us to reveal far, far
- * too much of our internal implemenation.  I'm not convinced I want
+ * too much of our internal implementation.  I'm not convinced I want
  * to keep list.h in the long term, anyway.  It's fine for kernel
  * programming, but performance is not the #1 priority for this
- * library, and I really don't like the tradeoff of type-safety for
+ * library, and I really don't like the trade-off of type-safety for
  * performance for this application.  [tytso:20030125.2007EST]
  */
 
@@ -304,8 +297,8 @@ int blkid_tag_next(blkid_tag_iterate iter,
 	    iter->p == &iter->dev->bid_tags)
 		return -1;
 
-	*type = 0;
-	*value = 0;
+	*type = NULL;
+	*value = NULL;
 	tag = list_entry(iter->p, struct blkid_struct_tag, bit_tags);
 	*type = tag->bit_name;
 	*value = tag->bit_val;
@@ -335,18 +328,18 @@ blkid_dev blkid_find_dev_with_tag(blkid_cache cache,
 	blkid_dev	dev;
 	int		pri;
 	struct list_head *p;
-	int		probe_new = 0;
+	int		probe_new = 0, probe_all = 0;
 
 	if (!cache || !type || !value)
 		return NULL;
 
 	blkid_read_cache(cache);
 
-	DBG(TAG, ul_debug("looking for %s=%s in cache", type, value));
+	DBG(TAG, ul_debug("looking for tag %s=%s in cache", type, value));
 
 try_again:
 	pri = -1;
-	dev = 0;
+	dev = NULL;
 	head = blkid_find_head_cache(cache, type);
 
 	if (head) {
@@ -364,7 +357,7 @@ try_again:
 	}
 	if (dev && !(dev->bid_flags & BLKID_BID_FL_VERIFIED)) {
 		dev = blkid_verify(cache, dev);
-		if (!dev || (dev && (dev->bid_flags & BLKID_BID_FL_VERIFIED)))
+		if (!dev || dev->bid_flags & BLKID_BID_FL_VERIFIED)
 			goto try_again;
 	}
 
@@ -375,9 +368,11 @@ try_again:
 		goto try_again;
 	}
 
-	if (!dev && !(cache->bic_flags & BLKID_BIC_FL_PROBED)) {
+	if (!dev && !probe_all
+	    && !(cache->bic_flags & BLKID_BIC_FL_PROBED)) {
 		if (blkid_probe_all(cache) < 0)
 			return NULL;
+		probe_all++;
 		goto try_again;
 	}
 	return dev;
@@ -391,7 +386,7 @@ extern char *optarg;
 extern int optind;
 #endif
 
-void __attribute__((__noreturn__)) usage(char *prog)
+static void __attribute__((__noreturn__)) usage(char *prog)
 {
 	fprintf(stderr, "Usage: %s [-f blkid_file] [-m debug_mask] device "
 		"[type value]\n",
@@ -450,7 +445,7 @@ int main(int argc, char **argv)
 
 	dev = blkid_get_dev(cache, devname, flags);
 	if (!dev) {
-		fprintf(stderr, "%s: Can not find device in blkid cache\n",
+		fprintf(stderr, "%s: cannot find device in blkid cache\n",
 			devname);
 		exit(1);
 	}

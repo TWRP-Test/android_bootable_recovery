@@ -12,7 +12,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -60,6 +59,9 @@ static int verify_tag(const char *devname, const char *name, const char *value)
 	const char *data;
 	int errsv = 0;
 
+	if (strcmp(token, "ID") == 0)
+		return 0; /* non-content tag */
+
 	pr = blkid_new_probe();
 	if (!pr)
 		return -1;
@@ -71,7 +73,7 @@ static int verify_tag(const char *devname, const char *name, const char *value)
 	blkid_probe_enable_partitions(pr, TRUE);
 	blkid_probe_set_partitions_flags(pr, BLKID_PARTS_ENTRY_DETAILS);
 
-	fd = open(devname, O_RDONLY|O_CLOEXEC);
+	fd = open(devname, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
 	if (fd < 0) {
 		errsv = errno;
 		goto done;
@@ -129,7 +131,7 @@ int blkid_send_uevent(const char *devname, const char *action)
 			DBG(EVALUATE, ul_debug("write failed: %s", uevent));
 	}
 	DBG(EVALUATE, ul_debug("%s: send uevent %s",
-			uevent, rc == 0 ? "SUCCES" : "FAILED"));
+			uevent, rc == 0 ? "SUCCESS" : "FAILED"));
 	return rc;
 }
 
@@ -150,6 +152,8 @@ static char *evaluate_by_udev(const char *token, const char *value, int uevent)
 		strcpy(dev, _PATH_DEV_BYPARTLABEL "/");
 	else if (!strcmp(token, "PARTUUID"))
 		strcpy(dev, _PATH_DEV_BYPARTUUID "/");
+	else if (!strcmp(token, "ID"))
+		strcpy(dev, _PATH_DEV_BYID "/");
 	else {
 		DBG(EVALUATE, ul_debug("unsupported token %s", token));
 		return NULL;	/* unsupported tag */
@@ -167,7 +171,7 @@ static char *evaluate_by_udev(const char *token, const char *value, int uevent)
 	if (!S_ISBLK(st.st_mode))
 		return NULL;
 
-	path = canonicalize_path(dev);
+	path = ul_canonicalize_path(dev);
 	if (!path)
 		return NULL;
 
@@ -196,8 +200,10 @@ static char *evaluate_by_scan(const char *token, const char *value,
 
 	if (!c) {
 		char *cachefile = blkid_get_cache_filename(conf);
-		blkid_get_cache(&c, cachefile);
+		int rc = blkid_get_cache(&c, cachefile);
 		free(cachefile);
+		if (rc < 0)
+			return NULL;
 	}
 	if (!c)
 		return NULL;
@@ -218,6 +224,9 @@ static char *evaluate_by_scan(const char *token, const char *value,
  * @value: token data (e.g. "foo")
  * @cache: pointer to cache (or NULL when you don't want to re-use the cache)
  *
+* If the @value is NULL and @token is not in the NAME=value format, then return
+* a copy of the @token.
+ *
  * Returns: allocated string with a device name.
  */
 char *blkid_evaluate_tag(const char *token, const char *value, blkid_cache *cache)
@@ -230,9 +239,6 @@ char *blkid_evaluate_tag(const char *token, const char *value, blkid_cache *cach
 	if (!token)
 		return NULL;
 
-	if (!cache || !*cache)
-		blkid_init_debug(0);
-
 	DBG(EVALUATE, ul_debug("evaluating  %s%s%s", token, value ? "=" : "",
 		   value ? value : ""));
 
@@ -241,8 +247,7 @@ char *blkid_evaluate_tag(const char *token, const char *value, blkid_cache *cach
 			ret = strdup(token);
 			goto out;
 		}
-		blkid_parse_tag_string(token, &t, &v);
-		if (!t || !v)
+		if (blkid_parse_tag_string(token, &t, &v) != 0 || !t || !v)
 			goto out;
 		token = t;
 		value = v;
@@ -293,7 +298,7 @@ char *blkid_evaluate_spec(const char *spec, blkid_cache *cache)
 	if (v)
 		res = blkid_evaluate_tag(t, v, cache);
 	else
-		res = canonicalize_path(spec);
+		res = ul_canonicalize_path(spec);
 
 	free(t);
 	free(v);
@@ -311,8 +316,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "usage: %s <tag> | <spec>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
-
-	blkid_init_debug(0);
 
 	res = blkid_evaluate_spec(argv[1], &cache);
 	if (res)

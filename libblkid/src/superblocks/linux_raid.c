@@ -79,7 +79,7 @@ struct mdp1_super_block {
 	uint8_t		pad2[64-57];	/* set to 0 when writing */
 
 	/* array state information - 64 bytes */
-	uint64_t	utime;		/* 40 bits second, 24 btes microseconds */
+	uint64_t	utime;		/* 40 bits second, 24 bits microseconds */
 	uint64_t	events;		/* incremented when superblock updated */
 	uint64_t	resync_offset;	/* data before this offset (from data_offset) known to be in sync */
 	uint32_t	sb_csum;	/* checksum up to dev_roles[max_dev] */
@@ -99,7 +99,7 @@ struct mdp1_super_block {
 #define MD_RESERVED_BYTES		0x10000
 #define MD_SB_MAGIC			0xa92b4efc
 
-static int probe_raid0(blkid_probe pr, blkid_loff_t off)
+static int probe_raid0(blkid_probe pr, uint64_t off)
 {
 	struct mdp0_super_block *mdp0;
 	union {
@@ -148,11 +148,11 @@ static int probe_raid0(blkid_probe pr, blkid_loff_t off)
 
 	size <<= 10;	/* convert KiB to bytes */
 
-	if (pr->size < 0 || (uint64_t) pr->size < size + MD_RESERVED_BYTES)
+	if (pr->size < size + MD_RESERVED_BYTES)
 		/* device is too small */
 		return 1;
 
-	if (off < 0 || (uint64_t) off < size)
+	if (off < size)
 		/* no space before superblock */
 		return 1;
 
@@ -182,6 +182,31 @@ static int probe_raid0(blkid_probe pr, blkid_loff_t off)
 	return 0;
 }
 
+static int raid1_verify_csum(blkid_probe pr, off_t off,
+		const struct mdp1_super_block *mdp1)
+{
+	uint64_t csummed_size = sizeof(struct mdp1_super_block)
+		+ (uint64_t) le32_to_cpu(mdp1->max_dev) * sizeof(mdp1->dev_roles[0]);
+	const unsigned char *csummed = blkid_probe_get_buffer(pr, off, csummed_size);
+	if (!csummed)
+		return 1;
+
+	uint64_t csum = 0;
+
+	csum -= le32_to_cpu(*(uint32_t *) (csummed + offsetof(struct mdp1_super_block, sb_csum)));
+
+	while (csummed_size >= 4) {
+		csum += le32_to_cpu(*(uint32_t *) csummed);
+		csummed_size -= 4;
+		csummed += 4;
+	}
+	if (csummed_size == 2)
+		csum += le16_to_cpu(*(uint16_t *) csummed);
+
+	csum = (csum >> 32) + (uint32_t) csum;
+	return blkid_probe_verify_csum(pr, csum, le32_to_cpu(mdp1->sb_csum));
+}
+
 static int probe_raid1(blkid_probe pr, off_t off)
 {
 	struct mdp1_super_block *mdp1;
@@ -198,6 +223,8 @@ static int probe_raid1(blkid_probe pr, off_t off)
 		return 1;
 	if (le64_to_cpu(mdp1->super_offset) != (uint64_t) off >> 9)
 		return 1;
+	if (!raid1_verify_csum(pr, off, mdp1))
+		return 1;
 	if (blkid_probe_set_uuid(pr, (unsigned char *) mdp1->set_uuid) != 0)
 		return 1;
 	if (blkid_probe_set_uuid_as(pr,
@@ -212,7 +239,7 @@ static int probe_raid1(blkid_probe pr, off_t off)
 	return 0;
 }
 
-int probe_raid(blkid_probe pr,
+static int probe_raid(blkid_probe pr,
 		const struct blkid_idmag *mag __attribute__((__unused__)))
 {
 	const char *ver = NULL;

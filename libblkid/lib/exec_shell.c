@@ -11,9 +11,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://gnu.org/licenses/>.
  */
 
 #include <stdlib.h>
@@ -27,21 +26,19 @@
 #include "xalloc.h"
 
 #include "exec_shell.h"
+#include "default_shell.h"
 
-#define DEFAULT_SHELL "/bin/sh"
-
-void exec_shell(void)
+void __attribute__((__noreturn__)) exec_shell(void)
 {
-	const char *shell = getenv("SHELL"), *shell_basename;
+	const char *shell = ul_default_shell(0, NULL);
+	char *shellc;
+	const char *shell_basename;
 	char *arg0;
-	if (!shell)
-		shell = DEFAULT_SHELL;
 
-	shell_basename = basename(shell);
-	arg0 = xmalloc(strlen(shell_basename) + 2);
-	arg0[0] = '-';
-	strcpy(arg0 + 1, shell_basename);
+	shellc = xstrdup(shell);
+	shell_basename = basename(shellc);
+	xasprintf(&arg0, "-%s", shell_basename);
 
-	execl(shell, arg0, NULL);
-	err(EXIT_FAILURE, _("failed to execute %s"), shell);
+	execl(shell, arg0, (char *)NULL);
+	errexec(shell);
 }

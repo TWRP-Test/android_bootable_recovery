@@ -19,6 +19,7 @@
 #include <time.h>
 
 #include "superblocks.h"
+#include "crc32c.h"
 
 struct ext2_super_block {
 	uint32_t		s_inodes_count;
@@ -74,7 +75,8 @@ struct ext2_super_block {
 	uint16_t		s_mmp_interval;
 	uint64_t		s_mmp_block;
 	uint32_t		s_raid_stripe_width;
-	uint32_t		s_reserved[163];
+	uint32_t		s_reserved[162];
+	uint32_t		s_checksum;
 } __attribute__((packed));
 
 /* magic string */
@@ -102,6 +104,7 @@ struct ext2_super_block {
 #define EXT4_FEATURE_RO_COMPAT_GDT_CSUM		0x0010
 #define EXT4_FEATURE_RO_COMPAT_DIR_NLINK	0x0020
 #define EXT4_FEATURE_RO_COMPAT_EXTRA_ISIZE	0x0040
+#define EXT4_FEATURE_RO_COMPAT_METADATA_CSUM	0x0400
 
 /* for s_feature_incompat */
 #define EXT2_FEATURE_INCOMPAT_FILETYPE		0x0002
@@ -148,9 +151,45 @@ static struct ext2_super_block *ext_get_super(
 	struct ext2_super_block *es;
 
 	es = (struct ext2_super_block *)
-			blkid_probe_get_buffer(pr, EXT_SB_OFF, 0x200);
+			blkid_probe_get_buffer(pr, EXT_SB_OFF, sizeof(struct ext2_super_block));
 	if (!es)
 		return NULL;
+	if (le32_to_cpu(es->s_feature_ro_compat) & EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
+		uint32_t csum = crc32c(~0, es, offsetof(struct ext2_super_block, s_checksum));
+		/*
+		 * A read of the superblock can race with other updates to the
+		 * same superblock.  In the unlikely event that this occurs and
+		 * we see a checksum failure, re-read the superblock with
+		 * O_DIRECT to ensure that it's consistent.  If it _still_ fails
+		 * then declare a checksum mismatch.
+		 */
+		if (!blkid_probe_verify_csum(pr, csum, le32_to_cpu(es->s_checksum))) {
+#ifdef O_DIRECT
+			if (blkid_probe_reset_buffers(pr))
+				return NULL;
+
+			es = (struct ext2_super_block *)
+			    blkid_probe_get_buffer_direct(pr, EXT_SB_OFF, sizeof(struct ext2_super_block));
+			if (!es)
+				return NULL;
+
+			csum = crc32c(~0, es, offsetof(struct ext2_super_block, s_checksum));
+			if (!blkid_probe_verify_csum(pr, csum, le32_to_cpu(es->s_checksum)))
+				return NULL;
+#else
+			return NULL;
+#endif
+		}
+	} else {
+		/*
+		 * For legacy fs without checksum, additionally verify the
+		 * block size to reduce false positive. Currently max allowed
+		 * block size is 64KiB (s_log_block_size <= 6), check for 256
+		 * to be more future proof.
+		 */
+		if (le32_to_cpu(es->s_log_block_size) >= 256)
+			return NULL;
+	}
 	if (fc)
 		*fc = le32_to_cpu(es->s_feature_compat);
 	if (fi)
@@ -164,13 +203,14 @@ static struct ext2_super_block *ext_get_super(
 static void ext_get_info(blkid_probe pr, int ver, struct ext2_super_block *es)
 {
 	struct blkid_chain *chn = blkid_probe_get_chain(pr);
+	uint32_t s_feature_incompat = le32_to_cpu(es->s_feature_incompat);
 
 	DBG(PROBE, ul_debug("ext2_sb.compat = %08X:%08X:%08X",
 		   le32_to_cpu(es->s_feature_compat),
-		   le32_to_cpu(es->s_feature_incompat),
+		   s_feature_incompat,
 		   le32_to_cpu(es->s_feature_ro_compat)));
 
-	if (strlen(es->s_volume_name))
+	if (*es->s_volume_name != '\0')
 		blkid_probe_set_label(pr, (unsigned char *) es->s_volume_name,
 					sizeof(es->s_volume_name));
 	blkid_probe_set_uuid(pr, es->s_uuid);
@@ -179,7 +219,7 @@ static void ext_get_info(blkid_probe pr, int ver, struct ext2_super_block *es)
 		blkid_probe_set_uuid_as(pr, es->s_journal_uuid, "EXT_JOURNAL");
 
 	if (ver != 2 && (chn->flags & BLKID_SUBLKS_SECTYPE) &&
-	    ((le32_to_cpu(es->s_feature_incompat) & EXT2_FEATURE_INCOMPAT_UNSUPPORTED) == 0))
+	    ((s_feature_incompat & EXT2_FEATURE_INCOMPAT_UNSUPPORTED) == 0))
 		blkid_probe_set_value(pr, "SEC_TYPE",
 				(unsigned char *) "ext2",
 				sizeof("ext2"));
@@ -187,6 +227,27 @@ static void ext_get_info(blkid_probe pr, int ver, struct ext2_super_block *es)
 	blkid_probe_sprintf_version(pr, "%u.%u",
 		le32_to_cpu(es->s_rev_level),
 		le16_to_cpu(es->s_minor_rev_level));
+
+	uint32_t block_size = 0;
+	if (le32_to_cpu(es->s_log_block_size) < 32){
+		block_size = 1024U << le32_to_cpu(es->s_log_block_size);
+		blkid_probe_set_fsblocksize(pr, block_size);
+		blkid_probe_set_block_size(pr, block_size);
+	}
+
+	uint64_t fslastblock = le32_to_cpu(es->s_blocks_count) |
+		((s_feature_incompat & EXT4_FEATURE_INCOMPAT_64BIT) ?
+		(uint64_t) le32_to_cpu(es->s_blocks_count_hi) << 32 : 0);
+	blkid_probe_set_fslastblock(pr, fslastblock);
+
+	/* The total number of blocks is taken without subtraction of overhead
+	 * (journal, metadata). The ext4 has non-trivial overhead calculation
+	 * viz. ext4_calculate_overhead(). Therefore, the FSSIZE would show number
+	 * slightly higher than the real value (for example, calculated via
+	 * statfs()).
+	 */
+	uint64_t fssize = (uint64_t) block_size * le32_to_cpu(es->s_blocks_count);
+	blkid_probe_set_fssize(pr, fssize);
 }
 
 

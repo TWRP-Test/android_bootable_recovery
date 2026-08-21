@@ -26,6 +26,18 @@
 #define BLKID_MAG_LASTOFFSET(_mag) \
 		 (BLKID_MAG_OFFSET(_mag) - (BLKID_MAG_SECTOR(_mag) << 9))
 
+static uint16_t bsd_checksum(const struct bsd_disklabel *l)
+{
+	uint16_t v, csum = 0;
+	const char *end = (const char *) (l + 1);
+
+	for (const char *c = (const char *) l; c < end; c += sizeof(uint16_t)) {
+		memcpy(&v, c, sizeof(v));
+		csum ^= v;
+	}
+	return csum ^ le16_to_cpu(l->d_checksum);
+}
+
 static int probe_bsd_pt(blkid_probe pr, const struct blkid_idmag *mag)
 {
 	struct bsd_disklabel *l;
@@ -35,21 +47,29 @@ static int probe_bsd_pt(blkid_probe pr, const struct blkid_idmag *mag)
 	blkid_partition parent;
 	blkid_partlist ls;
 	int i, nparts = BSD_MAXPARTITIONS;
-	unsigned char *data;
+	const unsigned char *data;
 	int rc = BLKID_PROBE_NONE;
+	uint64_t abs_offset = 0;
 
 	if (blkid_partitions_need_typeonly(pr))
 		/* caller does not ask for details about partitions */
 		return rc;
 
-	data = blkid_probe_get_sector(pr, BLKID_MAG_SECTOR(mag));
+	data = blkid_probe_get_buffer(pr,
+			(uint64_t) BLKID_MAG_SECTOR(mag) << 9,
+			BLKID_MAG_LASTOFFSET(mag) + sizeof(struct bsd_disklabel));
 	if (!data) {
 		if (errno)
 			rc = -errno;
 		goto nothing;
 	}
 
-	l = (struct bsd_disklabel *) data + BLKID_MAG_LASTOFFSET(mag);
+	l = (struct bsd_disklabel *) (data + BLKID_MAG_LASTOFFSET(mag));
+
+	if (!blkid_probe_verify_csum(pr, bsd_checksum(l), le16_to_cpu(l->d_checksum))) {
+		rc = BLKID_PROBE_NONE;
+		goto nothing;
+	}
 
 	ls = blkid_probe_get_partlist(pr);
 	if (!ls)
@@ -62,6 +82,7 @@ static int probe_bsd_pt(blkid_probe pr, const struct blkid_idmag *mag)
 		switch(blkid_partition_get_type(parent)) {
 		case MBR_FREEBSD_PARTITION:
 			name = "freebsd";
+			abs_offset = blkid_partition_get_start(parent);
 			break;
 		case MBR_NETBSD_PARTITION:
 			name = "netbsd";
@@ -94,17 +115,24 @@ static int probe_bsd_pt(blkid_probe pr, const struct blkid_idmag *mag)
 
 	for (i = 0, p = l->d_partitions; i < nparts; i++, p++) {
 		blkid_partition par;
-		uint32_t start, size;
+		uint64_t start, size;
 
-		/* TODO: in fdisk-mode returns all non-zero (p_size) partitions */
 		if (p->p_fstype == BSD_FS_UNUSED)
 			continue;
 
 		start = le32_to_cpu(p->p_offset);
 		size = le32_to_cpu(p->p_size);
 
-		if (parent && blkid_partition_get_start(parent) == start
-			   && blkid_partition_get_size(parent) == size) {
+		/* FreeBSD since version 10 uses relative offsets. We can use
+		 * 3rd partition (special wholedisk partition) to detect this
+		 * situation.
+		 */
+		if (abs_offset && nparts >= 3
+		    && le32_to_cpu(l->d_partitions[2].p_offset) == 0)
+			start += abs_offset;
+
+		if (parent && (uint64_t) blkid_partition_get_start(parent) == start
+			   && (uint64_t) blkid_partition_get_size(parent) == size) {
 			DBG(LOWPROBE, ul_debug(
 				"WARNING: BSD partition (%d) same like parent, "
 				"ignore", i));

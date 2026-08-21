@@ -10,38 +10,37 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <inttypes.h>
 
+#include "buffer.h"
 #include "superblocks.h"
+#include "crc32c.h"
 #include "crc64.h"
+#include "xxhash.h"
 
 #define SB_LABEL_SIZE      32
 #define SB_JOURNAL_BUCKETS 256U
 
-#define node(i, j)         ((i)->d + (j))
-#define end(i)             node(i, (i)->keys)
-
-static const char bcache_magic[] = {
-	0xc6, 0x85, 0x73, 0xf6, 0x4e, 0x1a, 0x45, 0xca,
-	0x82, 0x65, 0xf5, 0x7f, 0x48, 0xba, 0x6d, 0x81
-};
-
+/*
+ * The bcache_super_block is adapted from struct cache_sb in kernel.
+ * https://github.com/torvalds/linux/blob/master/drivers/md/bcache/bcache_ondisk.h
+ */
 struct bcache_super_block {
 	uint64_t		csum;
-	uint64_t		offset;	/* sector where this sb was written */
+	uint64_t		offset;		/* where this super block was written */
 	uint64_t		version;
-
-	uint8_t			magic[16];
-
-	uint8_t			uuid[16];
-	union {
-		uint8_t		set_uuid[16];
-		uint64_t	set_magic;
-	};
+	uint8_t			magic[16];	/* bcache file system identifier */
+	uint8_t			uuid[16];	/* device identifier */
+	uint8_t			set_info[16];	/* magic or uuid */
 	uint8_t			label[SB_LABEL_SIZE];
-
 	uint64_t		flags;
 	uint64_t		seq;
-	uint64_t		pad[8];
+
+	uint64_t		feature_compat;
+	uint64_t		feature_incompat;
+	uint64_t		feature_ro_compat;
+
+	uint64_t		pad[5];
 
 	union {
 	struct {
@@ -57,16 +56,10 @@ struct bcache_super_block {
 	struct {
 		/* Backing devices */
 		uint64_t	data_offset;
-
-		/*
-		 * block_size from the cache device section is still used by
-		 * backing devices, so don't add anything here until we fix
-		 * things to not need it for backing devices anymore
-		 */
 	};
 	};
 
-	uint32_t		last_mount;	/* time_t */
+	uint32_t		last_mount;
 
 	uint16_t		first_bucket;
 	union {
@@ -74,48 +67,434 @@ struct bcache_super_block {
 		uint16_t	keys;
 	};
 	uint64_t		d[SB_JOURNAL_BUCKETS];	/* journal buckets */
+	uint16_t		obso_bucket_size_hi;	/* obsoleted */
+} __attribute__((packed));
+
+struct bcachefs_sb_field {
+	uint32_t	u64s;
+	uint32_t	type;
+}  __attribute__((packed));
+
+struct bcachefs_sb_member {
+	uint8_t		uuid[16];
+	uint64_t	nbuckets;
+	uint16_t	first_bucket;
+	uint16_t	bucket_size;
+	uint8_t		btree_bitmap_shift;
+	uint8_t		pad[3];
+	uint64_t	last_mount;
+	uint64_t	flags;
+	/* fields below were added after members_v1 */
+	uint32_t	iops[4];
+	uint64_t	errors[3];
+	uint64_t	errors_at_reset[3];
+	uint64_t	errors_reset_time;
+	uint64_t	seq;
+	uint64_t	btree_allocated_bitmap;
+	uint32_t	last_journal_bucket;
+	uint32_t	last_journal_bucket_offset;
+
+	/* device name/model info from the last FS mount */
+	uint8_t		device_name[16];
+	uint8_t		device_model[64];
+} __attribute__((packed));
+
+struct bcachefs_sb_field_members_v1 {
+	struct bcachefs_sb_field	field;
+	struct bcachefs_sb_member	members[];
+}  __attribute__((packed));
+
+struct bcachefs_sb_field_members_v2 {
+	struct bcachefs_sb_field	field;
+	uint16_t			member_bytes;
+	uint8_t				pad[6];
+	struct bcachefs_sb_member	members[];
+}  __attribute__((packed));
+
+struct bcachefs_sb_disk_group {
+	uint8_t		label[SB_LABEL_SIZE];
+	uint64_t	flags[2];
+} __attribute__((packed));
+
+struct bcachefs_sb_field_disk_groups {
+	struct bcachefs_sb_field	field;
+	struct bcachefs_sb_disk_group   disk_groups[];
+}  __attribute__((packed));
+
+enum bcachefs_sb_csum_type {
+	BCACHEFS_SB_CSUM_TYPE_NONE = 0,
+	BCACHEFS_SB_CSUM_TYPE_CRC32C = 1,
+	BCACHEFS_SB_CSUM_TYPE_CRC64 = 2,
+	BCACHEFS_SB_CSUM_TYPE_XXHASH = 7,
 };
 
+union bcachefs_sb_csum {
+	uint32_t crc32c;
+	uint64_t crc64;
+	XXH64_hash_t xxh64;
+	uint8_t raw[16];
+} __attribute__((packed));
+
+struct bcachefs_sb_layout {
+	uint8_t		magic[16];
+	uint8_t		layout_type;
+	uint8_t		sb_max_size_bits;
+	uint8_t		nr_superblocks;
+	uint8_t		pad[5];
+	uint64_t	sb_offset[61];
+} __attribute__((packed));
+
+struct bcachefs_super_block {
+	union bcachefs_sb_csum	csum;
+	uint16_t	version;
+	uint16_t	version_min;
+	uint16_t	pad[2];
+	uint8_t		magic[16];
+	uint8_t		uuid[16];
+	uint8_t		user_uuid[16];
+	uint8_t		label[SB_LABEL_SIZE];
+	uint64_t	offset;
+	uint64_t	seq;
+	uint16_t	block_size;
+	uint8_t		dev_idx;
+	uint8_t		nr_devices;
+	uint32_t	u64s;
+	uint64_t	time_base_lo;
+	uint32_t	time_base_hi;
+	uint32_t	time_precision;
+	uint64_t	flags[8];
+	uint64_t	features[2];
+	uint64_t	compat[2];
+	struct bcachefs_sb_layout layout;
+	struct bcachefs_sb_field _start[];
+}  __attribute__((packed));
+
 /* magic string */
-#define BCACHE_SB_MAGIC     bcache_magic
+#define BCACHE_SB_MAGIC     "\xc6\x85\x73\xf6\x4e\x1a\x45\xca\x82\x65\xf5\x7f\x48\xba\x6d\x81"
+#define BCACHEFS_SB_MAGIC   "\xc6\x85\x73\xf6\x66\xce\x90\xa9\xd9\x6a\x60\xcf\x80\x3d\xf7\xef"
 /* magic string len */
-#define BCACHE_SB_MAGIC_LEN sizeof (bcache_magic)
+#define BCACHE_SB_MAGIC_LEN (sizeof(BCACHE_SB_MAGIC) - 1)
 /* super block offset */
-#define BCACHE_SB_OFF       0x1000
+#define BCACHE_SB_OFF       0x1000U
 /* supper block offset in kB */
 #define BCACHE_SB_KBOFF     (BCACHE_SB_OFF >> 10)
 /* magic string offset within super block */
-#define BCACHE_SB_MAGIC_OFF offsetof (struct bcache_super_block, magic)
+#define BCACHE_SB_MAGIC_OFF offsetof(struct bcache_super_block, magic)
+/* start of checksummed data within superblock */
+#define BCACHE_SB_CSUMMED_START 8U
+/* granularity of offset and length fields within superblock */
+#define BCACHEFS_SECTOR_SIZE   512U
+/* maximum superblock size shift */
+#define BCACHEFS_SB_MAX_SIZE_SHIFT   0x10U
+/* fields offset within super block */
+#define BCACHEFS_SB_FIELDS_OFF offsetof(struct bcachefs_super_block, _start)
+/* tag value for v1 members field */
+#define BCACHEFS_SB_FIELD_TYPE_MEMBERS_V1 1
+/* v1 members field size in bytes */
+#define BCACHEFS_SB_FIELD_MEMBERS_V1_BYTES 56
+/* tag value for v2 members field */
+#define BCACHEFS_SB_FIELD_TYPE_MEMBERS_V2 11
+/* tag value for disk_groups field */
+#define BCACHEFS_SB_FIELD_TYPE_DISK_GROUPS 5
+/* version splitting helpers */
+#define BCH_VERSION_MAJOR(_v)           ((uint16_t) ((_v) >> 10))
+#define BCH_VERSION_MINOR(_v)           ((uint16_t) ((_v) & ~(~0U << 10)))
 
-static uint64_t bcache_crc64(struct bcache_super_block *bcs)
+#define BYTES(f) ((((uint64_t) le32_to_cpu((f)->u64s)) * 8))
+
+static int bcache_verify_checksum(blkid_probe pr, const struct blkid_idmag *mag,
+		const struct bcache_super_block *bcs)
 {
-	unsigned char *data = (unsigned char *) bcs;
-	size_t sz;
+	const unsigned char *csummed;
+	size_t csummed_size;
+	uint64_t csum;
 
-	data += 8;		/* skip csum field */
-	sz = (unsigned char *) end(bcs) - data;
+	if (le16_to_cpu(bcs->keys) > ARRAY_SIZE(bcs->d))
+		return 0;
 
-	return crc64(0xFFFFFFFFFFFFFFFFULL, data, sz) ^ 0xFFFFFFFFFFFFFFFFULL;
+	/* up to the end of bcs->d[] */
+	csummed_size = offsetof(__typeof__(*bcs), d) +
+		sizeof(bcs->d[0]) * le16_to_cpu(bcs->keys);
+	csummed = blkid_probe_get_sb_buffer(pr, mag, csummed_size);
+	if (!csummed)
+		return 0;
+	csum = ul_crc64_we(csummed + BCACHE_SB_CSUMMED_START,
+			   csummed_size - BCACHE_SB_CSUMMED_START);
+	return blkid_probe_verify_csum(pr, csum, le64_to_cpu(bcs->csum));
 }
 
 static int probe_bcache (blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct bcache_super_block *bcs;
+	const struct bcache_super_block *bcs;
 
 	bcs = blkid_probe_get_sb(pr, mag, struct bcache_super_block);
 	if (!bcs)
 		return errno ? -errno : BLKID_PROBE_NONE;
 
+	if (!bcache_verify_checksum(pr, mag, bcs))
+		return BLKID_PROBE_NONE;
+
 	if (le64_to_cpu(bcs->offset) != BCACHE_SB_OFF / 512)
 		return BLKID_PROBE_NONE;
-	if (!blkid_probe_verify_csum(pr, bcache_crc64(bcs), le64_to_cpu(bcs->csum)))
+
+	if (blkid_probe_sprintf_version(pr, "%"PRIu64, le64_to_cpu(bcs->version)) < 0)
 		return BLKID_PROBE_NONE;
 
 	if (blkid_probe_set_uuid(pr, bcs->uuid) < 0)
 		return BLKID_PROBE_NONE;
 
+	if (blkid_probe_set_label(pr, bcs->label, sizeof(bcs->label)) < 0)
+		return BLKID_PROBE_NONE;
+
+	if (blkid_probe_set_block_size(pr, le16_to_cpu(bcs->block_size) * 512))
+		return BLKID_PROBE_NONE;
+
+	blkid_probe_set_wiper(pr, 0, BCACHE_SB_OFF);
+
 	return BLKID_PROBE_OK;
-};
+}
+
+#define FIELD_END(s, field)	offsetof(s, field) + sizeof_member(s, field)
+
+/* Fields must be dynamically checked for existence before accessing (using FIELD_END) */
+static const struct bcachefs_sb_member *bcachefs_sb_member_get_unsafe(
+	const struct bcachefs_sb_member *members,
+	uint16_t member_bytes, size_t i)
+{
+	return (const void*)((const char *) members + i * member_bytes);
+}
+
+static void probe_bcachefs_sb_members(blkid_probe pr,
+				     const struct bcachefs_super_block *bcs,
+				     const struct bcachefs_sb_field *field,
+				     const struct bcachefs_sb_member *members,
+				     uint16_t member_bytes, size_t member_array_offset,
+				     uint8_t *current_member_group)
+{
+	uint64_t sectors = 0;
+	uint8_t i;
+	const struct bcachefs_sb_member *current;
+
+	if (BYTES(field) != member_array_offset + bcs->nr_devices * member_bytes)
+		return;
+
+	current = bcachefs_sb_member_get_unsafe(members, member_bytes, bcs->dev_idx);
+
+	if (member_bytes < FIELD_END(struct bcachefs_sb_member, uuid))
+		return;
+
+	blkid_probe_set_uuid_as(pr, current->uuid, "UUID_SUB");
+
+	if (member_bytes < FIELD_END(struct bcachefs_sb_member, nbuckets) ||
+	    member_bytes < FIELD_END(struct bcachefs_sb_member, bucket_size))
+		return;
+
+	for (i = 0; i < bcs->nr_devices; i++) {
+		const struct bcachefs_sb_member *member = bcachefs_sb_member_get_unsafe(members, member_bytes, i);
+		sectors += le64_to_cpu(member->nbuckets) * le16_to_cpu(member->bucket_size);
+	}
+	blkid_probe_set_fssize(pr, sectors * BCACHEFS_SECTOR_SIZE);
+
+	if (member_bytes < FIELD_END(struct bcachefs_sb_member, flags))
+		return;
+
+	*current_member_group = le64_to_cpu(current->flags) >> 20 & 0xFF;
+}
+
+static void probe_bcachefs_device_label(blkid_probe pr,
+					const struct bcachefs_sb_field *field,
+					unsigned group_idx)
+{
+	const struct bcachefs_sb_field_disk_groups *disk_groups =
+			(const struct bcachefs_sb_field_disk_groups *) field;
+	const struct bcachefs_sb_disk_group *group;
+	size_t groups_nr = (BYTES(field) - offsetof(__typeof__(*disk_groups), disk_groups)) / sizeof(*group);
+	size_t nr = 0;
+	size_t total_sublabel_length = 0;
+	uint16_t path[32];
+	struct ul_buffer buf = UL_INIT_BUFFER;
+
+	while (1) {
+		if (nr == ARRAY_SIZE(path) || group_idx >= groups_nr)
+			return;
+
+		group = disk_groups->disk_groups + group_idx;
+
+		uint64_t group_flags_0 = le64_to_cpu(group->flags[0]);
+		bool deleted = group_flags_0 & 0x1;
+		uint32_t parent = group_flags_0 >> 6 & ((1 << 18) - 1);
+
+		if (deleted)
+			return;
+
+		path[nr++] = group_idx;
+		total_sublabel_length += strnlen((const char*)group->label, sizeof(group->label));
+
+		if (!parent)
+			break;
+		group_idx = parent - 1;
+	}
+
+	if (ul_buffer_alloc_data(&buf, total_sublabel_length + nr + 1))
+		return;
+
+	while (nr--) {
+		group_idx = path[nr];
+		group = disk_groups->disk_groups + group_idx;
+
+		ul_buffer_append_data(&buf, (const char*)group->label,
+			strnlen((const char*)group->label, sizeof(group->label)));
+		ul_buffer_append_data(&buf, nr ? "." : "", 1);
+	}
+
+	if (!ul_buffer_is_empty(&buf)) {
+		blkid_probe_set_id_label(pr, "LABEL_SUB",
+		                         (const unsigned char*)ul_buffer_get_data(&buf, NULL, NULL),
+		                         ul_buffer_get_datasiz(&buf));
+	}
+
+	ul_buffer_free_data(&buf);
+}
+
+static int is_within_range(const void *start, uint64_t size, const void *end)
+{
+	ptrdiff_t diff;
+
+	if (start >= end)
+		return 0; // should not happen
+
+	diff = (unsigned char *) end - (unsigned char *) start;
+	return size <= (uint64_t) diff;
+}
+
+static void probe_bcachefs_sb_fields(blkid_probe pr, const struct bcachefs_super_block *bcs,
+				     const unsigned char *sb_start, const unsigned char *sb_end)
+{
+	const unsigned char *field_addr = sb_start + BCACHEFS_SB_FIELDS_OFF;
+	const struct bcachefs_sb_field_disk_groups *disk_groups = NULL;
+	uint8_t current_member_group = 0;	/* 0 means unset */
+
+	while (1) {
+		struct bcachefs_sb_field *field = (struct bcachefs_sb_field *) field_addr;
+		uint64_t field_size;
+		uint32_t type;
+
+		if (!is_within_range(field, sizeof(*field), sb_end))
+			break;
+
+		field_size = BYTES(field);
+
+		if (field_size < sizeof(*field))
+			break;
+
+		if (!is_within_range(field, field_size, sb_end))
+			break;
+
+		type = le32_to_cpu(field->type);
+		if (!type)
+			break;
+
+		if (type == BCACHEFS_SB_FIELD_TYPE_MEMBERS_V1) {
+			struct bcachefs_sb_field_members_v1 *members = (struct bcachefs_sb_field_members_v1 *) field;
+			probe_bcachefs_sb_members(pr, bcs, field, members->members,
+				BCACHEFS_SB_FIELD_MEMBERS_V1_BYTES, offsetof(__typeof__(*members), members),
+				&current_member_group);
+		}
+
+		if (type == BCACHEFS_SB_FIELD_TYPE_MEMBERS_V2) {
+			struct bcachefs_sb_field_members_v2 *members = (struct bcachefs_sb_field_members_v2 *) field;
+			probe_bcachefs_sb_members(pr, bcs, field, members->members,
+				le16_to_cpu(members->member_bytes), offsetof(__typeof__(*members), members),
+				&current_member_group);
+		}
+
+		if (type == BCACHEFS_SB_FIELD_TYPE_DISK_GROUPS)
+			disk_groups = (const struct bcachefs_sb_field_disk_groups *) field;
+
+		field_addr += BYTES(field);
+	}
+
+	if (disk_groups && current_member_group)
+		probe_bcachefs_device_label(pr, &disk_groups->field, current_member_group - 1);
+}
+
+static int bcachefs_validate_checksum(blkid_probe pr, const struct bcachefs_super_block *bcs,
+				      const unsigned char *sb, const unsigned char *sb_end)
+{
+	uint8_t checksum_type = be64_to_cpu(bcs->flags[0]) >> 58;
+	const unsigned char *checksummed_data_start = sb + sizeof(bcs->csum);
+	size_t checksummed_data_size = sb_end - checksummed_data_start;
+
+	switch (checksum_type) {
+		case BCACHEFS_SB_CSUM_TYPE_NONE:
+			return 1;
+		case BCACHEFS_SB_CSUM_TYPE_CRC32C: {
+			uint32_t crc = crc32c(~0LL, checksummed_data_start, checksummed_data_size) ^ ~0LL;
+			return blkid_probe_verify_csum(pr, crc, le32_to_cpu(bcs->csum.crc32c));
+		}
+		case BCACHEFS_SB_CSUM_TYPE_CRC64: {
+			uint64_t crc = ul_crc64_we(checksummed_data_start, checksummed_data_size);
+			return blkid_probe_verify_csum(pr, crc, le64_to_cpu(bcs->csum.crc64));
+		}
+		case BCACHEFS_SB_CSUM_TYPE_XXHASH: {
+			XXH64_hash_t xxh64 = XXH64(checksummed_data_start, checksummed_data_size, 0);
+			return blkid_probe_verify_csum(pr, xxh64, le64_to_cpu(bcs->csum.xxh64));
+		}
+		default:
+			DBG(LOWPROBE, ul_debug("bcachefs: unknown checksum type %d, ignoring.", checksum_type));
+			return 1;
+	}
+}
+
+static int probe_bcachefs(blkid_probe pr, const struct blkid_idmag *mag)
+{
+	const struct bcachefs_super_block *bcs;
+	const unsigned char *sb, *sb_end;
+	uint64_t sb_size, blocksize, offset_sectors;
+	uint16_t version;
+
+	bcs = blkid_probe_get_sb(pr, mag, struct bcachefs_super_block);
+	if (!bcs)
+		return errno ? -errno : BLKID_PROBE_NONE;
+
+	offset_sectors = blkid_probe_get_idmag_off(pr, mag) / BCACHEFS_SECTOR_SIZE;
+	if (le64_to_cpu(bcs->offset) != offset_sectors)
+		return BLKID_PROBE_NONE;
+
+	if (bcs->nr_devices == 0 || bcs->dev_idx >= bcs->nr_devices)
+		return BLKID_PROBE_NONE;
+
+	sb_size = BCACHEFS_SB_FIELDS_OFF + BYTES(bcs);
+
+	if (bcs->layout.sb_max_size_bits > BCACHEFS_SB_MAX_SIZE_SHIFT)
+		return BLKID_PROBE_NONE;
+
+	if (sb_size > (BCACHEFS_SECTOR_SIZE << bcs->layout.sb_max_size_bits))
+		return BLKID_PROBE_NONE;
+
+	sb = blkid_probe_get_sb_buffer(pr, mag, sb_size);
+	if (!sb)
+		return BLKID_PROBE_NONE;
+	sb_end = sb + sb_size;
+
+	if (!bcachefs_validate_checksum(pr, bcs, sb, sb_end))
+		return BLKID_PROBE_NONE;
+
+	blkid_probe_set_uuid(pr, bcs->user_uuid);
+	blkid_probe_set_label(pr, bcs->label, sizeof(bcs->label));
+	version = le16_to_cpu(bcs->version);
+	blkid_probe_sprintf_version(pr, "%"PRIu16".%"PRIu16,
+				    BCH_VERSION_MAJOR(version),
+				    BCH_VERSION_MINOR(version));
+	blocksize = le16_to_cpu(bcs->block_size);
+	blkid_probe_set_block_size(pr, blocksize * BCACHEFS_SECTOR_SIZE);
+	blkid_probe_set_fsblocksize(pr, blocksize * BCACHEFS_SECTOR_SIZE);
+	blkid_probe_set_wiper(pr, 0, BCACHE_SB_OFF);
+
+	probe_bcachefs_sb_fields(pr, bcs, sb, sb_end);
+
+	return BLKID_PROBE_OK;
+}
 
 const struct blkid_idinfo bcache_idinfo =
 {
@@ -125,12 +504,47 @@ const struct blkid_idinfo bcache_idinfo =
 	.minsz		= 8192,
 	.magics		=
 	{
-		{ .magic = BCACHE_SB_MAGIC
-		, .len   = BCACHE_SB_MAGIC_LEN
-		, .kboff = BCACHE_SB_KBOFF
-		, .sboff = BCACHE_SB_MAGIC_OFF
-		} ,
+		{
+			.magic = BCACHE_SB_MAGIC,
+			.len   = BCACHE_SB_MAGIC_LEN,
+			.kboff = BCACHE_SB_KBOFF,
+			.sboff = BCACHE_SB_MAGIC_OFF
+		},
 		{ NULL }
 	}
 };
 
+const struct blkid_idinfo bcachefs_idinfo =
+{
+	.name		= "bcachefs",
+	.usage		= BLKID_USAGE_FILESYSTEM,
+	.probefunc	= probe_bcachefs,
+	.minsz		= 256 * BCACHEFS_SECTOR_SIZE,
+	.magics		= {
+		{
+			.magic = BCACHE_SB_MAGIC,
+			.len   = BCACHE_SB_MAGIC_LEN,
+			.kboff = BCACHE_SB_KBOFF,
+			.sboff = BCACHE_SB_MAGIC_OFF,
+		},
+		{
+			.magic = BCACHEFS_SB_MAGIC,
+			.len   = BCACHE_SB_MAGIC_LEN,
+			.kboff = BCACHE_SB_KBOFF,
+			.sboff = BCACHE_SB_MAGIC_OFF,
+		},
+		{
+			.magic = BCACHEFS_SB_MAGIC,
+			.len   = BCACHE_SB_MAGIC_LEN,
+			.kboff = 1 << 11,
+			.sboff = BCACHE_SB_MAGIC_OFF,
+		},
+		{
+			.magic = BCACHEFS_SB_MAGIC,
+			.len   = BCACHE_SB_MAGIC_LEN,
+			.kboff = -(1 << 10),
+			.sboff = BCACHE_SB_MAGIC_OFF,
+		},
+		{ NULL }
+	}
+};

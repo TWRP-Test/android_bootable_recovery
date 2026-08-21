@@ -4,7 +4,7 @@
  * Copyright (C) 2001 by Andreas Dilger
  * Copyright (C) 2004 Kay Sievers <kay.sievers@vrfy.org>
  * Copyright (C) 2008 Karel Zak <kzak@redhat.com>
- * Copyright (C) 2012 Milan Broz <mbroz@redhat.com>
+ * Copyright (C) 2012 Milan Broz <gmazyland@gmail.com>
  *
  * This file may be redistributed under the terms of the
  * GNU Lesser General Public License.
@@ -76,11 +76,11 @@ static int probe_lvm2(blkid_probe pr, const struct blkid_idmag *mag)
 	int sector = mag->kboff << 1;
 	struct lvm2_pv_label_header *label;
 	char uuid[LVM2_ID_LEN + 7];
-	unsigned char *buf;
+	const unsigned char *buf;
 
 	buf = blkid_probe_get_buffer(pr,
 			mag->kboff << 10,
-			512 + sizeof(struct lvm2_pv_label_header));
+			512 + LVM2_LABEL_SIZE);
 	if (!buf)
 		return errno ? -errno : 1;
 
@@ -113,7 +113,7 @@ static int probe_lvm2(blkid_probe pr, const struct blkid_idmag *mag)
 	blkid_probe_set_version(pr, mag->magic);
 
 	/* LVM (pvcreate) wipes begin of the device -- let's remember this
-	 * to resolve conflicts bettween LVM and partition tables, ...
+	 * to resolve conflicts between LVM and partition tables, ...
 	 */
 	blkid_probe_set_wiper(pr, 0, 8 * 1024);
 
@@ -122,7 +122,7 @@ static int probe_lvm2(blkid_probe pr, const struct blkid_idmag *mag)
 
 static int probe_lvm1(blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct lvm1_pv_label_header *label;
+	const struct lvm1_pv_label_header *label;
 	char uuid[LVM2_ID_LEN + 7];
 	unsigned int version;
 
@@ -158,7 +158,7 @@ struct verity_sb {
 
 static int probe_verity(blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct verity_sb *sb;
+	const struct verity_sb *sb;
 	unsigned int version;
 
 	sb = blkid_probe_get_sb(pr, mag, struct verity_sb);
@@ -171,6 +171,32 @@ static int probe_verity(blkid_probe pr, const struct blkid_idmag *mag)
 
 	blkid_probe_set_uuid(pr, sb->uuid);
 	blkid_probe_sprintf_version(pr, "%u", version);
+	return 0;
+}
+
+struct integrity_sb {
+	uint8_t  magic[8];
+	uint8_t  version;
+	int8_t   log2_interleave_sectors;
+	uint16_t integrity_tag_size;
+	uint32_t journal_sections;
+	uint64_t provided_data_sectors;
+	uint32_t flags;
+	uint8_t  log2_sectors_per_block;
+} __attribute__ ((packed));
+
+static int probe_integrity(blkid_probe pr, const struct blkid_idmag *mag)
+{
+	const struct integrity_sb *sb;
+
+	sb = blkid_probe_get_sb(pr, mag, struct integrity_sb);
+	if (sb == NULL)
+		return errno ? -errno : 1;
+
+	if (!sb->version)
+		return 1;
+
+	blkid_probe_sprintf_version(pr, "%u", sb->version);
 	return 0;
 }
 
@@ -221,6 +247,18 @@ const struct blkid_idinfo verity_hash_idinfo =
 	.magics		=
 	{
 		{ .magic = "verity\0\0", .len = 8 },
+		{ NULL }
+	}
+};
+
+const struct blkid_idinfo integrity_idinfo =
+{
+	.name		= "DM_integrity",
+	.usage		= BLKID_USAGE_CRYPTO,
+	.probefunc	= probe_integrity,
+	.magics		=
+	{
+		{ .magic = "integrt\0", .len = 8 },
 		{ NULL }
 	}
 };

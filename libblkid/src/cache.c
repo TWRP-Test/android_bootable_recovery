@@ -23,6 +23,7 @@
 #endif
 #include "blkidP.h"
 #include "env.h"
+#include "loopdev.h"
 
 /**
  * SECTION:cache
@@ -86,7 +87,7 @@ char *blkid_get_cache_filename(struct blkid_config *conf)
  * @cache: pointer to return cache handler
  * @filename: path to the cache file or NULL for the default path
  *
- * Allocates and initialize librray cache handler.
+ * Allocates and initializes library cache handler.
  *
  * Returns: 0 on success or number less than zero in case of error.
  */
@@ -97,14 +98,10 @@ int blkid_get_cache(blkid_cache *ret_cache, const char *filename)
 	if (!ret_cache)
 		return -BLKID_ERR_PARAM;
 
-	blkid_init_debug(0);
-
-	DBG(CACHE, ul_debug("creating blkid cache (using %s)",
-				filename ? filename : "default cache"));
-
-	if (!(cache = (blkid_cache) calloc(1, sizeof(struct blkid_struct_cache))))
+	if (!(cache = calloc(1, sizeof(struct blkid_struct_cache))))
 		return -BLKID_ERR_MEM;
 
+	DBG(CACHE, ul_debugobj(cache, "alloc (from %s)", filename ? filename : "default cache"));
 	INIT_LIST_HEAD(&cache->bic_devs);
 	INIT_LIST_HEAD(&cache->bic_tags);
 
@@ -133,7 +130,7 @@ void blkid_put_cache(blkid_cache cache)
 
 	(void) blkid_flush_cache(cache);
 
-	DBG(CACHE, ul_debug("freeing cache struct"));
+	DBG(CACHE, ul_debugobj(cache, "freeing cache struct"));
 
 	/* DBG(CACHE, ul_debug_dump_cache(cache)); */
 
@@ -144,6 +141,7 @@ void blkid_put_cache(blkid_cache cache)
 		blkid_free_dev(dev);
 	}
 
+	DBG(CACHE, ul_debugobj(cache, "freeing cache tag heads"));
 	while (!list_empty(&cache->bic_tags)) {
 		blkid_tag tag = list_entry(cache->bic_tags.next,
 					   struct blkid_struct_tag,
@@ -154,7 +152,7 @@ void blkid_put_cache(blkid_cache cache)
 						   struct blkid_struct_tag,
 						   bit_names);
 
-			DBG(CACHE, ul_debug("warning: unfreed tag %s=%s",
+			DBG(CACHE, ul_debugobj(cache, "warning: unfreed tag %s=%s",
 						bad->bit_name, bad->bit_val));
 			blkid_free_tag(bad);
 		}
@@ -177,16 +175,28 @@ void blkid_gc_cache(blkid_cache cache)
 {
 	struct list_head *p, *pnext;
 	struct stat st;
+	int ret;
 
 	if (!cache)
 		return;
 
 	list_for_each_safe(p, pnext, &cache->bic_devs) {
 		blkid_dev dev = list_entry(p, struct blkid_struct_dev, bid_devs);
-		if (stat(dev->bid_name, &st) < 0) {
-			DBG(CACHE, ul_debug("freeing %s", dev->bid_name));
+
+		ret = stat(dev->bid_name, &st);
+		if (ret < 0) {
+			DBG(CACHE, ul_debugobj(cache, "freeing non-existing %s", dev->bid_name));
 			blkid_free_dev(dev);
 			cache->bic_flags |= BLKID_BIC_FL_CHANGED;
+
+#ifdef __linux__
+		} else if (is_loopdev(dev->bid_name)
+					&& !loopdev_has_backing_file(dev->bid_name)) {
+			/* remove empty loop device from cache */
+			DBG(CACHE, ul_debugobj(cache, "freeing empty loop device %s", dev->bid_name));
+			blkid_free_dev(dev);
+			cache->bic_flags |= BLKID_BIC_FL_CHANGED;
+#endif
 		} else {
 			DBG(CACHE, ul_debug("Device %s exists", dev->bid_name));
 		}

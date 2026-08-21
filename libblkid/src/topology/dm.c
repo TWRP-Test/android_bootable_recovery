@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -30,15 +29,15 @@ static int is_dm_device(dev_t devno)
 static int probe_dm_tp(blkid_probe pr,
 		const struct blkid_idmag *mag __attribute__((__unused__)))
 {
-	const char *paths[] = {
+	const char * const paths[] = {
 		"/usr/local/sbin/dmsetup",
 		"/usr/sbin/dmsetup",
 		"/sbin/dmsetup"
 	};
-	int dmpipe[] = { -1, -1 }, stripes, stripesize;
-	char *cmd = NULL;
+	int dmpipe[] = { -1, -1 }, stripes = 0, stripesize = 0;
+	const char *cmd = NULL;
 	FILE *stream = NULL;
-	long long  offset, size;
+	long long  offset = 0, size = 0;
 	size_t i;
 	dev_t devno = blkid_probe_get_devno(pr);
 
@@ -50,7 +49,7 @@ static int probe_dm_tp(blkid_probe pr,
 	for (i = 0; i < ARRAY_SIZE(paths); i++) {
 		struct stat sb;
 		if (stat(paths[i], &sb) == 0) {
-			cmd = (char *) paths[i];
+			cmd = paths[i];
 			break;
 		}
 	}
@@ -65,7 +64,8 @@ static int probe_dm_tp(blkid_probe pr,
 	switch (fork()) {
 	case 0:
 	{
-		char *dmargv[7], maj[16], min[16];
+		const char *dmargv[7];
+	        char maj[16], min[16];
 
 		/* Plumbing */
 		close(dmpipe[0]);
@@ -73,11 +73,8 @@ static int probe_dm_tp(blkid_probe pr,
 		if (dmpipe[1] != STDOUT_FILENO)
 			dup2(dmpipe[1], STDOUT_FILENO);
 
-		/* The libblkid library could linked with setuid programs */
-		if (setgid(getgid()) < 0)
-			 exit(1);
-		if (setuid(getuid()) < 0)
-			 exit(1);
+		if (drop_permissions() != 0)
+			 _exit(1);
 
 		snprintf(maj, sizeof(maj), "%d", major(devno));
 		snprintf(min, sizeof(min), "%d", minor(devno));
@@ -90,7 +87,7 @@ static int probe_dm_tp(blkid_probe pr,
 		dmargv[5] = min;
 		dmargv[6] = NULL;
 
-		execv(dmargv[0], dmargv);
+		execv(dmargv[0], (char * const *) dmargv);
 
 		DBG(LOWPROBE, ul_debug("Failed to execute %s: errno=%d", cmd, errno));
 		exit(1);
@@ -106,15 +103,18 @@ static int probe_dm_tp(blkid_probe pr,
 	if (!stream)
 		goto nothing;
 
+	if (dmpipe[1] != -1) {
+		close(dmpipe[1]);
+	}
+
 	if (fscanf(stream, "%lld %lld striped %d %d ",
-			&offset, &size, &stripes, &stripesize) != 0)
+			&offset, &size, &stripes, &stripesize) != 4)
 		goto nothing;
 
 	blkid_topology_set_minimum_io_size(pr, stripesize << 9);
 	blkid_topology_set_optimal_io_size(pr, (stripes * stripesize) << 9);
 
 	fclose(stream);
-	close(dmpipe[1]);
 	return 0;
 
 nothing:
@@ -122,8 +122,6 @@ nothing:
 		fclose(stream);
 	else if (dmpipe[0] != -1)
 		close(dmpipe[0]);
-	if (dmpipe[1] != -1)
-		close(dmpipe[1]);
 	return 1;
 }
 

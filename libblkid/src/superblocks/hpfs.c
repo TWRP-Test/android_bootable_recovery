@@ -60,9 +60,9 @@ struct hpfs_spare_super
 
 static int probe_hpfs(blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct hpfs_super_block *hs;
-	struct hpfs_spare_super *hss;
-	struct hpfs_boot_block *hbb;
+	const struct hpfs_super_block *hs;
+	const struct hpfs_spare_super *hss;
+	const struct hpfs_boot_block *hbb;
 	uint8_t version;
 
 	/* super block */
@@ -99,6 +99,8 @@ static int probe_hpfs(blkid_probe pr, const struct blkid_idmag *mag)
 				hbb->vol_serno[1], hbb->vol_serno[0]);
 	}
 	blkid_probe_sprintf_version(pr, "%u", version);
+	blkid_probe_set_fsblocksize(pr, 512);
+	blkid_probe_set_block_size(pr, 512);
 
 	return 0;
 }

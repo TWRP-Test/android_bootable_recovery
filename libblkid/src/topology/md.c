@@ -17,7 +17,6 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -122,11 +121,11 @@ static int probe_md_tp(blkid_probe pr,
 	switch (md.level) {
 	case 6:
 		md.raid_disks--;
-		/* fallthrough */
+		FALLTHROUGH;
 	case 5:
 	case 4:
 		md.raid_disks--;
-		/* fallthrough */
+		FALLTHROUGH;
 	case 1:
 	case 0:
 	case 10:
@@ -136,7 +135,7 @@ static int probe_md_tp(blkid_probe pr,
 	}
 
 	blkid_topology_set_minimum_io_size(pr, md.chunk_size);
-	blkid_topology_set_optimal_io_size(pr, md.chunk_size * md.raid_disks);
+	blkid_topology_set_optimal_io_size(pr, (unsigned long) md.chunk_size * md.raid_disks);
 
 	return 0;
 

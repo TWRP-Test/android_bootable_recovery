@@ -29,8 +29,6 @@ static int probe_highpoint45x(blkid_probe pr,
 	uint64_t off;
 	uint32_t magic;
 
-	if (pr->size < 0x10000)
-		return 1;
 	if (!S_ISREG(pr->mode) && !blkid_probe_is_wholedisk(pr))
 		return 1;
 
@@ -62,6 +60,7 @@ static int probe_highpoint37x(blkid_probe pr,
 const struct blkid_idinfo highpoint45x_idinfo = {
 	.name		= "hpt45x_raid_member",
 	.usage		= BLKID_USAGE_RAID,
+	.minsz		= 0x10000,
 	.probefunc	= probe_highpoint45x,
 	.magics		= BLKID_NONE_MAGIC
 };
@@ -72,7 +71,7 @@ const struct blkid_idinfo highpoint37x_idinfo = {
 	.probefunc	= probe_highpoint37x,
 	.magics		= {
 		/*
-		 * Superblok offset:                      4608 bytes  (9 sectors)
+		 * Superblock offset:                     4608 bytes  (9 sectors)
 		 * Magic string offset within superblock:   32 bytes
 		 *
 		 * kboff = (4608 + 32) / 1024

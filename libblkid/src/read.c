@@ -32,18 +32,6 @@
 # include <stdlib.h>
 #endif
 
-#ifdef HAVE_STRTOULL
-#define STRTOULL strtoull /* defined in stdlib.h if you try hard enough */
-#else
-/* FIXME: need to support real strtoull here */
-#define STRTOULL strtoul
-#endif
-
-#ifdef TEST_PROGRAM
-#define blkid_debug_dump_dev(dev)	(debug_dump_dev(dev))
-static void debug_dump_dev(blkid_dev dev);
-#endif
-
 /*
  * File format:
  *
@@ -199,8 +187,12 @@ static int parse_dev(blkid_cache cache, blkid_dev *dev, char **cp)
 	start = skip_over_blank(start + 1);
 	end = skip_over_word(start);
 
-	DBG(READ, ul_debug("device should be %*s",
-			       (int)(end - start), start));
+	ON_DBG(READ, {
+		char c = *end;
+		*end = '\0';
+		ul_debug("device should be %s", start);
+		*end = c;
+	});
 
 	if (**cp == '>')
 		*cp = end;
@@ -289,26 +281,6 @@ static int parse_token(char **name, char **value, char **cp)
 }
 
 /*
- * Extract a tag of the form <NAME>value</NAME> from the line.
- */
-/*
-static int parse_xml(char **name, char **value, char **cp)
-{
-	char *end;
-
-	if (!name || !value || !cp)
-		return -BLKID_ERR_PARAM;
-
-	*name = strip_line(*cp);
-
-	if ((*name)[0] != '<' || (*name)[1] == '/')
-		return 0;
-
-	FIXME: finish this.
-}
-*/
-
-/*
  * Extract a tag from the line.
  *
  * Return 1 if a valid tag was found.
@@ -324,24 +296,32 @@ static int parse_tag(blkid_cache cache, blkid_dev dev, char **cp)
 	if (!cache || !dev)
 		return -BLKID_ERR_PARAM;
 
-	if ((ret = parse_token(&name, &value, cp)) <= 0 /* &&
-	    (ret = parse_xml(&name, &value, cp)) <= 0 */)
+	if ((ret = parse_token(&name, &value, cp)) <= 0)
 		return ret;
 
+	DBG(READ, ul_debug("tag: %s=\"%s\"", name, value));
+
+	errno = 0;
+
 	/* Some tags are stored directly in the device struct */
-	if (!strcmp(name, "DEVNO"))
-		dev->bid_devno = STRTOULL(value, 0, 0);
-	else if (!strcmp(name, "PRI"))
-		dev->bid_pri = strtol(value, 0, 0);
-	else if (!strcmp(name, "TIME")) {
+	if (!strcmp(name, "DEVNO")) {
+		dev->bid_devno = strtoull(value, NULL, 0);
+		if (errno)
+			return -errno;
+	} else if (!strcmp(name, "PRI")) {
+		dev->bid_pri = strtol(value, NULL, 0);
+		if (errno)
+			return -errno;
+	} else if (!strcmp(name, "TIME")) {
 		char *end = NULL;
-		dev->bid_time = STRTOULL(value, &end, 0);
-		if (end && *end == '.')
-			dev->bid_utime = STRTOULL(end + 1, 0, 0);
+
+		dev->bid_time = strtoull(value, &end, 0);
+		if (errno == 0 && end && *end == '.')
+			dev->bid_utime = strtoull(end + 1, NULL, 0);
+		if (errno)
+			return -errno;
 	} else
 		ret = blkid_set_tag(dev, name, value, strlen(value));
-
-	DBG(READ, ul_debug("    tag: %s=\"%s\"", name, value));
 
 	return ret < 0 ? ret : 1;
 }
@@ -383,8 +363,6 @@ static int blkid_parse_line(blkid_cache cache, blkid_dev *dev_p, char *cp)
 		blkid_free_dev(dev);
 		goto done;
 	}
-
-	DBG(READ, blkid_debug_dump_dev(dev));
 
 done:
 	return ret;
@@ -455,35 +433,9 @@ void blkid_read_cache(blkid_cache cache)
 	return;
 errout:
 	close(fd);
-	return;
 }
 
 #ifdef TEST_PROGRAM
-static void debug_dump_dev(blkid_dev dev)
-{
-	struct list_head *p;
-
-	if (!dev) {
-		printf("  dev: NULL\n");
-		return;
-	}
-
-	printf("  dev: name = %s\n", dev->bid_name);
-	printf("  dev: DEVNO=\"0x%0llx\"\n", (long long)dev->bid_devno);
-	printf("  dev: TIME=\"%ld.%ld\"\n", (long)dev->bid_time, (long)dev->bid_utime);
-	printf("  dev: PRI=\"%d\"\n", dev->bid_pri);
-	printf("  dev: flags = 0x%08X\n", dev->bid_flags);
-
-	list_for_each(p, &dev->bid_tags) {
-		blkid_tag tag = list_entry(p, struct blkid_struct_tag, bit_tags);
-		if (tag)
-			printf("    tag: %s=\"%s\"\n", tag->bit_name,
-			       tag->bit_val);
-		else
-			printf("    tag: NULL\n");
-	}
-	printf("\n");
-}
 
 int main(int argc, char**argv)
 {

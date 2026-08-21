@@ -1,4 +1,6 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
  * Terminology:
  *
  *	cpuset	- (libc) cpu_set_t data structure represents set of CPUs
@@ -20,7 +22,9 @@
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
+#endif
 
 #include "cpuset.h"
 #include "c.h"
@@ -29,23 +33,21 @@ static inline int val_to_char(int v)
 {
 	if (v >= 0 && v < 10)
 		return '0' + v;
-	else if (v >= 10 && v < 16)
+	if (v >= 10 && v < 16)
 		return ('a' - 10) + v;
-	else
-		return -1;
+	return -1;
 }
 
 static inline int char_to_val(int c)
 {
 	int cl;
 
-	cl = tolower(c);
 	if (c >= '0' && c <= '9')
 		return c - '0';
-	else if (cl >= 'a' && cl <= 'f')
+	cl = tolower(c);
+	if (cl >= 'a' && cl <= 'f')
 		return cl + (10 - 'a');
-	else
-		return -1;
+	return -1;
 }
 
 static const char *nexttoken(const char *q,  int sep)
@@ -96,8 +98,10 @@ int get_max_number_of_cpus(void)
  */
 cpu_set_t *cpuset_alloc(int ncpus, size_t *setsize, size_t *nbits)
 {
-	cpu_set_t *set = CPU_ALLOC(ncpus);
+	cpu_set_t *set = NULL;
 
+	if (ncpus)
+		set = CPU_ALLOC(ncpus);
 	if (!set)
 		return NULL;
 	if (setsize)
@@ -146,45 +150,69 @@ int __cpuset_count_s(size_t setsize, const cpu_set_t *set)
 #endif
 
 /*
+ * Finds the first CPU present after the specified index.
+ *
+ * start: starting index, inclusive.
+ * setsize: size of the set in *bytes*.
+ * set: CPU set to search.
+ *
+ * Return: the index of the first CPU present in `set`, starting at `start`.
+ * If no such CPU exists, returns the size of the set in *bits*.
+ */
+static size_t find_next_cpu(size_t start, size_t setsize, cpu_set_t *set)
+{
+	size_t nbits = cpuset_nbits(setsize);
+	for (; start < nbits; start++)
+		if (CPU_ISSET_S(start, setsize, set))
+			return start;
+	return start;
+}
+
+/*
  * Returns human readable representation of the cpuset. The output format is
- * a list of CPUs with ranges (for example, "0,1,3-9").
+ * a list of CPUs with ranges (for example, "0,1,3-9:3").
  */
 char *cpulist_create(char *str, size_t len,
 			cpu_set_t *set, size_t setsize)
 {
-	size_t i;
 	char *ptr = str;
 	int entry_made = 0;
 	size_t max = cpuset_nbits(setsize);
+	size_t a = 0;  /* min for cpu range */
+	size_t next = 0;  /* where to start looking for next cpu */
 
-	for (i = 0; i < max; i++) {
-		if (CPU_ISSET_S(i, setsize, set)) {
-			int rlen;
-			size_t j, run = 0;
-			entry_made = 1;
-			for (j = i + 1; j < max; j++) {
-				if (CPU_ISSET_S(j, setsize, set))
-					run++;
-				else
-					break;
+	while ((a = find_next_cpu(next, setsize, set)) < max) {
+		int rlen;
+		next = find_next_cpu(a + 1, setsize, set);
+		if (next == max) {
+			rlen = snprintf(ptr, len, "%zu,", a);
+		} else {
+			/* Extend range as long as we have the same stride. */
+			size_t b = next;
+			size_t s = b - a;
+			while (((next = find_next_cpu(b + 1, setsize, set)) <
+				max) && next - b == s) {
+				b = next;
 			}
-			if (!run)
-				rlen = snprintf(ptr, len, "%zd,", i);
-			else if (run == 1) {
-				rlen = snprintf(ptr, len, "%zd,%zd,", i, i + 1);
-				i++;
+			if (b - a == s) {
+				/*
+				 * Only print one CPU.  Hope the next one can
+				 * be put in the next range.
+				 */
+				rlen = snprintf(ptr, len, "%zu,", a);
+				next = b;
+			} else if (s == 1) {
+				rlen = snprintf(ptr, len, "%zu-%zu,", a, b);
 			} else {
-				rlen = snprintf(ptr, len, "%zd-%zd,", i, i + run);
-				i += run;
+				rlen = snprintf(ptr, len, "%zu-%zu:%zu,",
+						a, b, s);
 			}
-			if (rlen < 0 || (size_t) rlen + 1 > len)
-				return NULL;
-			ptr += rlen;
-			if (rlen > 0 && len > (size_t) rlen)
-				len -= rlen;
-			else
-				len = 0;
 		}
+		if (rlen < 0 || (size_t) rlen >= len)
+			return NULL;
+		ptr += rlen;
+		len -= rlen;
+		entry_made = 1;
 	}
 	ptr -= entry_made;
 	*ptr = '\0';
@@ -258,11 +286,23 @@ int cpumask_parse(const char *str, cpu_set_t *set, size_t setsize)
 			CPU_SET_S(cpu + 2, setsize, set);
 		if (val & 8)
 			CPU_SET_S(cpu + 3, setsize, set);
-		len--;
 		ptr--;
 		cpu += 4;
 	}
 
+	return 0;
+}
+
+static int nextnumber(const char *str, char **end, unsigned int *result)
+{
+	errno = 0;
+	if (str == NULL || *str == '\0' || !isdigit(*str))
+		return -EINVAL;
+	*result = (unsigned int) strtoul(str, end, 10);
+	if (errno)
+		return -errno;
+	if (str == *end)
+		return -EINVAL;
 	return 0;
 }
 
@@ -276,9 +316,9 @@ int cpumask_parse(const char *str, cpu_set_t *set, size_t setsize)
  */
 int cpulist_parse(const char *str, cpu_set_t *set, size_t setsize, int fail)
 {
-	size_t max = cpuset_nbits(setsize);
+	const size_t max = cpuset_nbits(setsize);
 	const char *p, *q;
-	int r = 0;
+	char *end = NULL;
 
 	q = str;
 	CPU_ZERO_S(setsize, set);
@@ -288,21 +328,24 @@ int cpulist_parse(const char *str, cpu_set_t *set, size_t setsize, int fail)
 		unsigned int b;	/* end of range */
 		unsigned int s;	/* stride */
 		const char *c1, *c2;
-		char c;
 
-		if ((r = sscanf(p, "%u%c", &a, &c)) < 1)
+		if (nextnumber(p, &end, &a) != 0)
 			return 1;
 		b = a;
 		s = 1;
+		p = end;
 
 		c1 = nexttoken(p, '-');
 		c2 = nexttoken(p, ',');
+
 		if (c1 != NULL && (c2 == NULL || c1 < c2)) {
-			if ((r = sscanf(c1, "%u%c", &b, &c)) < 1)
+			if (nextnumber(c1, &end, &b) != 0)
 				return 1;
-			c1 = nexttoken(c1, ':');
+
+			c1 = end && *end ? nexttoken(end, ':') : NULL;
+
 			if (c1 != NULL && (c2 == NULL || c1 < c2)) {
-				if ((r = sscanf(c1, "%u%c", &s, &c)) < 1)
+				if (nextnumber(c1, &end, &s) != 0)
 					return 1;
 				if (s == 0)
 					return 1;
@@ -312,19 +355,23 @@ int cpulist_parse(const char *str, cpu_set_t *set, size_t setsize, int fail)
 		if (!(a <= b))
 			return 1;
 		while (a <= b) {
-			if (fail && (a >= max))
-				return 2;
+			if (a >= max) {
+				if (fail)
+					return 2;
+				else
+					break;
+			}
 			CPU_SET_S(a, setsize, set);
 			a += s;
 		}
 	}
 
-	if (r == 2)
+	if (end && *end)
 		return 1;
 	return 0;
 }
 
-#ifdef TEST_PROGRAM
+#ifdef TEST_PROGRAM_CPUSET
 
 #include <getopt.h>
 
@@ -336,10 +383,10 @@ int main(int argc, char *argv[])
 	int ncpus = 2048, rc, c;
 
 	static const struct option longopts[] = {
-	    { "ncpus", 1, 0, 'n' },
-	    { "mask",  1, 0, 'm' },
-	    { "range", 1, 0, 'r' },
-	    { NULL,    0, 0, 0 }
+	    { "ncpus", 1, NULL, 'n' },
+	    { "mask",  1, NULL, 'm' },
+	    { "range", 1, NULL, 'r' },
+	    { NULL,    0, NULL, 0 }
 	};
 
 	while ((c = getopt_long(argc, argv, "n:m:r:", longopts, NULL)) != -1) {
@@ -396,7 +443,7 @@ int main(int argc, char *argv[])
 
 usage_err:
 	fprintf(stderr,
-		"usage: %s [--ncpus <num>] --mask <mask> | --range <list>",
+		"usage: %s [--ncpus <num>] --mask <mask> | --range <list>\n",
 		program_invocation_short_name);
 	exit(EXIT_FAILURE);
 }

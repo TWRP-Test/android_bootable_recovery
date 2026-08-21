@@ -71,11 +71,15 @@ static uint16_t silraid_checksum(struct silicon_metadata *sil)
 {
 	int sum = 0;
 	unsigned short count = offsetof(struct silicon_metadata, checksum1) / 2;
-	uint16_t *p = (uint16_t *) sil;
+	unsigned char *ptr = (unsigned char *) sil;
 
 	while (count--) {
-		uint16_t x = *p++;
-		sum += le16_to_cpu(x);
+		uint16_t val;
+
+		memcpy(&val, ptr, sizeof(uint16_t));
+		sum += le16_to_cpu(val);
+
+		ptr += sizeof(uint16_t);
 	}
 
 	return (-sum & 0xFFFF);
@@ -87,8 +91,6 @@ static int probe_silraid(blkid_probe pr,
 	uint64_t off;
 	struct silicon_metadata *sil;
 
-	if (pr->size < 0x10000)
-		return 1;
 	if (!S_ISREG(pr->mode) && !blkid_probe_is_wholedisk(pr))
 		return 1;
 
@@ -123,6 +125,7 @@ static int probe_silraid(blkid_probe pr,
 const struct blkid_idinfo silraid_idinfo = {
 	.name		= "silicon_medley_raid_member",
 	.usage		= BLKID_USAGE_RAID,
+	.minsz		= 0x10000,
 	.probefunc	= probe_silraid,
 	.magics		= BLKID_NONE_MAGIC
 };

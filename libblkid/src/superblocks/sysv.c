@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008 Karel Zak <kzak@redhat.com>
  *
- * This is written from sratch according to Linux kernel fs/sysv/super.c file.
+ * This is written from scratch according to Linux kernel fs/sysv/super.c file.
  * It seems that sysv probing code in libvolume_id and also in the original
  * blkid is useless.
  *
@@ -76,7 +76,7 @@ struct sysv_super_block
 
 static int probe_xenix(blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct xenix_super_block *sb;
+	const struct xenix_super_block *sb;
 
 	sb = blkid_probe_get_sb(pr, mag, struct xenix_super_block);
 	if (!sb)
@@ -146,8 +146,8 @@ const struct blkid_idinfo sysv_idinfo =
 	.usage		= BLKID_USAGE_FILESYSTEM,
 	.probefunc	= probe_sysv,
 
-	/* SYSV is BE and LE and superblock could be on four positions. It's
-	 * simpler to probe for the magic string by .probefunc().
+	/* SYSV is BE and LE, and superblock could be one of four positions.
+	 * So it's simpler to probe for the magic string via .probefunc().
 	 */
 	.magics		= BLKID_NONE_MAGIC
 };
