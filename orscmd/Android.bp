@@ -1,0 +1,15 @@
+cc_binary {
+    name: "orscmd",
+    stem: "twrp",
+    recovery: true,
+
+    srcs: [
+        "orscmd.cpp",
+    ],
+
+    cflags: [
+        "-W",
+    ],
+
+    pack_relocations: false,
+}

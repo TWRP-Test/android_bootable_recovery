@@ -32,7 +32,7 @@
 #include "../variables.h"
 
 void print_version(void) {
-	printf("TWRP openrecoveryscript command line tool, TWRP version %s\n\n", TW_VERSION_STR);
+	printf("TWRP openrecoveryscript command line tool, TWRP version %s\n\n", TW_MAIN_VERSION_STR);
 }
 
 void print_usage(void) {

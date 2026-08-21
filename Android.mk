@@ -749,9 +749,5 @@ endif
 ifeq ($(BUILD_ID), GINGERBREAD)
     TW_NO_EXFAT := true
 endif
-ifneq ($(TW_OEM_BUILD),true)
-    include $(commands_TWRP_local_path)/orscmd/Android.mk
-endif
-
 
 commands_TWRP_local_path :=
