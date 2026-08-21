@@ -73,7 +73,6 @@ cc_library_static {
         "install.cpp",
         "installcommand.cpp",
         "package.cpp",
-        "tw_atomic.cpp",
         "twinstall.cpp",
         "verifier.cpp",
     ],
