@@ -19,7 +19,7 @@
 #ifndef __TWRP_DIGEST_DRIVER
 #define __TWRP_DIGEST_DRIVER
 #include <string>
-#include "twrpDigest/twrpDigest.hpp"
+#include "twrpdigest/twrpDigest.hpp"
 
 class twrpDigestDriver {
 public:

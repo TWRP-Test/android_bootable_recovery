@@ -22,8 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "twrpDigest/twrpDigest.hpp"
-
 #ifndef BUILD_TWRPTAR_MAIN
 #include "partitions.hpp"
 #endif

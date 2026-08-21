@@ -21,10 +21,7 @@
 
 #include <string>
 #include "twrpDigest.hpp"
-
-extern "C" {
-	#include "digest/md5/md5.h"
-}
+#include <openssl/md5.h>
 
 class twrpMD5: public twrpDigest {
 public:
@@ -35,8 +32,8 @@ public:
 	void finalize();                                                      // Finalize and compute MD5
 
 private:
-	struct MD5Context md5c;                                               // MD5 control structure
-	unsigned char md5sum[MD5LENGTH];                                      // Stores the md5sum computation
+	MD5_CTX md5c;
+	unsigned char md5sum[MD5_DIGEST_LENGTH];
 };
 
 #endif //__TWRPMD5_H

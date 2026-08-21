@@ -16,9 +16,6 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <vector>
-#include <string>
-#include <sstream>
 #include <string>
 #include <openssl/sha.h>
 #include "twrpDigest.hpp"
@@ -43,27 +40,5 @@ void twrpSHA256::finalize(void) {
 std::string twrpSHA256::return_digest_string(void) {
 	twrpSHA256::finalize();
 	std::string digest_str = twrpDigest::hexify(sha256_store, SHA256_DIGEST_LENGTH);
-	return digest_str;
-}
-
-twrpSHA512::twrpSHA512() {
-	twrpSHA512::init();
-}
-
-void twrpSHA512::init(void) {
-	SHA512_Init(&sha512_ctx);
-}
-
-void twrpSHA512::update(const unsigned char* stream, size_t len) {
-	SHA512_Update(&sha512_ctx, stream, len);
-}
-
-void twrpSHA512::finalize(void) {
-	SHA512_Final(sha512_store, &sha512_ctx);
-}
-
-std::string twrpSHA512::return_digest_string(void) {
-	twrpSHA512::finalize();
-	std::string digest_str = twrpDigest::hexify(sha512_store, SHA512_DIGEST_LENGTH);
 	return digest_str;
 }

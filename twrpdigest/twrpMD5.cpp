@@ -16,10 +16,6 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <vector>
-#include <string>
-//#include <sstream>
-#include "twrpDigest.hpp"
 #include "twrpMD5.hpp"
 
 twrpMD5::twrpMD5() {
@@ -27,15 +23,15 @@ twrpMD5::twrpMD5() {
 }
 
 void twrpMD5::init() {
-	MD5Init(&md5c);
+	MD5_Init(&md5c);
 }
 
 void twrpMD5::update(const unsigned char* stream, size_t len) {
-	MD5Update(&md5c, stream, len);
+	MD5_Update(&md5c, stream, len);
 }
 
 void twrpMD5::finalize() {
-	MD5Final(md5sum, &md5c);
+	MD5_Final(md5sum, &md5c);
 }
 
 std::string twrpMD5::return_digest_string() {

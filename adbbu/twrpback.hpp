@@ -18,7 +18,9 @@
 #define _TWRPBACK_HPP
 
 #include <fstream>
-#include "../twrpDigest/twrpMD5.hpp"
+#include <string>
+
+class twrpMD5;
 
 class twrpback {
 public:

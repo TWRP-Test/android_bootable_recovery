@@ -1,0 +1,24 @@
+cc_library_shared {
+    name: "libtwrpdigest",
+
+    srcs: [
+        "twrpDigest.cpp",
+        "twrpMD5.cpp",
+        "twrpSHA.cpp",
+    ],
+
+    shared_libs: [
+        "libc++",
+        "libcrypto",
+    ],
+
+    export_shared_lib_headers: [
+        "libcrypto",
+    ],
+
+    cflags: [
+        "-fno-strict-aliasing",
+    ],
+
+    recovery_available: true,
+}

@@ -37,8 +37,7 @@
 #include "twadbstream.h"
 #include "twrpback.hpp"
 #include "libtwadbbu.hpp"
-#include "../twrpDigest/twrpDigest.hpp"
-#include "../twrpDigest/twrpMD5.hpp"
+#include "../twrpdigest/twrpMD5.hpp"
 #include "../twrpAdbBuFifo.hpp"
 
 twrpback::twrpback(void) {

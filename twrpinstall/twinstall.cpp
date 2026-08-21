@@ -46,8 +46,6 @@
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twrpDigestDriver.hpp"
-#include "twrpDigest/twrpDigest.hpp"
-#include "twrpDigest/twrpMD5.hpp"
 #include "twrp-functions.hpp"
 #include "gui/gui.hpp"
 #include "gui/pages.hpp"

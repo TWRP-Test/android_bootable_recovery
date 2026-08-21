@@ -36,19 +36,4 @@ private:
 	SHA256_CTX sha256_ctx;                                   // Initialize the SHA256 control structure
 };
 
-class twrpSHA512: public twrpDigest {
-public:
-	twrpSHA512();                                            // Initialize the SHA512 digest for streaming activities only
-	void init();                                             // Initialize the SHA512 digest algorithm
-
-protected:
-	void update(const unsigned char* stream, size_t len);    // Update the SHA512 digest stream
-	void finalize();                                         // Finalize the SHA512 digest for computation
-	std::string return_digest_string();                      // Return the digest string computed to the callee
-
-private:
-	uint8_t sha512_store[SHA512_DIGEST_LENGTH];              // Initialize the SHA512 digest array that holds the computation
-	SHA512_CTX sha512_ctx;                                   // Initialize the SHA512 control structure
-};
-
 #endif //__TWRPSHA_H

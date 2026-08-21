@@ -28,9 +28,9 @@
 #include "twcommon.h"
 #include "variables.h"
 #include "gui/gui.hpp"
-#include "twrpDigest/twrpDigest.hpp"
-#include "twrpDigest/twrpMD5.hpp"
-#include "twrpDigest/twrpSHA.hpp"
+#include "twrpdigest/twrpDigest.hpp"
+#include "twrpdigest/twrpMD5.hpp"
+#include "twrpdigest/twrpSHA.hpp"
 
 
 bool twrpDigestDriver::Check_File_Digest(const string& Filename) {
@@ -38,8 +38,6 @@ bool twrpDigestDriver::Check_File_Digest(const string& Filename) {
 	string digestfile = Filename, file_name = Filename;
 	string digest_str;
 	bool use_sha2 = false;
-
-#ifndef TW_NO_SHA2_LIBRARY
 
 	digestfile += ".sha2";
 	if (TWFunc::Path_Exists(digestfile)) {
@@ -59,14 +57,6 @@ bool twrpDigestDriver::Check_File_Digest(const string& Filename) {
 			}
 		}
 	}
-#else
-	digest = new twrpMD5();
-	digestfile = Filename + ".md5";
-	if (!TWFunc::Path_Exists(digestfile)) {
-		digestfile = Filename + ".md5sum";
-	}
-
-#endif
 
 	if (!TWFunc::Path_Exists(digestfile)) {
 		delete digest;
@@ -128,15 +118,9 @@ bool twrpDigestDriver::Write_Digest(string Full_Filename) {
 	twrpDigest *digest;
 	string digest_filename, digest_str;
 	int use_sha2;
-
-#ifdef TW_NO_SHA2_LIBRARY
-	use_sha2 = 0;
-#else
 	DataManager::GetValue(TW_USE_SHA2, use_sha2);
-#endif
 
 	if (use_sha2) {
-#ifndef TW_NO_SHA2_LIBRARY
 		digest = new twrpSHA256();
 		digest_filename = Full_Filename + ".sha2";
 		if (!stream_file_to_digest(Full_Filename, digest)) {
@@ -149,7 +133,6 @@ bool twrpDigestDriver::Write_Digest(string Full_Filename) {
 			return false;
 		}
 		LOGINFO("SHA2 Digest: %s  %s\n", digest_str.c_str(), TWFunc::Get_Filename(Full_Filename).c_str());
-#endif
 	}
 	else  {
 		digest = new twrpMD5();
