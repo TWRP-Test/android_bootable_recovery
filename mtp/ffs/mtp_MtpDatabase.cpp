@@ -763,14 +763,12 @@ int IMtpDatabase::openFilePath(const char* path, bool transcode) {
 
 MtpProperty* IMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) {
   MtpProperty* result = NULL;
-  bool writable = false;
   switch (property) {
 	case MTP_DEVICE_PROPERTY_SYNCHRONIZATION_PARTNER:
 	case MTP_DEVICE_PROPERTY_DEVICE_FRIENDLY_NAME:
-	  writable = true;
-	  // fall through
 	case MTP_DEVICE_PROPERTY_IMAGE_SIZE:
-	  result = new MtpProperty(property, MTP_TYPE_STR, writable);
+	  result = new MtpProperty(property, MTP_TYPE_STR,
+							   property != MTP_DEVICE_PROPERTY_IMAGE_SIZE);
 
 	  // get current value
 	  // TODO: add actual values
