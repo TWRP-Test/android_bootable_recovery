@@ -134,7 +134,6 @@ ifeq ($(TW_OEM_BUILD),true)
     TW_EXCLUDE_TZDATA := true
     TW_EXCLUDE_NANO := true
     TW_EXCLUDE_BASH := true
-    TW_EXCLUDE_ZIP := true
 endif
 
 ifeq ($(AB_OTA_UPDATER),true)
@@ -589,15 +588,6 @@ TWRP_REQUIRED_MODULES += \
     android.system.keystore2-service.xml \
     keystore2.rc \
     plat_keystore2_key_contexts
-endif
-
-ifneq ($(wildcard external/zip/Android.mk),)
-ifneq ($(TW_EXCLUDE_ZIP), true)
-    TWRP_REQUIRED_MODULES += zip
-endif
-endif
-ifneq ($(wildcard external/unzip/Android.mk),)
-    TWRP_REQUIRED_MODULES += unzip
 endif
 
 ifneq ($(TW_NO_EXFAT), true)
