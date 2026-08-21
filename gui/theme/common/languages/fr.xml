@@ -550,6 +550,7 @@
         <string name="restoring_hdr">Restauration en cours</string>
         <string name="recreate_folder_err">Incapable de recréer le dossier {1}.</string>
         <string name="img_size_err">La taille de l'image est plus grande que la cible</string>
+        <string name="sparse_import_err">Échec de l'importation de l'image sparse '{1}'</string>
         <string name="flashing">Écriture de {1}...</string>
         <string name="backup_folder">Dossier de sauvegarde à '{1}'</string>
         <string name="locate_backup_err">Impossible de localiser la sauvegarde '{1}'</string>

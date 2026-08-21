@@ -106,6 +106,7 @@ LOCAL_C_INCLUDES += \
     system/core/fs_mgr \
     system/gsid/include \
     system/core/libsparse \
+    system/core/libsparse/include \
     external/freetype/include \
     $(LOCAL_PATH)/gui/include \
     $(LOCAL_PATH)/recovery_ui/include \
@@ -511,7 +512,6 @@ TWRP_REQUIRED_MODULES += \
     fatlabel \
     mkfs.fat \
     permissive.sh \
-    simg2img_twrp \
     libbootloader_message \
     init.recovery.hlthchrg.rc \
     init.recovery.service.rc \
@@ -752,7 +752,6 @@ include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
     $(commands_TWRP_local_path)/dosfstools/Android.mk \
     $(commands_TWRP_local_path)/etc/Android.mk \
-    $(commands_TWRP_local_path)/simg2img/Android.mk \
     $(commands_TWRP_local_path)/attr/Android.mk
 
 ifneq ($(TW_OZIP_DECRYPT_KEY),)

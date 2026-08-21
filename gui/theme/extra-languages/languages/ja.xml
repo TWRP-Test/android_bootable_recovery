@@ -564,6 +564,7 @@
 		<string name="restoring_hdr">リストア中</string>
 		<string name="recreate_folder_err">{1} フォルダを再作成できません。</string>
 		<string name="img_size_err">イメージのサイズがターゲットデバイスのサイズを超えています。</string>
+		<string name="sparse_import_err">スパースイメージ '{1}' の取り込みに失敗しました。</string>
 		<string name="flashing">{1} を書き込み中...</string>
 		<string name="backup_folder_set">バックアップフォルダを '{1}' に設定しました</string>
 		<string name="locate_backup_err">バックアップ \'{1}\' が見つかりません</string>

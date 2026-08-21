@@ -636,6 +636,7 @@
 		<string name="restoring_hdr">Restore කරන ගමන්</string>
 		<string name="recreate_folder_err">{1} folder එක හදාගන්න බෑ.</string>
 		<string name="img_size_err">Image එෙක් Size එක target device එකට වඩා ෙලාකුයි</string>
+		<string name="sparse_import_err">Failed to import sparse image '{1}'</string>
 		<string name="flashing">Flashing {1}...</string>
 		<string name="backup_folder_set">Backup folder එක '{1}'ට දැඨමා</string>
 		<string name="locate_backup_err">'{1}' එෙක් backup නෑ</string>

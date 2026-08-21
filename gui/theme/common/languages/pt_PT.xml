@@ -613,6 +613,7 @@
 		<string name="restoring_hdr">A restaurar</string>
 		<string name="recreate_folder_err">Não é possível recriar a pasta {1}.</string>
 		<string name="img_size_err">O tamanho da imagem excede a capacidade do dispositivo de destino</string>
+		<string name="sparse_import_err">Falha ao importar a imagem sparse '{1}'</string>
 		<string name="flashing">A instalar {1}...</string>
 		<string name="backup_folder_set">Pasta de Backup definida para '{1}'</string>
 		<string name="locate_backup_err">Não é possível localizar o Backup '{1}'</string>

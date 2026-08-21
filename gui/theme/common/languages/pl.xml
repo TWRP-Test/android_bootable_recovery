@@ -638,6 +638,7 @@
 		<string name="restoring_hdr">Przywracanie</string>
 		<string name="recreate_folder_err">Nie można odtworzyć {1} folderu.</string>
 		<string name="img_size_err">Rozmiar obrazu jest większy niż urządzenia docelowego</string>
+		<string name="sparse_import_err">Nie udało się zaimportować obrazu sparse '{1}'</string>
 		<string name="flashing">Instalowanie {1}...</string>
 		<string name="backup_folder_set">'{1}' ustawiony jako folder kopii zapasowych</string>
 		<string name="locate_backup_err">Nie udało się zlokalizować kopii '{1}'</string>

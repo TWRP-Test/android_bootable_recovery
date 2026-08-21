@@ -629,6 +629,7 @@
 		<string name="restoring_hdr">Memulihkan</string>
 		<string name="recreate_folder_err">Tidak dapat membuat folder {1}.</string>
 		<string name="img_size_err">Ukuran Image lebih besar dari perangkat</string>
+		<string name="sparse_import_err">Gagal mengimpor image sparse '{1}'</string>
 		<string name="flashing">Memflash {1}...</string>
 		<string name="backup_folder_set">Folder cadangan disetel ke '{1}'</string>
 		<string name="locate_backup_err">Tidak dapat menemukan cadangan '{1}'</string>

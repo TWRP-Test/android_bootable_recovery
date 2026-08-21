@@ -636,6 +636,7 @@
 		<string name="restoring_hdr">正在恢复</string>
 		<string name="recreate_folder_err">无法重新创建 {1} 文件夹。</string>
 		<string name="img_size_err">镜像大小大于目标设备</string>
+		<string name="sparse_import_err">无法导入 sparse 镜像“{1}”</string>
 		<string name="flashing">正在刷入 {1}…</string>
 		<string name="backup_folder_set">备份文件夹设置为:“{1}”</string>
 		<string name="locate_backup_err">未找到备份文件“{1}”</string>

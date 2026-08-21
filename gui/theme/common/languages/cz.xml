@@ -638,6 +638,7 @@
 		<string name="restoring_hdr">Obnovování</string>
 		<string name="recreate_folder_err">Nelze vytvořit adresář {1}.</string>
 		<string name="img_size_err">Velikost IMG je větší než cílové zařízení</string>
+		<string name="sparse_import_err">Nepodařilo se importovat sparse obraz '{1}'</string>
 		<string name="flashing">Zapisování {1}...</string>
 		<string name="backup_folder_set">Adresář záloh nastavený na: \'{1}\'</string>
 		<string name="locate_backup_err">Zálohu \'{1}\' nelze najít</string>

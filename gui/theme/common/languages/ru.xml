@@ -632,6 +632,7 @@
 		<string name="restoring_hdr">Восстановление</string>
 		<string name="recreate_folder_err">Невозможно заново создать папку {1}.</string>
 		<string name="img_size_err">Размер образа больше размера целевого устройства</string>
+		<string name="sparse_import_err">Не удалось импортировать sparse-образ '{1}'</string>
 		<string name="flashing">Прошивка {1}...</string>
 		<string name="backup_folder_set">Папка для резервной копии установлена в '{1}'</string>
 		<string name="locate_backup_err">Не удаётся найти резервную копию '{1}'</string>

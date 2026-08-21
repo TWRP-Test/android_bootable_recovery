@@ -75,6 +75,7 @@ extern "C" {
 #include <linux/xattr.h>
 #endif
 #include <sparse_format.h>
+#include <sparse/sparse.h>
 #include "progresstracking.hpp"
 
 #define CRYPT_FOOTER_OFFSET 0x4000
@@ -3363,17 +3364,41 @@ bool TWPartition::Is_Sparse_Image(const string& Filename) {
 }
 
 bool TWPartition::Flash_Sparse_Image(const string& Filename) {
-	string Command;
-
 #ifdef TW_ENABLE_BLKDISCARD
 	BlkDiscard();
 #endif
 
 	gui_msg(Msg("flashing=Flashing {1}...")(Display_Name));
 
-	Command = "simg2img '" + Filename + "' '" + Actual_Block_Device + "'";
-	LOGINFO("Flash command: '%s'\n", Command.c_str());
-	TWFunc::Exec_Cmd(Command);
+	int in = open(Filename.c_str(), O_RDONLY);
+	if (in < 0) {
+		gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Filename)(strerror(errno)));
+		return false;
+	}
+
+	struct sparse_file* s = sparse_file_import(in, true, false);
+	if (!s) {
+		close(in);
+		gui_msg(Msg(msg::kError, "sparse_import_err=Failed to import sparse image '{1}'")(Filename));
+		return false;
+	}
+
+	int out = open(Actual_Block_Device.c_str(), O_WRONLY);
+	if (out < 0) {
+		gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Actual_Block_Device)(strerror(errno)));
+		close(in);
+		sparse_file_destroy(s);
+		return false;
+	}
+
+	int ret = sparse_file_write(s, out, false, false, false);
+	close(out);
+	close(in);
+	sparse_file_destroy(s);
+	if (ret < 0) {
+		LOGERR("Failed to flash sparse image '%s' to '%s'\n", Filename.c_str(), Actual_Block_Device.c_str());
+		return false;
+	}
 	return true;
 }
 

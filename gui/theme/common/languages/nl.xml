@@ -627,6 +627,7 @@
 		<string name="restoring_hdr">Wordt hersteld</string>
 		<string name="recreate_folder_err">Kan map {1} niet opnieuw maken.</string>
 		<string name="img_size_err">Imagegrootte is groter dan doelapparaat</string>
+		<string name="sparse_import_err">Kan sparse-image '{1}' niet importeren</string>
 		<string name="flashing">{1} wordt geflasht...</string>
 		<string name="backup_folder_set">Back-upmap ingesteld op '{1}'</string>
 		<string name="locate_backup_err">Kan back-up '{1}' niet vinden</string>

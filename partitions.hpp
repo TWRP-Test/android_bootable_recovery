@@ -226,7 +226,7 @@ private:
 	void Recreate_AndSec_Folder(void);                                        // Recreates the .android_secure folder
 	bool Mount_Storage_Retry(bool Display_Error);                             // Tries multiple times with a half second delay to mount a device in case storage is slow to mount
 	bool Is_Sparse_Image(const string& Filename);                             // Determines if a file is in sparse image format
-	bool Flash_Sparse_Image(const string& Filename);                          // Flashes a sparse image using simg2img
+	bool Flash_Sparse_Image(const string& Filename);                          // Flashes a sparse image using libsparse
 	void ExcludeAll(const string& path);                                      // Adds an exclusion for path to both the backup and wipe exclusion lists
 
 private:

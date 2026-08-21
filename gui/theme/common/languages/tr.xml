@@ -581,6 +581,7 @@
 		<string name="restoring_hdr">Geri yükleniyor</string>
 		<string name="recreate_folder_err">{1} klasörü yeniden oluşturulamadı.</string>
 		<string name="img_size_err">İmaj boyutu hedef cihazdan daha büyük</string>
+		<string name="sparse_import_err">'{1}' sparse imajı içe aktarılamadı</string>
 		<string name="flashing">{1} flashlanıyor...</string>
 		<string name="backup_folder_set">Yedekleme klasörü '{1}' olarak ayarlandı</string>
 		<string name="locate_backup_err">'{1}' yedeği bulunamadı</string>

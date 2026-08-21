@@ -551,6 +551,7 @@
 		<string name="restoring_hdr">Restaurando</string>
 		<string name="recreate_folder_err">Incapaz de recrear la carpeta {1}.</string>
 		<string name="img_size_err">El tamaño de la imagen es mayor que el tamaño del dispositivo de destino.</string>
+		<string name="sparse_import_err">Error al importar la imagen sparse '{1}'</string>
 		<string name="flashing">Flasheando {1}...</string>
 		<string name="backup_folder_set">Copia de Seguridad establecida en '{1}'</string>
 		<string name="locate_backup_err">Incapaz de localizar copia de seguridad \'{1}\'</string>

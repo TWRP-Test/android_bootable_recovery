@@ -580,6 +580,7 @@
 		<string name="restoring_hdr">Ripristino in corso...</string>
 		<string name="recreate_folder_err">Impossibile ripristinare la cartella {1}.</string>
 		<string name="img_size_err">La dimensione dell'immagine eccede la capacità del dispositivo</string>
+		<string name="sparse_import_err">Impossibile importare l'immagine sparse '{1}'</string>
 		<string name="flashing">Installazione di {1}...</string>
 		<string name="backup_folder_set">Cartella dei backup impostata in '{1}'</string>
 		<string name="locate_backup_err">Impossibile localizzare il backup '{1}'</string>

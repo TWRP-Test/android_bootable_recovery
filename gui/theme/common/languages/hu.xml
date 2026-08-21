@@ -580,6 +580,7 @@
 		<string name="restoring_hdr">Visszaállítás</string>
 		<string name="recreate_folder_err">{1} mappa újra létrehozása sikertelen.</string>
 		<string name="img_size_err">Kép mérete nagyobb, mint a céleszköz</string>
+		<string name="sparse_import_err">A(z) '{1}' sparse lemezkép importálása sikertelen</string>
 		<string name="flashing">{1} flashelése...</string>
 		<string name="backup_folder_set">Biztonsági mentés mappája beállítva erre: '{1}'</string>
 		<string name="locate_backup_err">Nem található a(z) '{1}' biztonsági mentés</string>

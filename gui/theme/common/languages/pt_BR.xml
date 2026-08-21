@@ -538,6 +538,7 @@
 		<string name="restoring_hdr">Restaurando</string>
 		<string name="recreate_folder_err">Não é possível recriar a pasta de {1}.</string>
 		<string name="img_size_err">Tamanho da imagem é maior do que o dispositivo de destino</string>
+		<string name="sparse_import_err">Falha ao importar a imagem sparse '{1}'</string>
 		<string name="flashing">Piscando {1}...</string>
 		<string name="backup_folder_set">Pasta da cópia de segurança definida como \'{1}\'</string>
 		<string name="locate_backup_err">Não é possível localizar a cópia de segurança \'{1}\'</string>

@@ -638,6 +638,7 @@
 		<string name="restoring_hdr">Obnavljanje</string>
 		<string name="recreate_folder_err">Mape {1} ni mogoče ponovno ustvariti.</string>
 		<string name="img_size_err">Velikost odtisa je večja od ciljne naprave.</string>
+		<string name="sparse_import_err">Uvoz sparse slike '{1}' ni uspel</string>
 		<string name="flashing">Nameščanje {1} …</string>
 		<string name="backup_folder_set">Mapa varnostnega kopiranja je nastavljena na \'{1}\'.</string>
 		<string name="locate_backup_err">Varnostne kopije \'{1}\' ni mogoče najti</string>

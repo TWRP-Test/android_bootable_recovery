@@ -641,6 +641,7 @@
 		<string name="restoring_hdr">正在復原</string>
 		<string name="recreate_folder_err">無法重新建立 {1} 資料夾。</string>
 		<string name="img_size_err">映像大小大於目標裝置</string>
+		<string name="sparse_import_err">無法匯入 sparse 映像“{1}”</string>
 		<string name="flashing">正在刷入 {1}…</string>
 		<string name="backup_folder_set">備份資料夾設定為:“{1}”</string>
 		<string name="locate_backup_err">未找到備份文件“{1}”</string>

@@ -538,6 +538,7 @@
 		<string name="restoring_hdr">Obnovenie</string>
 		<string name="recreate_folder_err">Nie je možné vytvoriť adresár {1}.</string>
 		<string name="img_size_err">Veľkosť image je väčšia ako cieľová partícia</string>
+		<string name="sparse_import_err">Nepodarilo sa importovať sparse obraz '{1}'</string>
 		<string name="flashing">Zapisovanie {1}...</string>
 		<string name="backup_folder_set">Adresár záloh nastavený na: \'{1}\'</string>
 		<string name="locate_backup_err">Zálohu \'{1}\' nie je možné nájsť</string>

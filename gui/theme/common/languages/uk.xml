@@ -560,6 +560,7 @@
 		<string name="restoring_hdr">Відновлення</string>
 		<string name="recreate_folder_err">Неможливо створити папку {1} наново.</string>
 		<string name="img_size_err">Розмір образу більший за цільовий пристрій</string>
+		<string name="sparse_import_err">Не вдалося імпортувати sparse-образ '{1}'</string>
 		<string name="flashing">Прошивка {1}...</string>
 		<string name="backup_folder_set">Для резервного копіювавння встановлена папка '{1}'</string>
 		<string name="locate_backup_err">Не вдається знайти резервну копію '{1}'</string>

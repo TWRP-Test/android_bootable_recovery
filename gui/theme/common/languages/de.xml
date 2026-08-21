@@ -623,6 +623,7 @@
 		<string name="restoring_hdr">Wiederherstellung läuft</string>
 		<string name="recreate_folder_err">Ordner {1} kann nicht wiederhergestellt werden.</string>
 		<string name="img_size_err">Image ist zu groß für das Gerät</string>
+		<string name="sparse_import_err">Sparse-Image '{1}' konnte nicht importiert werden</string>
 		<string name="flashing">Einspielen von {1}...</string>
 		<string name="backup_folder_set"> * Ordner für Sicherung: {1}</string>
 		<string name="locate_backup_err">Sicherung '{1}' nicht gefunden</string>

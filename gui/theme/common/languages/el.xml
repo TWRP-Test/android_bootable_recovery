@@ -565,6 +565,7 @@
         <string name="restoring_hdr">Επαναφορά</string>
         <string name="recreate_folder_err">Δεν είναι δυνατή η ανασύνθεση του φακέλου {1}.</string>
         <string name="img_size_err">Το μέγεθος της εικόνας είναι μεγαλύτερο από την συσκευή προορισμού</string>
+        <string name="sparse_import_err">Αποτυχία εισαγωγής sparse εικόνας '{1}'</string>
         <string name="flashing">Εγγραφή {1}...</string>
         <string name="backup_folder_set">Φάκελος αντιγρ. ασφ. ορίστηκε το '{1}'</string>
         <string name="locate_backup_err">Δεν μπόρεσε να εντοπιστεί το αντιγρ. ασφ. '{1}'</string>
