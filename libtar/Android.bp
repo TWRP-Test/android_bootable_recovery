@@ -1,0 +1,80 @@
+cc_defaults {
+    name: "libtar_defaults",
+
+    defaults: ["libtar_defaults_flags"],
+
+    srcs: [
+        "append.c",
+        "block.c",
+        "decode.c",
+        "encode.c",
+        "extract.c",
+        "handle.c",
+        "output.c",
+        "util.c",
+        "wrapper.c",
+        "basename.c",
+        "strmode.c",
+        "libtar_hash.c",
+        "libtar_list.c",
+        "dirname.c",
+        "android_utils.c",
+    ],
+
+    local_include_dirs: [
+        ".",
+    ],
+
+    include_dirs: [
+        "external/zlib",
+        "external/selinux/libselinux/include",
+    ],
+
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
+
+}
+
+bootstrap_go_package {
+    name: "soong-libtar_defaults",
+    pkgPath: "bootable/recovery/libtar",
+    deps: [
+        "soong",
+        "soong-android",
+        "soong-cc",
+    ],
+    srcs: [
+        "libtar_defaults.go",
+        "../soong/makevars.go",
+    ],
+    pluginFor: ["soong_build"],
+}
+
+libtar_defaults {
+    name: "libtar_defaults_flags",
+}
+
+cc_library_shared {
+    name: "libtar",
+    defaults: ["libtar_defaults"],
+    recovery_available: true,
+
+    shared_libs: [
+        "libc",
+        "libz",
+        "libselinux",
+    ],
+}
+
+cc_library_static {
+    name: "libtar_static",
+    defaults: ["libtar_defaults"],
+    recovery_available: true,
+
+    static_libs: [
+        "libc",
+        "libz",
+        "libselinux",
+    ],
+}

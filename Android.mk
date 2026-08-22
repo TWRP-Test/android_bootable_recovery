@@ -612,6 +612,10 @@ ifeq ($(BOARD_CACHEIMAGE_PARTITION_SIZE),)
     TWRP_REQUIRED_MODULES += recovery-persist recovery-refresh
 endif
 
+ifeq ($(TW_INCLUDE_CRYPTO_FBE),true)
+    LOCAL_STATIC_LIBRARIES += libscrypt_static libasync_safe
+endif
+
 LOCAL_REQUIRED_MODULES += $(TWRP_REQUIRED_MODULES)
 
 include $(BUILD_EXECUTABLE)
@@ -699,7 +703,6 @@ include $(commands_TWRP_local_path)/minui/Android.mk
 
 #includes for TWRP
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
-    $(commands_TWRP_local_path)/libtar/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
     $(commands_TWRP_local_path)/etc/Android.mk \
     $(commands_TWRP_local_path)/attr/Android.mk
