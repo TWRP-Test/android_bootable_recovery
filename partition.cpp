@@ -2944,74 +2944,99 @@ bool TWPartition::Data_Is_Locked() {
 	return false;
 }
 
-// Only one partition ever carries data/media, so one walk at a time will do.
-static std::mutex size_walk_lock;
-static bool size_walk_running = false;
+struct Async_Size_State {
+	std::mutex lock;
+	bool running = false;
+	TWPartition* pending_partition = NULL;
+	unsigned long long pending_size = 0;
+};
+
+// Keep state alive until detached workers finish.
+static Async_Size_State& Get_Async_Size_State() {
+	static Async_Size_State* state = new Async_Size_State;
+	return *state;
+}
 
 void TWPartition::Update_Data_Size_Async() {
+	Async_Size_State& state = Get_Async_Size_State();
 	{
-		std::lock_guard<std::mutex> lock(size_walk_lock);
-		if (size_walk_running || !Backup_Size_Provisional)
+		std::lock_guard<std::mutex> lock(state.lock);
+		if (!Backup_Size_Provisional || state.running)
 			return;
-		size_walk_running = true;
+		state.running = true;
 	}
 
-	// Backup_Tar() appends to the real list, so walk a copy.
+	// The worker must use a snapshot; Backup_Tar() mutates the real list.
 	TWExclude exclusions = backup_exclusions;
 	string path = Mount_Point;
 
-	std::thread([this, exclusions, path]() mutable {
-		if (Is_Mounted()) {
+	if (Is_Mounted()) {
+		TWPartition* partition = this;
+		string dev = Decrypted_Block_Device.empty() ? Actual_Block_Device : Decrypted_Block_Device;
+		std::thread([partition, exclusions, path, dev]() mutable {
 			unsigned long long size = 0;
-			// f2fs fast path: dump.f2fs reports filesystem-wide used blocks,
-			// so subtract the excluded directories from it.
-			uint64_t es = exclusions.Get_Exclusions_Folder_Size();
-			string dev = Decrypted_Block_Device.empty() ? Actual_Block_Device : Decrypted_Block_Device;
-			if (es > 0 && !dev.empty()) {
-				char cmdBuf[256];
-				const char _cmd[] = "dump.f2fs -d1 %s | grep %s | awk -F ': ' '{print $2}' | awk -F ']' '{print $1}'";
-				int64_t _Used = 0;
-				snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_block_count");
-				string result;
-				if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
-					uint64_t USCount = strtoull(result.c_str(), NULL, 10);
-					if (USCount > 0 && USCount <= 354674688ULL) {
-						_Used = USCount * 4096LLU;
-						if ((int64_t)(_Used - es) > 0) {
-							snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_inode_count");
-							result.clear();
-							if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
-								uint64_t UICount = strtoull(result.c_str(), NULL, 10);
-								if (UICount > 0 && _Used > UICount * 4096ULL)
-									_Used -= UICount * 4096ULL;
-							}
-							if ((int64_t)(_Used - es) > 0)
-								size = _Used - es;
+		// Prefer filesystem counters, then fall back to the directory walk.
+		uint64_t es = exclusions.Get_Exclusions_Folder_Size();
+		if (es > 0 && !dev.empty()) {
+			char cmdBuf[256];
+			const char _cmd[] = "dump.f2fs -d1 %s | grep %s | awk -F ': ' '{print $2}' | awk -F ']' '{print $1}'";
+			int64_t _Used = 0;
+			snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_block_count");
+			string result;
+			if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
+				uint64_t USCount = strtoull(result.c_str(), NULL, 10);
+				if (USCount > 0 && USCount <= 354674688ULL) {
+					_Used = USCount * 4096LLU;
+					if ((int64_t)(_Used - es) > 0) {
+						snprintf(cmdBuf, sizeof(cmdBuf), _cmd, dev.c_str(), "valid_inode_count");
+						result.clear();
+						if (TWFunc::Exec_Cmd(cmdBuf, result, false) == 0) {
+							uint64_t UICount = strtoull(result.c_str(), NULL, 10);
+							if (UICount > 0 && _Used > UICount * 4096ULL)
+								_Used -= UICount * 4096ULL;
 						}
+						if ((int64_t)(_Used - es) > 0)
+							size = _Used - es;
 					}
 				}
-				LOGINFO("Data size: f2fs fast path %s (exclusions %llu bytes).\n",
-						size > 0 ? "hit" : "miss", (unsigned long long)es);
 			}
-			if (size == 0) {
-				// dump.f2fs is unavailable or unusable; keep the old walk.
-				LOGINFO("Data size: falling back to folder walk.\n");
-				size = exclusions.Get_Folder_Size(path);
-			}
-			Used = size;
-			Backup_Size = size;
-			Backup_Size_Provisional = false;
-			int bak = (int)(size / 1048576LLU);
-			DataManager::SetValue(TW_BACKUP_DATA_SIZE, bak);
-			LOGINFO("Data backup size is %iMB.\n", bak);
-			// Repaint any partition list that is already on screen.
-			DataManager::SetValue(TW_BACKUP_SIZES_READY, bak);
-		} else {
-			LOGINFO("'%s' is not mounted, keeping the statfs backup size.\n", path.c_str());
+			LOGINFO("Data size: f2fs fast path %s (exclusions %llu bytes).\n",
+					size > 0 ? "hit" : "miss", (unsigned long long)es);
 		}
-		std::lock_guard<std::mutex> lock(size_walk_lock);
-		size_walk_running = false;
-	}).detach();
+		if (size == 0) {
+			// dump.f2fs unavailable: use the old walk.
+			LOGINFO("Data size: falling back to folder walk.\n");
+			size = exclusions.Get_Folder_Size(path, false);
+		}
+		Async_Size_State& state = Get_Async_Size_State();
+		std::lock_guard<std::mutex> lock(state.lock);
+		state.pending_partition = partition;
+		state.pending_size = size;
+		}).detach();
+	} else {
+		LOGINFO("'%s' is not mounted, keeping the statfs backup size.\n", path.c_str());
+		std::lock_guard<std::mutex> lock(state.lock);
+		state.running = false;
+	}
+}
+
+void TWPartition::Apply_Async_Data_Size() {
+	Async_Size_State& state = Get_Async_Size_State();
+	unsigned long long size;
+	{
+		std::lock_guard<std::mutex> lock(state.lock);
+		if (state.pending_partition != this)
+			return;
+		size = state.pending_size;
+		state.pending_partition = NULL;
+		state.running = false;
+	}
+	Used = size;
+	Backup_Size = size;
+	Backup_Size_Provisional = false;
+	int bak = (int)(size / 1048576LLU);
+	DataManager::SetValue(TW_BACKUP_DATA_SIZE, bak);
+	LOGINFO("Data backup size is %iMB.\n", bak);
 }
 
 bool TWPartition::Update_Size(bool Display_Error, bool Defer_Folder_Size) {

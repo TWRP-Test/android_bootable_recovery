@@ -146,7 +146,8 @@ public:
 	bool Wipe_Encryption();                                                   // Ignores wipe commands for /data/media devices and formats the original block device
 	void Check_FS_Type();                                                     // Checks the filesystem type using blkid
 	bool Update_Size(bool Display_Error, bool Defer_Folder_Size = false);     // Updates size information, Defer_Folder_Size leaves the data/media walk to Update_Data_Size_Async()
-	void Update_Data_Size_Async();                                            // Walks data/media off the UI thread and publishes the size once it finishes
+	void Update_Data_Size_Async();                                            // Starts a deferred data/media size scan
+	void Apply_Async_Data_Size();                                             // Applies a completed scan on the caller thread
 	static bool Data_Is_Locked();                                             // True while user 0's CE storage is still locked
 	void Recreate_Media_Folder();                                             // Recreates the /data/media folder
 	bool Flash_Image(PartitionSettings *part_settings);                                        // Flashes an image to the partition
@@ -350,6 +351,7 @@ public:
 	int Repair_By_Path(string Path, bool Display_Error);                      // Repairs a partition based on path
 	int Resize_By_Path(string Path, bool Display_Error);                      // Resizes a partition based on path
 	void Update_System_Details(bool Defer_Data_Size = false);                 // Updates fstab, file systems, sizes, etc.
+	void Process_Async_Data_Size();                                           // Applies a completed background data-size calculation
 	int Decrypt_Device(string Password, int user_id = 0);                     // Attempt to decrypt any encrypted partitions
 	void Mark_Data_Locked();                                                  // Data was unmounted, so its fscrypt keys went with it
 	bool Storage_Name_In_Use(const string& Name);                             // Checks whether a partition is already showing this name

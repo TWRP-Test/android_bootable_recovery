@@ -58,7 +58,7 @@ void TWExclude::add_absolute_dir(const string& dir) {
 	absolutedir.push_back(TWFunc::Remove_Trailing_Slashes(dir));
 }
 
-uint64_t TWExclude::Get_Folder_Size(const string& Path) {
+uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
 	DIR* d;
 	struct dirent* de;
 	struct stat st;
@@ -67,7 +67,8 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path) {
 
 	d = opendir(Path.c_str());
 	if (d == NULL) {
-		gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Path)(strerror(errno)));
+		if (Display_Error)
+			gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Path)(strerror(errno)));
 		return 0;
 	}
 
@@ -75,12 +76,13 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path) {
 		FullPath = Path + "/";
 		FullPath += de->d_name;
 		if (lstat(FullPath.c_str(), &st)) {
-			gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(FullPath)(strerror(errno)));
+			if (Display_Error)
+				gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(FullPath)(strerror(errno)));
 			LOGINFO("Real error: Unable to stat '%s'\n", FullPath.c_str());
 			continue;
 		}
 		if ((st.st_mode & S_IFDIR) && !check_skip_dirs(FullPath) && de->d_type != DT_SOCK) {
-			dusize += Get_Folder_Size(FullPath);
+			dusize += Get_Folder_Size(FullPath, Display_Error);
 		} else if (st.st_mode & S_IFREG || st.st_mode & S_IFLNK) {
 			dusize += (uint64_t)(st.st_size);
 		}

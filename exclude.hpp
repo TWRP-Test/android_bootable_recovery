@@ -28,7 +28,7 @@ class TWExclude {
 
 public:
 	TWExclude();
-	uint64_t Get_Folder_Size(const string& Path); // Gets the folder's size using stat
+	uint64_t Get_Folder_Size(const string& Path, bool Display_Error = true); // Gets folder size; optionally reports errors
 	uint64_t Get_Exclusions_Folder_Size();
 	void add_absolute_dir(const string& Path);
 	void add_relative_dir(const string& Path);

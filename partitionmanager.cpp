@@ -2014,6 +2014,12 @@ void TWPartitionManager::Update_System_Details(bool Defer_Data_Size) {
 	return;
 }
 
+void TWPartitionManager::Process_Async_Data_Size() {
+	TWPartition* dat = Find_Partition_By_Path("/data");
+	if (dat != NULL)
+		dat->Apply_Async_Data_Size();
+}
+
 void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 	TWPartition* dat = Find_Partition_By_Path("/data");
 
@@ -2684,7 +2690,7 @@ void TWPartitionManager::Get_Partition_List(string ListType, std::vector<Partiti
 					}
 				}
 				std::string size_place;
-				if (partition->Backup_Size_Provisional) {
+				if (partition->Backup_Size_Provisional && !TWPartition::Data_Is_Locked()) {
 					// The list is on screen, so someone wants the number now.
 					partition->Update_Data_Size_Async();
           			size_place = gui_lookup("calculating", "calculating");

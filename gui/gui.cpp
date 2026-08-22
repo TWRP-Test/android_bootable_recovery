@@ -584,6 +584,8 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 
 	for (;;)
 	{
+		// Apply completed background size scans on the GUI thread.
+		PartitionManager.Process_Async_Data_Size();
 		loopTimer(input_timeout_ms);
 		FD_ZERO(&fdset);
 		timeout.tv_sec = 0;
