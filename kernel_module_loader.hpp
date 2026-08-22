@@ -28,7 +28,7 @@ public:
 	static bool Load_Vendor_Modules(); // Load specific maintainer defined kernel modules in TWRP
 
 private:
-	static int Try_And_Load_Modules(std::string module_dir, bool vendor_is_mounted); // Use libmodprobe to attempt loading kernel modules
+	static bool Try_And_Load_Modules(std::string module_dir, bool vendor_is_mounted); // Use libmodprobe to attempt loading kernel modules
 	static bool Write_Module_List(std::string module_dir); // Write list of modules to load from TW_LOAD_VENDOR_MODULES
 	static bool Copy_Modules_To_Tmpfs(std::string module_dir); // Copy modules to ramdisk for loading
 	static std::vector<string> Skip_Loaded_Kernel_Modules(); // return list of loaded kernel modules already done by init

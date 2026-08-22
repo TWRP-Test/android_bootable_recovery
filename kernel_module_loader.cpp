@@ -43,7 +43,6 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 	// check /vendor/lib/modules/N.N-gki (vendor mounted)
 	// check /vendor_dlkm/lib/modules (vendor_dlkm mounted)
 	if (android::base::GetBoolProperty(TW_MODULES_MOUNTED_PROP, false)) return true;
-	int modules_loaded = 0;
 #ifdef TW_INCLUDE_CRYPTO
 	std::string vendor_patch;
 	std::string system_patch;
@@ -71,7 +70,6 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 
 	std::string rls(uts.release);
 	std::vector<std::string> release = TWFunc::split_string(rls, '.', true);
-	int expected_module_count = kernel_modules_requested.size();
 	module_dirs.push_back(base_dir + "/" + release[0] + "." + release[1]);
 #ifndef TW_LOAD_VENDOR_MODULES_EXCLUDE_GKI
 	std::string gki = "/" + release[0] + "." + release[1] + "-gki";
@@ -82,8 +80,7 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 #ifdef TW_LOAD_PREBUILT_MODULES_AT_FIRST
 	/* Try ramdisk-provided vendor modules before any mode-specific source. */
 	for (auto&& module_dir:vendor_module_dirs) {
-		modules_loaded += Try_And_Load_Modules(module_dir, true);
-		if (modules_loaded >= expected_module_count) goto exit;
+		Try_And_Load_Modules(module_dir, true);
 	}
 #endif
 
@@ -93,8 +90,7 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 			 * so try only with twrp prebuilt modules.
 			 */
 			for (auto&& module_dir:vendor_module_dirs) {
-				modules_loaded += Try_And_Load_Modules(module_dir, false);
-				if (modules_loaded >= expected_module_count) goto exit;
+				Try_And_Load_Modules(module_dir, false);
 			}
 			break;
 
@@ -102,8 +98,7 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 		case RECOVERY_IN_BOOT_MODE:
 #ifdef TW_LOAD_VENDOR_BOOT_MODULES
 			for (auto&& module_dir:module_dirs) {
-				modules_loaded += Try_And_Load_Modules(module_dir, false);
-				if (modules_loaded >= expected_module_count) goto exit;
+				Try_And_Load_Modules(module_dir, false);
 			}
 #endif
 			/* In both mode vendor_boot or vendor modules are used
@@ -148,14 +143,11 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 	}
 
 	for (auto&& module_dir:vendor_module_dirs) {
-		modules_loaded += Try_And_Load_Modules(module_dir, true);
-		if (modules_loaded >= expected_module_count) goto exit;
+		Try_And_Load_Modules(module_dir, true);
 	}
 
-	modules_loaded += Try_And_Load_Modules(vendor_dlkm_base_dir, true);
-	if (modules_loaded >= expected_module_count) goto exit;
+	Try_And_Load_Modules(vendor_dlkm_base_dir, true);
 
-exit:
 	if (ven)
 		ven->UnMount(false);
 	if (ven_dlkm)
@@ -167,19 +159,21 @@ exit:
 #endif
 
 	android::base::SetProperty(TW_MODULES_MOUNTED_PROP, "true");
-
+	LOGINFO("Finished attempting to load requested kernel modules; unavailable modules are optional for this device\n");
 	return true;
 }
 
-int KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendor_is_mounted) {
+bool KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendor_is_mounted) {
 		LOGINFO("Checking directory: %s\n", module_dir.c_str());
-		int modules_loaded = 0;
 		std::string dest_module_dir;
 		dest_module_dir = "/tmp" + module_dir;
 		TWFunc::Recursive_Mkdir(dest_module_dir);
-		Copy_Modules_To_Tmpfs(module_dir);
+		if (!Copy_Modules_To_Tmpfs(module_dir)) {
+			LOGINFO("Unable to copy modules from %s\n", module_dir.c_str());
+			return false;
+		}
 		if (!Write_Module_List(dest_module_dir))
-			return kernel_modules_requested.size();
+			return false;
 		if (!vendor_is_mounted && module_dir == "/vendor/lib/modules") {
 			module_dir = "/lib/modules";
 		}
@@ -187,12 +181,13 @@ int KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendor
 		if (mount(dest_module_dir.c_str(), module_dir.c_str(), "", MS_BIND, NULL) == 0) {
 			Modprobe m({module_dir}, "modules.load.twrp", false);
 			m.LoadListedModules(false);
-			modules_loaded = m.GetModuleCount();
 			PartitionManager.UnMount_By_Path(module_dir.c_str(), false, MNT_DETACH);
-			LOGINFO("Modules Loaded: %d\n", modules_loaded);
+			LOGINFO("libmodprobe processed %d modules from %s\n", m.GetModuleCount(), module_dir.c_str());
+			return true;
+		} else {
+			LOGINFO("Unable to mount %s on %s\n", dest_module_dir.c_str(), module_dir.c_str());
 		}
-		LOGINFO("Loaded %d modules from %s\n", modules_loaded, module_dir.c_str());
-		return modules_loaded;
+		return false;
 }
 
 std::vector<string> KernelModuleLoader::Skip_Loaded_Kernel_Modules() {
@@ -206,11 +201,17 @@ std::vector<string> KernelModuleLoader::Skip_Loaded_Kernel_Modules() {
 		return kernel_modules;
 	for (auto&& module_line:loaded_modules) {
 		auto module = TWFunc::Split_String(module_line, " ")[0];
-		std::string full_module_name = module + ".ko";
-		auto found = std::find(kernel_modules.begin(), kernel_modules.end(), full_module_name);
-		if (found != kernel_modules.end()) {
-			LOGINFO("found module to dedupe: %s\n", (*found).c_str());
-			kernel_modules.erase(found);
+		for (auto it = kernel_modules.begin(); it != kernel_modules.end(); ++it) {
+			std::string requested = *it;
+			for (auto& character : requested) {
+				if (character == '-')
+					character = '_';
+			}
+			if (requested == module + ".ko") {
+				LOGINFO("found module to dedupe: %s\n", it->c_str());
+				kernel_modules.erase(it);
+				break;
+			}
 		}
 	}
 	return kernel_modules;
@@ -221,29 +222,38 @@ bool KernelModuleLoader::Write_Module_List(std::string module_dir) {
 	struct dirent* de;
 	std::vector<std::string> kernel_modules;
 	d = opendir(module_dir.c_str());
+	if (d == nullptr) {
+		LOGINFO("Unable to open module directory: %s. Skipping\n", module_dir.c_str());
+		return false;
+	}
 	auto deduped_modules = Skip_Loaded_Kernel_Modules();
 	if (deduped_modules.size() == 0) {
 		LOGINFO("Requested modules are loaded\n");
+		closedir(d);
 		return false;
 	}
-	if (d != nullptr) {
-		while ((de = readdir(d)) != nullptr) {
-			std::string kernel_module = de->d_name;
-			if (de->d_type == DT_REG) {
-				if (android::base::EndsWith(kernel_module, ".ko")) {
-					for (auto&& requested:kernel_modules_requested) {
-						if (kernel_module == requested) {
-							kernel_modules.push_back(kernel_module);
-							continue;
-						}
-					}
-					continue;
-				}
+	while ((de = readdir(d)) != nullptr) {
+		std::string kernel_module = de->d_name;
+		if (!android::base::EndsWith(kernel_module, ".ko"))
+			continue;
+		for (auto&& requested:deduped_modules) {
+			if (kernel_module == requested) {
+				kernel_modules.push_back(kernel_module);
+				break;
 			}
 		}
-		std::string module_file = module_dir + "/modules.load.twrp";
-		TWFunc::write_to_file(module_file, kernel_modules);
-		closedir(d);
+	}
+	closedir(d);
+	if (kernel_modules.empty()) {
+		LOGINFO("No requested modules found in %s\n", module_dir.c_str());
+		return false;
+	}
+	std::string module_file = module_dir + "/modules.load.twrp";
+	/* The vector overload appends, so truncate stale lists before writing. */
+	if (!TWFunc::write_to_file(module_file, "") ||
+			!TWFunc::write_to_file(module_file, kernel_modules)) {
+		LOGINFO("Unable to write module list: %s\n", module_file.c_str());
+		return false;
 	}
 	return true;
 }
@@ -252,6 +262,17 @@ bool KernelModuleLoader::Copy_Modules_To_Tmpfs(std::string module_dir) {
 	std::string ramdisk_dir = "/tmp" + module_dir;
 	DIR* d;
 	struct dirent* de;
+	DIR* old = opendir(ramdisk_dir.c_str());
+	if (old != nullptr) {
+		while ((de = readdir(old)) != nullptr) {
+			if (de->d_name[0] == '.')
+				continue;
+			std::string stale = ramdisk_dir + "/" + de->d_name;
+			if (de->d_type == DT_REG)
+				remove(stale.c_str());
+		}
+		closedir(old);
+	}
 	d = opendir(module_dir.c_str());
 	if (d != nullptr) {
 		while ((de = readdir(d)) != nullptr) {
