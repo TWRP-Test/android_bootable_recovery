@@ -79,6 +79,14 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 	vendor_module_dirs.push_back(vendor_base_dir + gki);
 #endif
 
+#ifdef TW_LOAD_PREBUILT_MODULES_AT_FIRST
+	/* Try ramdisk-provided vendor modules before any mode-specific source. */
+	for (auto&& module_dir:vendor_module_dirs) {
+		modules_loaded += Try_And_Load_Modules(module_dir, true);
+		if (modules_loaded >= expected_module_count) goto exit;
+	}
+#endif
+
 	switch(Get_Boot_Mode()) {
 		case RECOVERY_FASTBOOT_MODE:
 			/* On bootmode: once, there is not always stock kernel
@@ -103,13 +111,6 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 			 */
 			break;
 	}
-
-#ifdef TW_LOAD_PREBUILT_MODULES_AT_FIRST
-	for (auto&& module_dir:vendor_module_dirs) {
-		modules_loaded += Try_And_Load_Modules(module_dir, true);
-		if (modules_loaded >= expected_module_count) goto exit;
-	}
-#endif
 
 	if (ven) {
 		LOGINFO("Checking mounted /vendor\n");
