@@ -32,24 +32,6 @@ include $(BUILD_PREBUILT)
 endif
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := init.recovery.service.rc
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-
-LOCAL_SRC_FILES := init.recovery.service22.rc
-include $(BUILD_PREBUILT)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := init.recovery.hlthchrg.rc
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-
-LOCAL_SRC_FILES := init.recovery.hlthchrg26.rc
-include $(BUILD_PREBUILT)
-
-include $(CLEAR_VARS)
 LOCAL_MODULE := init.recovery.ldconfig.rc
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := EXECUTABLES

@@ -490,8 +490,6 @@ TWRP_REQUIRED_MODULES += \
     mkfs.fat \
     permissive.sh \
     libbootloader_message \
-    init.recovery.hlthchrg.rc \
-    init.recovery.service.rc \
     init.recovery.ldconfig.rc \
     awk \
     toybox \
