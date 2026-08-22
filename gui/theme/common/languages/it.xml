@@ -112,13 +112,6 @@
 		<string name="rebooting">Riavvio...</string>
 		<string name="swipe_reboot">Scorri per riavviare</string>
 		<string name="swipe_reboot_s">   Riavvia</string>
-		<string name="reboot_install_app_hdr">Installazione app di TWRP</string>
-		<string name="reboot_install_app1">Ti piacerebbe installare l'app ufficiale di TWRP?</string>
-		<string name="reboot_install_app2">L'app può verificare nuove versioni di TWRP.</string>
-		<string name="reboot_install_app_prompt_install">Chiedi di installare l'app TWRP se non è installata</string>
-		<string name="reboot_install_app_system">Installa come app di Sistema</string>
-		<string name="reboot_installing_app">Installazione dell'app...</string>
-		<string name="swipe_to_install_app">Scorri per installare l'app</string>
 		<string name="swipe_flash">Scorri per installare</string>
 		<string name="confirm_action">Conferma l'azione</string>
 		<string name="back_cancel">Premi indietro per annullare.</string>

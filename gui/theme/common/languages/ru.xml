@@ -116,17 +116,6 @@
 		<string name="rebooting">Перезагрузка...</string>
 		<string name="swipe_reboot">Свайп для перезагрузки</string>
 		<string name="swipe_reboot_s">   Перезагрузка</string>
-		<string name="reboot_install_app_hdr">Установить TWRP App</string>
-		<string name="reboot_install_app1">Вы хотите установить официальное приложение TWRP?</string>
-		<string name="reboot_install_app2">Оно позволит вам проверять наличие новой версии TWRP.</string>
-		<string name="reboot_install_app_prompt_install">Предлагать установку TWRP App при его отсутствии</string>
-		<string name="reboot_install_app_system">Установить как системное приложение</string>
-		<string name="reboot_installing_app">Установка TWRP приложения...</string>
-		<string name="swipe_to_install_app">Свайп для установки TWRP App</string>
-		<string name="uninstall_twrp_system_app">Удаление TWRP App из системы</string>
-		<string name="uninstall_twrp_system_app_confirm">Удалить TWRP App из системы?</string>
-		<string name="uninstalling_twrp_system_app">Удаление TWRP App из системы...</string>
-		<string name="uninstall_twrp_system_app_complete">Удаление TWRP App из системы завершено</string>
 		<string name="swipe_flash">Свайп для прошивки</string>
 		<string name="confirm_action">Подтвердить действие</string>
 		<string name="back_cancel">Нажмите назад для отмены.</string>

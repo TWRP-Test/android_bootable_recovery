@@ -106,13 +106,6 @@
         <string name="rebooting">Επανεκκίνηση...</string>
         <string name="swipe_reboot">Σύρετε για Επανεκκίνηση</string>
         <string name="swipe_reboot_s">   Επανεκκίνηση</string>
-        <string name="reboot_install_app_hdr">Εγκατάσταση της εφαρμογής TWRP;</string>
-        <string name="reboot_install_app1">Θέλετε να εγκαταστήσετε την Επίσημη Εφαρμογή TWRP;</string>
-        <string name="reboot_install_app2">Η εφαρμογή μπορεί να ελέγχει για νεότερες εκδόσεις του TWRP.</string>
-        <string name="reboot_install_app_prompt_install">Προτροπή για εγκατάσταση της εφαρμογής TWRP εαν δεν είναι εγκατεστημένη</string>
-        <string name="reboot_install_app_system">Εγκατάσταση ως Εφαρμογή Συστήματος</string>
-        <string name="reboot_installing_app">Εγκατάσταση εφαρμογής...</string>
-        <string name="swipe_to_install_app">Σύρετε για εγκατάσταση του TWRP</string>
         <string name="swipe_flash">Σύρετε για Εγκατάσταση</string>
         <string name="confirm_action">Επιβεβαίωση ενέργειας</string>
         <string name="back_cancel">Πατήστε το κουμπί πίσω για να ακυρώσετε.</string>

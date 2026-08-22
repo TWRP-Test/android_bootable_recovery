@@ -114,17 +114,6 @@
 		<string name="rebooting">Rebooting...</string>
 		<string name="swipe_reboot">Reboot කරන්න</string>
 		<string name="swipe_reboot_s">   Reboot කරන්න</string>
-		<string name="reboot_install_app_hdr">TWRP App එක Install කරන්න</string>
-		<string name="reboot_install_app1">ඔයා Official TWRP App එක Install කරන්න කැමතිද ?</string>
-		<string name="reboot_install_app2">App එ‍ෙකන් අභත් TWRP versions ක‍රන්න Check පුභවන්.</string>
-		<string name="reboot_install_app_prompt_install">TWRP app එක Install කරල නැත්තළ Install කරන්න</string>
-		<string name="reboot_install_app_system">System App එකක් ජදියට Install කරන්න</string>
-		<string name="reboot_installing_app">App එක Install කරන ගමන්...</string>
-		<string name="swipe_to_install_app">Install කරන්න.</string>
-		<string name="uninstall_twrp_system_app">TWRP App එක System එ‍‍‍‍ෙකන් Uninstall කරන්න.</string>
-		<string name="uninstall_twrp_system_app_confirm">TWRP App එක System එෙකන් Uninstall කරන්න ථනද?.</string>
-		<string name="uninstalling_twrp_system_app">TWRP App එක System එ‍‍‍‍ෙකන් Uninstall කරන ගමන්...</string>
-		<string name="uninstall_twrp_system_app_complete">TWRP App එක System එ‍‍‍‍ෙකන් Uninstall කරා.</string>
 		<string name="swipe_flash">Flash කරන්න</string>
 		<string name="confirm_action">‍ෙළක කරන්නද?</string>
 		<string name="back_cancel">Cancel කරන්න Back ඔබන්න.</string>

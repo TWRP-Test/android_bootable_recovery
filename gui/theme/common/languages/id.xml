@@ -116,17 +116,6 @@
 		<string name="rebooting">Mereboot...</string>
 		<string name="swipe_reboot">Geser untuk Reboot</string>
 		<string name="swipe_reboot_s">   Reboot</string>
-		<string name="reboot_install_app_hdr">Instal aplikasi TWRP</string>
-		<string name="reboot_install_app1">Apakah Anda ingin memasang Aplikasi TWRP resmi?</string>
-		<string name="reboot_install_app2">Aplikasi dapat memeriksa versi TWRP terbaru.</string>
-		<string name="reboot_install_app_prompt_install">Instal aplikasi TWRP jika belum tersedia</string>
-		<string name="reboot_install_app_system">Instal sebagai aplikasi sistem</string>
-		<string name="reboot_installing_app">Menginstal aplikasi...</string>
-		<string name="swipe_to_install_app">Geser untuk Instal</string>
-		<string name="uninstall_twrp_system_app">Hapus aplikasi TWRP dari sistem</string>
-		<string name="uninstall_twrp_system_app_confirm">Hapus aplikasi TWRP dari sistem?</string>
-		<string name="uninstalling_twrp_system_app">Menghapus aplikasi TWRP dari sistem ...</string>
-		<string name="uninstall_twrp_system_app_complete">Aplikasi TWRP berhasil dihapus</string>
 		<string name="swipe_flash">Geser untuk Flash</string>
 		<string name="confirm_action">Konfirmasi Tindakan</string>
 		<string name="back_cancel">Tekan tombol kembali untuk membatalkan.</string>

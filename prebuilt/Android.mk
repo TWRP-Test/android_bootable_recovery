@@ -533,24 +533,6 @@ ifeq ($(TW_INCLUDE_7ZA), true)
     include $(BUILD_PREBUILT)
 endif
 
-#TWRP App "placeholder"
-include $(CLEAR_VARS)
-LOCAL_MODULE := me.twrp.twrpapp.apk
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/bin
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-include $(BUILD_PREBUILT)
-
-#TWRP App permissions for Android 9+
-include $(CLEAR_VARS)
-LOCAL_MODULE := privapp-permissions-twrpapp.xml
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/bin
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-include $(BUILD_PREBUILT)
-
 ifneq (,$(filter $(TW_INCLUDE_REPACKTOOLS) $(TW_INCLUDE_RESETPROP) $(TW_INCLUDE_LIBRESETPROP), true))
     ifeq ($(wildcard external/magisk-prebuilt/Android.mk),)
         $(warning Magisk prebuilt tools not found!)

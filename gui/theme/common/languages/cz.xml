@@ -116,17 +116,6 @@
 		<string name="rebooting">Restartování...</string>
 		<string name="swipe_reboot">Potáhnout pro restartování</string>
 		<string name="swipe_reboot_s">   Restart</string>
-		<string name="reboot_install_app1">Přejete si nainstalovat apku Official TWRP App?</string>
-		<string name="reboot_install_app2">Aplikace může zkontrolovat nové verze TWRP.</string>
-		<string name="reboot_install_app_hdr">Instalovat TWRP apku?</string>
-		<string name="reboot_install_app_prompt_install">Vyzvat k instalaci TWRP apky, pokud není nainstalována</string>
-		<string name="reboot_install_app_system">Nainstalovat jako systémovou aplikaci</string>
-		<string name="reboot_installing_app">Instalace aplikace...</string>
-		<string name="swipe_to_install_app">Potáhnout pro instalaci TWRP apky</string>
-		<string name="uninstall_twrp_system_app">Odinstalovat TWRP apku ze systému</string>
-		<string name="uninstall_twrp_system_app_complete">TWRP apka odinstalována</string>
-		<string name="uninstall_twrp_system_app_confirm">Odinstalovat TWRP apku ze systému?</string>
-		<string name="uninstalling_twrp_system_app">Odinstalovávání TWRP apky ze systému...</string>
 		<string name="swipe_flash">Potáhnout pro potvrzení zápisu</string>
 		<string name="confirm_action">Potvrdit akci</string>
 		<string name="back_cancel">Pro zrušení stlačte tlačítko nazpět.</string>

@@ -113,13 +113,6 @@
 		<string name="rebooting">Yeniden Başlatılıyor...</string>
 		<string name="swipe_reboot">Yeniden Başlatmak için Kaydır</string>
 		<string name="swipe_reboot_s">   Yeniden başlat</string>
-		<string name="reboot_install_app_hdr">TWRP Uygulaması yüklensin mi?</string>
-		<string name="reboot_install_app1">Resmi TWRP Uygulamasını yüklemek ister misiniz?</string>
-		<string name="reboot_install_app2">Uygulama, yeni TWRP sürümlerini kontrol edebilir.</string>
-		<string name="reboot_install_app_prompt_install">Yüklü değilse, TWRP uygulamasını yüklemek için sor</string>
-		<string name="reboot_install_app_system">Sistem Uygulaması olarak yükle</string>
-		<string name="reboot_installing_app">Uygulama yükleniyor...</string>
-		<string name="swipe_to_install_app">TWRP Uygulamasını yüklemek için kaydır</string>
 		<string name="swipe_flash">Flashlamayı onaylamak için kaydır</string>
 		<string name="confirm_action">Eylemi Onayla</string>
 		<string name="back_cancel">İptal etmek için geri düğmesine basın.</string>

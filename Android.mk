@@ -512,8 +512,6 @@ TWRP_REQUIRED_MODULES += \
     minadbd \
     twrpbu \
     adbd_system_api_recovery \
-    me.twrp.twrpapp.apk \
-    privapp-permissions-twrpapp.xml \
     adbd_system_api_recovery \
     libsync.recovery \
     libandroidicu.recovery \

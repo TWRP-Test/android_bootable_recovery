@@ -111,8 +111,6 @@ public:
 	static int stream_adb_backup(string &Restore_Name); // Tell ADB Backup to Stream to TWRP from GUI selection
 	static std::string get_log_dir(); // return recovery log storage directory
 	static void check_selinux_support(); // print whether selinux support is enabled to console
-	static bool Is_TWRP_App_In_System(); // Check if the TWRP app is installed in the system partition
-	static void checkforapp();
 	static int Property_Override(string Prop_Name, string Prop_Value); // Override properties (including ro. properties)
 	static int Delete_Property(string Prop_Name); // Delete properties (non-persistent properties only)
 	static void List_Mounts(); // List current mounts by the kernel

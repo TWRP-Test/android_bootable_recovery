@@ -116,17 +116,6 @@
 		<string name="rebooting">A reiniciar...</string>
 		<string name="swipe_reboot">     Deslize para reiniciar</string>
 		<string name="swipe_reboot_s">   Reiniciar</string>
-		<string name="reboot_install_app_hdr">Instalar a App TWRP?</string>
-		<string name="reboot_install_app1">Pretende instalar a App TWRP Oficial?</string>
-		<string name="reboot_install_app2">A mesma pesquisa por novas versões da TWRP.</string>
-		<string name="reboot_install_app_prompt_install">Perguntar se pretende instalar a App TWRP caso não esteja</string>
-		<string name="reboot_install_app_system">Instalar como App de Sistema</string>
-		<string name="reboot_installing_app">A instalar a App...</string>
-		<string name="swipe_to_install_app">      Deslize para instalar</string>
-		<string name="uninstall_twrp_system_app">Desinstalar a App TWRP do System</string>
-		<string name="uninstall_twrp_system_app_confirm">Desinstalar a App TWRP?</string>
-		<string name="uninstalling_twrp_system_app">A desinstalar a App...</string>
-		<string name="uninstall_twrp_system_app_complete">A desinstalação foi concluída</string>
 		<string name="swipe_flash">      Deslize para instalar</string>
 		<string name="confirm_action">Confirmar a ação</string>
 		<string name="back_cancel">Pressione o botão voltar para cancelar.</string>

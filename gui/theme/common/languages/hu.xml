@@ -112,13 +112,6 @@
 		<string name="rebooting">Újraindítás...</string>
 		<string name="swipe_reboot">Csúsztasson az újraindításhoz</string>
 		<string name="swipe_reboot_s">   Újraindítás</string>
-		<string name="reboot_install_app_hdr">TWRP alkalmazás telepítése?</string>
-		<string name="reboot_install_app1">Szeretné telepíteni a hivatalos TWRP alkalmazást?</string>
-		<string name="reboot_install_app2">Az alkalmazás képes az új TWRP verziók ellenőrzésére.</string>
-		<string name="reboot_install_app_prompt_install">Azonnal telepítse a TWRP alkalmazást, ha nincs telepítve</string>
-		<string name="reboot_install_app_system">Telepítés rendszeralkalmazásként</string>
-		<string name="reboot_installing_app">Alkalmazás telepítése...</string>
-		<string name="swipe_to_install_app">Csúsztasson a TWRP alkalmazás telepítéséhez</string>
 		<string name="swipe_flash">Csúsztasson a flashelés megerősítéséhez</string>
 		<string name="confirm_action">Művelet megerősítése</string>
 		<string name="back_cancel">Nyomja meg a vissza gombot a megszakításhoz.</string>
