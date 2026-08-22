@@ -2077,6 +2077,9 @@ bool TWPartition::Decrypt(string Password) {
 bool TWPartition::Wipe_Encryption() {
 	bool Save_Data_Media = Has_Data_Media;
 	bool ret = false;
+#ifdef TW_USE_DMCTL
+	const char* userdata_mapper = "/dev/block/mapper/userdata";
+#endif
 	BasePartition* base_partition = make_partition();
 
 	if (!base_partition->PreWipeEncryption())
@@ -2098,6 +2101,24 @@ bool TWPartition::Wipe_Encryption() {
 		UnMount(false);
 		if (Is_Mounted()) return false;
 	}
+	#ifdef TW_USE_DMCTL
+	if (Mount_Point == "/data" && TWFunc::Path_Exists(userdata_mapper)) {
+		LOGINFO("Removing metadata-encryption userdata mapping before format.\n");
+		int dmctl_result = TWFunc::Exec_Cmd("dmctl delete userdata", false);
+		if (dmctl_result != 0 && TWFunc::Path_Exists(userdata_mapper)) {
+			LOGERR("Unable to remove metadata-encryption userdata mapping.\n");
+			return false;
+		}
+		for (int retry = 0;
+				retry < 100 && TWFunc::Path_Exists(userdata_mapper);
+				retry++)
+			usleep(10000);
+		if (TWFunc::Path_Exists(userdata_mapper)) {
+			LOGERR("Metadata-encryption userdata mapping did not disappear before format.\n");
+			return false;
+		}
+	}
+	#endif
 	if (Is_Decrypted && !Decrypted_Block_Device.empty()) {
 //		if (delete_crypto_blk_dev((char*)("userdata")) != 0) {
 //			LOGERR("Error deleting crypto block device, continuing anyway.\n");
@@ -2463,14 +2484,6 @@ bool TWPartition::Wipe_F2FS() {
 		NeedPreserveFooter = false;
 	}
 	LOGINFO("make_f2fs command: %s\n", f2fs_command.c_str());
-
-	#ifdef TW_USE_DMCTL
-	if (TWFunc::Path_Exists("/dev/block/mapper/userdata")) {
-		LOGINFO("TWRP: running dmctl before formatting...\n");
-		TWFunc::Exec_Cmd("dmctl delete userdata", false);
-		usleep(32768);
-	}
-	#endif
 
 	if (TWFunc::Exec_Cmd(f2fs_command) == 0) {
 		if (NeedPreserveFooter)
