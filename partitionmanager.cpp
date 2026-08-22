@@ -3804,6 +3804,24 @@ void TWPartitionManager::Unlock_Block_Partitions() {
 
 bool TWPartitionManager::Unmap_Super_Devices() {
 	bool destroyed = false;
+	auto destroy_if_mapped = [](const std::string& name) {
+		const std::string mapper_path = "/dev/block/mapper/" + name;
+		struct stat st;
+		if (lstat(mapper_path.c_str(), &st) != 0) {
+			if (errno == ENOENT) {
+				LOGINFO("dynamic partition %s is already unmapped\n", name.c_str());
+				return true;
+			}
+			LOGERR("Unable to inspect dynamic partition %s: %s\n", name.c_str(), strerror(errno));
+			return false;
+		}
+		if (DestroyLogicalPartition(name))
+			return true;
+		// It may have disappeared between lstat() and destruction.
+		if (lstat(mapper_path.c_str(), &st) != 0 && errno == ENOENT)
+			return true;
+		return false;
+	};
 #ifndef TW_EXCLUDE_APEX
 	twrpApex apex;
 	apex.Unmount();
@@ -3818,13 +3836,13 @@ bool TWPartitionManager::Unmap_Super_Devices() {
 				blk_device_partition.append(PartitionManager.Get_Active_Slot_Suffix());
 			(*iter)->UnMount(false);
 			LOGINFO("removing dynamic partition: %s\n", blk_device_partition.c_str());
-			destroyed = DestroyLogicalPartition(blk_device_partition);
+			destroyed = destroy_if_mapped(blk_device_partition);
 			std::string cow_partition = blk_device_partition + "-cow";
 			std::string cow_partition_path = "/dev/block/mapper/" + cow_partition;
 			struct stat st;
 			if (lstat(cow_partition_path.c_str(), &st) == 0) {
 				LOGINFO("removing cow partition: %s\n", cow_partition.c_str());
-				destroyed = DestroyLogicalPartition(cow_partition);
+				destroyed = destroy_if_mapped(cow_partition);
 			}
 			iter = Partitions.erase(iter);
 			delete part;
@@ -3845,7 +3863,7 @@ bool TWPartitionManager::Unmap_Super_Devices() {
 				std::string partition = de->d_name;
 				if (strcmp(partition.c_str(),"userdata") != 0){
 					LOGINFO("removing dynamic partition: %s\n", partition.c_str());
-					destroyed = DestroyLogicalPartition(partition);
+					destroyed = destroy_if_mapped(partition);
 					if (!destroyed) {
 						closedir(d);
 						return false;
