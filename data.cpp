@@ -768,12 +768,6 @@ void DataManager::SetDefaultValues()
 #endif
 	}
 
-#ifndef TW_EXCLUDE_ENCRYPTED_BACKUPS
-	mConst.SetValue("tw_include_encrypted_backup", "1");
-#else
-	LOGINFO("TW_EXCLUDE_ENCRYPTED_BACKUPS := true\n");
-	mConst.SetValue("tw_include_encrypted_backup", "0");
-#endif
 #ifdef TW_HAS_MTP
 	mConst.SetValue("tw_has_mtp", "1");
 	mPersist.SetValue("tw_mtp_enabled", "1");

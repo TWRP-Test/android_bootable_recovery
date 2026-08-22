@@ -948,21 +948,17 @@ int twrpTar::createTar() {
 			oaes_pid = fork();
 
 			if (oaes_pid < 0) {
-				LOGINFO("openaes fork() failed\n");
+				LOGINFO("aes fork() failed\n");
 				gui_err("backup_error=Error creating backup.");
 				close(output_fd);
 				for (i = 0; i < 4; i++)
 					close(pipes[i]); // close all
 				return -1;
 			} else if (oaes_pid == 0) {
-				// openaes Child
 				dup2(pipes[2], STDIN_FILENO);
 				dup2(output_fd, STDOUT_FILENO);
-				if (execlp("openaes", "openaes", "enc", "--key", password.c_str(), NULL) < 0) {
-					LOGINFO("execlp openaes ERROR!\n");
-					gui_err("backup_error=Error creating backup.");
-					_exit(-1);
-				}
+				TWFunc::AES_Encrypt_Stream(password);
+				_exit(0);
 			} else {
 				// Parent
 				close(pipes[0]);
@@ -1060,14 +1056,10 @@ int twrpTar::createTar() {
 			close(oaesfd[1]);
 			return -1;
 		} else if (oaes_pid == 0) {
-			// Child
 			dup2(oaesfd[0], STDIN_FILENO); // remap stdin
 			dup2(output_fd, STDOUT_FILENO); // remap stdout to output file
-			if (execlp("openaes", "openaes", "enc", "--key", password.c_str(), NULL) < 0) {
-				LOGINFO("execlp openaes ERROR!\n");
-				gui_err("backup_error=Error creating backup.");
-				_exit(-1);
-			}
+			TWFunc::AES_Encrypt_Stream(password);
+			_exit(0);
 		} else {
 			// Parent
 			close(oaesfd[0]); // close parent input
@@ -1146,20 +1138,16 @@ int twrpTar::openTar() {
 				close(pipes[i]); // close all
 			return -1;
 		} else if (oaes_pid == 0) {
-			// openaes Child
 			dup2(input_fd, STDIN_FILENO);
 			dup2(pipes[1], STDOUT_FILENO);
-			if (execlp("openaes", "openaes", "dec", "--key", password.c_str(), NULL) < 0) {
-				LOGINFO("execlp openaes ERROR!\n");
-				gui_err("restore_error=Error during restore process.");
-				_exit(-1);
-			}
+			TWFunc::AES_Decrypt_Stream(password);
+			_exit(0);
 		} else {
 			// Parent
 			pigz_pid = fork();
 
 			if (pigz_pid < 0) {
-				LOGINFO("openaes fork() failed\n");
+				LOGINFO("pigz fork() failed\n");
 				gui_err("restore_error=Error during restore process.");
 				close(input_fd);
 				for (i = 0; i < 4; i++)
@@ -1216,11 +1204,8 @@ int twrpTar::openTar() {
 			// Child
 			dup2(oaesfd[1], STDOUT_FILENO); // remap stdout
 			dup2(input_fd, STDIN_FILENO); // remap input fd to stdin
-			if (execlp("openaes", "openaes", "dec", "--key", password.c_str(), NULL) < 0) {
-				LOGINFO("execlp openaes ERROR!\n");
-				gui_err("restore_error=Error during restore process.");
-				_exit(-1);
-			}
+			TWFunc::AES_Decrypt_Stream(password);
+			_exit(0);
 		} else {
 			// Parent
 			close(oaesfd[1]); // close parent output
@@ -1354,7 +1339,7 @@ int twrpTar::closeTar() {
 		int status;
 		if (pigz_pid > 0 && TWFunc::Wait_For_Child(pigz_pid, &status, "pigz") != 0)
 			return -1;
-		if (oaes_pid > 0 && TWFunc::Wait_For_Child(oaes_pid, &status, "openaes") != 0)
+		if (oaes_pid > 0 && TWFunc::Wait_For_Child(oaes_pid, &status, "aes") != 0)
 			return -1;
 	}
 	free_libtar_buffer();
@@ -1497,22 +1482,66 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 			LOGERR("Decrypted file is not in tar format.\n");
 			total_size = TWFunc::Get_File_Size(filename);
 		} else if (ret == 3) {
-			Command = "openaes dec --key \"" + password + "\" --in '" + filename + "' | pigz -l";
-			/* if we set Command = "pigz -l " + tarfn + " | sed '1d' | cut -f5 -d' '";
-			we get the uncompressed size at once. */
-			TWFunc::Exec_Cmd(Command, result, false);
-			if (!result.empty()) {
-				LOGINFO("result was: '%s'\n", result.c_str());
-				/* Expected output:
-				compressed original  reduced name
-				95855838   179403776 -1.3%   data.<filesystem>.win
-				^
-				split[5]
-				*/
-				split = TWFunc::split_string(result, ' ', true);
-				if (split.size() > 4)
-					total_size = atoi(split[5].c_str());
+			// Match the original OpenAES path: inspect the decrypted gzip stream
+			// with pigz to obtain the uncompressed size.
+			int aes_pipe[2], pigz_pipe[2];
+			if (pipe2(aes_pipe, O_CLOEXEC) == 0) {
+				if (pipe2(pigz_pipe, O_CLOEXEC) != 0) {
+					close(aes_pipe[0]);
+					close(aes_pipe[1]);
+				} else {
+				pid_t aes_pid = fork();
+				if (aes_pid == 0) {
+					int input = open(filename.c_str(), O_RDONLY | O_LARGEFILE);
+					if (input < 0)
+						_exit(1);
+					dup2(input, STDIN_FILENO);
+					dup2(aes_pipe[1], STDOUT_FILENO);
+					close(input);
+					close(aes_pipe[0]);
+					close(aes_pipe[1]);
+					close(pigz_pipe[0]);
+					close(pigz_pipe[1]);
+					TWFunc::AES_Decrypt_Stream(password);
+					_exit(0);
+				}
+
+				pid_t pigz_pid = fork();
+				if (pigz_pid == 0) {
+					dup2(aes_pipe[0], STDIN_FILENO);
+					dup2(pigz_pipe[1], STDOUT_FILENO);
+					close(aes_pipe[0]);
+					close(aes_pipe[1]);
+					close(pigz_pipe[0]);
+					close(pigz_pipe[1]);
+					execlp("pigz", "pigz", "-l", static_cast<char*>(NULL));
+					_exit(1);
+				}
+
+				close(aes_pipe[0]);
+				close(aes_pipe[1]);
+				close(pigz_pipe[1]);
+				if (aes_pid > 0 && pigz_pid > 0) {
+					char buf[256];
+					ssize_t n;
+					while ((n = read(pigz_pipe[0], buf, sizeof(buf) - 1)) > 0)
+						result.append(buf, n);
+				}
+				close(pigz_pipe[0]);
+				int status;
+				if (aes_pid > 0)
+					waitpid(aes_pid, &status, 0);
+				if (pigz_pid > 0)
+					waitpid(pigz_pid, &status, 0);
+				if (!result.empty()) {
+					split = TWFunc::split_string(result, ' ', true);
+					if (split.size() > 5)
+						total_size = strtoull(split[5].c_str(), NULL, 10);
+				}
+				}
 			}
+			if (total_size == 0)
+				total_size = TWFunc::Get_File_Size(filename);
 		} else {
 			total_size = TWFunc::Get_File_Size(filename);
 		}

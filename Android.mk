@@ -50,7 +50,8 @@ LOCAL_SRC_FILES := \
     openrecoveryscript.cpp \
     tarWrite.c \
     twrpAdbBuFifo.cpp \
-    twrpRepacker.cpp
+    twrpRepacker.cpp \
+    oaes/oaes.cpp \
 
 ifeq ($(TW_EXCLUDE_APEX),)
     LOCAL_SRC_FILES += twrpApex.cpp
@@ -411,11 +412,6 @@ endif
 ifneq ($(TW_CUSTOM_CPU_TEMP_PATH),)
 	LOCAL_CFLAGS += -DTW_CUSTOM_CPU_TEMP_PATH=$(TW_CUSTOM_CPU_TEMP_PATH)
 endif
-ifneq ($(TW_EXCLUDE_ENCRYPTED_BACKUPS),)
-    LOCAL_SHARED_LIBRARIES += libopenaes
-else
-    LOCAL_CFLAGS += -DTW_EXCLUDE_ENCRYPTED_BACKUPS
-endif
 ifeq ($(TARGET_RECOVERY_QCOM_RTC_FIX),)
   ifneq ($(filter msm8226 msm8x26 msm8610 msm8974 msm8x74 msm8084 msm8x84 apq8084 msm8909 msm8916 msm8992 msm8994 msm8952 msm8996 msm8937 msm8953 msm8998,$(TARGET_BOARD_PLATFORM)),)
     LOCAL_CFLAGS += -DQCOM_RTC_FIX
@@ -588,9 +584,6 @@ endif
 ifeq ($(BOARD_HAS_NO_REAL_SDCARD),)
     TWRP_REQUIRED_MODULES += sgdisk
 endif
-ifneq ($(TW_EXCLUDE_ENCRYPTED_BACKUPS),)
-    TWRP_REQUIRED_MODULES += openaes openaes_license
-endif
 TWRP_REQUIRED_MODULES += orscmd
 ifneq ($(TW_EXCLUDE_DEFAULT_USB_INIT), true)
     TWRP_REQUIRED_MODULES += init.recovery.usb.rc
@@ -720,7 +713,6 @@ include $(commands_TWRP_local_path)/minui/Android.mk
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/libtar/Android.mk \
     $(commands_TWRP_local_path)/libcrecovery/Android.mk \
-    $(commands_TWRP_local_path)/openaes/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
     $(commands_TWRP_local_path)/dosfstools/Android.mk \
     $(commands_TWRP_local_path)/etc/Android.mk \

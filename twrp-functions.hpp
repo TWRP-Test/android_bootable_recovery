@@ -65,6 +65,8 @@ public:
 	static bool Path_Exists(string Path);                                       // Returns true if the path exists
 	static Archive_Type Get_File_Type(string fn);                               // Determines file type, 0 for unknown, 1 for gzip, 2 for OAES encrypted
 	static int Try_Decrypting_File(string fn, string password); // -1 for some error, 0 for failed to decrypt, 1 for decrypted, 3 for decrypted and found gzip format
+	static void AES_Encrypt_Stream(const string& password);                    // Encrypt stdin to stdout using the OAES chunked format
+	static void AES_Decrypt_Stream(const string& password);                    // Decrypt stdin to stdout using the OAES chunked format
 	static unsigned long Get_File_Size(const string& Path);                     // Returns the size of a file
 	static std::string Remove_Beginning_Slash(const std::string& path);         // Remove the beginning slash of a path
 	static std::string Remove_Trailing_Slashes(const std::string& path, bool leaveLast = false); // Normalizes the path, e.g /data//media/ -> /data/media
