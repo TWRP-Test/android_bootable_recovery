@@ -34,8 +34,12 @@ BatteryInfo GetBatteryInfo() {
   using std::string_literals::operator""s;
 
   auto service_name = IHealth::descriptor + "/default"s;
+  // The UI polls the battery every second and this cannot change while
+  // recovery runs, so asking servicemanager each time only spams the log.
+  static const bool aidl_health_declared =
+      AServiceManager_isDeclared(service_name.c_str());
   std::shared_ptr<IHealth> health;
-  if (AServiceManager_isDeclared(service_name.c_str())) {
+  if (aidl_health_declared) {
     ndk::SpAIBinder binder(AServiceManager_waitForService(service_name.c_str()));
     health = IHealth::fromBinder(binder);
   }
