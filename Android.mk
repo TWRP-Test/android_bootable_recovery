@@ -123,7 +123,7 @@ LOCAL_C_INCLUDES += \
 
 LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts
 LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libtwrpadbbu
-LOCAL_SHARED_LIBRARIES += libbootloader_message libcrecovery libtwrpdigest libc++ libaosprecovery libcrypto libbase 
+LOCAL_SHARED_LIBRARIES += libbootloader_message libtwrpdigest libc++ libaosprecovery libcrypto libbase
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
 LOCAL_SHARED_LIBRARIES += libsparse
 
@@ -702,7 +702,6 @@ include $(commands_TWRP_local_path)/minui/Android.mk
 #includes for TWRP
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/libtar/Android.mk \
-    $(commands_TWRP_local_path)/libcrecovery/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
     $(commands_TWRP_local_path)/dosfstools/Android.mk \
     $(commands_TWRP_local_path)/etc/Android.mk \

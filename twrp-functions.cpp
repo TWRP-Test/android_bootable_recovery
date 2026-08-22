@@ -64,10 +64,6 @@
 #endif // ndef BUILD_TWRPTAR_MAIN
 #include "set_metadata.h"
 
-extern "C" {
-	#include "libcrecovery/common.h"
-}
-
 #ifdef TW_INCLUDE_LIBRESETPROP
     #include <resetprop.hpp>
 #endif
@@ -88,14 +84,16 @@ int TWFunc::Exec_Cmd(const string& cmd, string &result, bool combine_stderr) {
 	std::string popen_cmd = cmd;
 	if (combine_stderr)
 		popen_cmd = cmd + " 2>&1";
-	exec = __popen(popen_cmd.c_str(), "r");
-
-	while (!feof(exec)) {
-		if (fgets(buffer, 128, exec) != NULL) {
-			result += buffer;
-		}
+	exec = popen(popen_cmd.c_str(), "r");
+	if (exec == nullptr) {
+		LOGERR("Exec_Cmd(): failed to execute command: %s\n", cmd.c_str());
+		return -1;
 	}
-	ret = __pclose(exec);
+
+	while (fgets(buffer, sizeof(buffer), exec) != nullptr) {
+		result += buffer;
+	}
+	ret = pclose(exec);
 	return ret;
 }
 
