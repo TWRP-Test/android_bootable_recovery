@@ -2151,6 +2151,12 @@ void TWPartition::Check_FS_Type() {
 		return;
 
 	pr = blkid_new_probe_from_filename(Actual_Block_Device.c_str());
+	// /storage probes a directory, so NULL is routine here, and
+	// blkid_do_fullprobe() does not check what it is handed.
+	if (!pr) {
+		LOGINFO("Can't probe device %s\n", Actual_Block_Device.c_str());
+		return;
+	}
 	if (blkid_do_fullprobe(pr)) {
 		blkid_free_probe(pr);
 		LOGINFO("Can't probe device %s\n", Actual_Block_Device.c_str());
