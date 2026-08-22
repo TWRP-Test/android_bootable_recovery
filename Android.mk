@@ -629,35 +629,6 @@ LOCAL_POST_INSTALL_CMD := \
 
 include $(BUILD_PHONY_PACKAGE)
 
-# recovery-persist (system partition dynamic executable run after /data mounts)
-# ===============================
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    recovery-persist.cpp 
-LOCAL_MODULE := recovery-persist
-LOCAL_SHARED_LIBRARIES := liblog libbase 
-LOCAL_STATIC_LIBRARIES := libotautil librecovery_utils
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/otautil/include
-LOCAL_C_INCLUDES += system/core/libstats/include
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/recovery_utils/include
-LOCAL_CFLAGS := -Werror
-LOCAL_INIT_RC := recovery-persist.rc
-include $(BUILD_EXECUTABLE)
-
-# recovery-refresh (system partition dynamic executable run at init)
-# ===============================
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    recovery-refresh.cpp
-LOCAL_MODULE := recovery-refresh
-LOCAL_SHARED_LIBRARIES := liblog libbase
-LOCAL_STATIC_LIBRARIES := libotautil librecovery_utils
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/otautil/include
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/recovery_utils/include
-LOCAL_CFLAGS := -Werror
-LOCAL_INIT_RC := recovery-refresh.rc
-include $(BUILD_EXECUTABLE)
-
 # libmounts (static library)
 # ===============================
 include $(CLEAR_VARS)

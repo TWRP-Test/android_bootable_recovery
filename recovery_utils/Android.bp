@@ -100,7 +100,6 @@ cc_library_static {
     visibility: [
         "//bootable/recovery",
         "//bootable/recovery/install",
-        "//bootable/recovery/libaosprecovery",
         "//bootable/recovery/minadbd",
         "//bootable/recovery/tests",
         "//bootable/deprecated-ota:__subpackages__",
