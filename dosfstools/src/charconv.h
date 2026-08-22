@@ -1,7 +1,7 @@
-/* check.h - Check and repair a PC/MS-DOS filesystem
+/* charconv.h
 
-   Copyright (C) 1993 Werner Almesberger <werner.almesberger@lrc.di.epfl.ch>
-   Copyright (C) 2008-2014 Daniel Baumann <mail@daniel-baumann.ch>
+   Copyright (C) 2010 Alexander Korolkov <alexander.korolkov@gmail.com>
+   Copyright (C) 2018-2020 Pali Rohár <pali.rohar@gmail.com>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,21 +20,17 @@
    can be found in /usr/share/common-licenses/GPL-3 file.
 */
 
-#ifndef _CHECK_H
-#define _CHECK_H
+#ifndef _CHARCONV_H
+#define _CHARCONV_H
 
-void check_dirty_bits(DOS_FS * fs);
+#include <stddef.h>
 
-int scan_root(DOS_FS * fs);
+#define DEFAULT_DOS_CODEPAGE 850
 
-/* Scans the root directory and recurses into all subdirectories. See check.c
-   for all the details. Returns a non-zero integer if the filesystem has to
-   be checked again. */
-
-
-void check_label(DOS_FS * fs);
-
-/* Checks the volume label from the root directory entry that is valid and
- * matches the label stored in boot sector. */
+int set_dos_codepage(int codepage);
+int dos_char_to_printable(char **p, unsigned char c, unsigned int out_size);
+int local_string_to_dos_string(char *out, char *in, unsigned int out_size);
+int dos_string_to_wchar_string(wchar_t *out, char *in, unsigned int out_size);
+int wchar_string_to_dos_string(char *out, wchar_t *in, unsigned int out_size);
 
 #endif

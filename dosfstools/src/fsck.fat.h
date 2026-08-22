@@ -3,6 +3,7 @@
    Copyright (C) 1993 Werner Almesberger <werner.almesberger@lrc.di.epfl.ch>
    Copyright (C) 1998 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
    Copyright (C) 2008-2014 Daniel Baumann <mail@daniel-baumann.ch>
+   Copyright (C) 2015 Andreas Bombe <aeb@debian.org>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,16 +28,24 @@
 #ifndef _DOSFSCK_H
 #define _DOSFSCK_H
 
+#include <sys/types.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <endian.h>
+#include "endian_compat.h"
 
 #include "msdos_fs.h"
 
 #define VFAT_LN_ATTR (ATTR_RO | ATTR_HIDDEN | ATTR_SYS | ATTR_VOLUME)
 
 #define FAT_STATE_DIRTY 0x01
+#define FAT_NEED_SURFACE_TEST 0x02
+
+#define FAT16_FLAG_HARDDISK_ERROR 0x4000
+#define FAT16_FLAG_CLEAN_SHUTDOWN 0x8000
+
+#define FAT32_FLAG_HARDDISK_ERROR 0x4000000
+#define FAT32_FLAG_CLEAN_SHUTDOWN 0x8000000
 
 /* ++roman: Use own definition of boot sector structure -- the kernel headers'
  * name for it is msdos_boot_sector in 2.0 and fat_boot_sector in 2.1 ... */
@@ -67,7 +76,7 @@ struct boot_sector {
     uint8_t reserved2[12];	/* Unused */
 
     uint8_t drive_number;	/* Logical Drive Number */
-    uint8_t reserved3;		/* Unused */
+    uint8_t boot_flags;		/* bit 0: dirty, bit 1: need surface test */
 
     uint8_t extended_sig;	/* Extended Signature (0x29) */
     uint32_t serial;		/* Serial number */
@@ -96,7 +105,7 @@ struct boot_sector_16 {
     uint32_t total_sect;	/* number of sectors (if sectors == 0) */
 
     uint8_t drive_number;	/* Logical Drive Number */
-    uint8_t reserved2;		/* Unused */
+    uint8_t boot_flags;		/* bit 0: dirty, bit 1: need surface test */
 
     uint8_t extended_sig;	/* Extended Signature (0x29) */
     uint32_t serial;		/* Serial number */
@@ -109,20 +118,18 @@ struct boot_sector_16 {
 
 struct info_sector {
     uint32_t magic;		/* Magic for info sector ('RRaA') */
-    uint8_t junk[0x1dc];
-    uint32_t reserved1;		/* Nothing as far as I can tell */
+    uint8_t reserved1[480];
     uint32_t signature;		/* 0x61417272 ('rrAa') */
     uint32_t free_clusters;	/* Free cluster count.  -1 if unknown */
     uint32_t next_cluster;	/* Most recently allocated cluster. */
-    uint32_t reserved2[3];
-    uint16_t reserved3;
-    uint16_t boot_sign;
-};
+    uint8_t reserved2[12];
+    uint32_t boot_sign;
+} __attribute__ ((packed));
 
 typedef struct {
-    uint8_t name[8], ext[3];	/* name and extension */
+    uint8_t name[MSDOS_NAME];	/* name including extension */
     uint8_t attr;		/* attribute bits */
-    uint8_t lcase;		/* Case for base and extension */
+    uint8_t ntbyte;		/* Case for base and extension, encryption flags and padding size */
     uint8_t ctime_ms;		/* Creation time, milliseconds */
     uint16_t ctime;		/* Creation time */
     uint16_t cdate;		/* Creation date */
@@ -135,8 +142,8 @@ typedef struct {
 typedef struct _dos_file {
     DIR_ENT dir_ent;
     char *lfn;
-    loff_t offset;
-    loff_t lfn_offset;
+    off_t offset;
+    off_t lfn_offset;
     struct _dos_file *parent;	/* parent directory */
     struct _dos_file *next;	/* next entry */
     struct _dos_file *first;	/* first entry (directory only) */
@@ -149,26 +156,28 @@ typedef struct {
 
 typedef struct {
     int nfats;
-    loff_t fat_start;
+    off_t fat_start;
     unsigned int fat_size;	/* unit is bytes */
     unsigned int fat_bits;	/* size of a FAT entry */
     unsigned int eff_fat_bits;	/* # of used bits in a FAT entry */
     uint32_t root_cluster;	/* 0 for old-style root dir */
-    loff_t root_start;
+    off_t root_start;
     unsigned int root_entries;
-    loff_t data_start;
+    off_t data_start;
     unsigned int cluster_size;
-    uint32_t clusters;
-    loff_t fsinfo_start;	/* 0 if not present */
+    uint32_t data_clusters;	/* not including two reserved cluster numbers */
+    off_t fsinfo_start;		/* 0 if not present */
     long free_clusters;
-    loff_t backupboot_start;	/* 0 if not present */
+    off_t backupboot_start;	/* 0 if not present */
     unsigned char *fat;
     DOS_FILE **cluster_owner;
-    char *label;
+    uint32_t serial;
+    char label[11];
 } DOS_FS;
 
-extern int interactive, rw, list, verbose, test, write_immed;
-extern int atari_format;
+extern int rw, list, verbose, test, no_spaces_in_sfns;
+extern long fat_table;
+extern int only_uppercase_label;
 extern unsigned n_files;
 extern void *mem_queue;
 
@@ -184,8 +193,5 @@ extern void *mem_queue;
 
 /* return -16 as a number with fs->fat_bits bits */
 #define FAT_EXTD(fs)	(((1 << fs->eff_fat_bits)-1) & ~0xf)
-
-/* marker for files with no 8.3 name */
-#define FAT_NO_83NAME 32
 
 #endif

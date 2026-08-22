@@ -46,9 +46,9 @@
 #define MSDOS_DOTDOT "..         "	/* "..", padded to MSDOS_NAME chars */
 
 struct msdos_dir_entry {
-    uint8_t name[8], ext[3];	/* name and extension */
+    uint8_t name[MSDOS_NAME];	/* name including extension */
     uint8_t attr;		/* attribute bits */
-    uint8_t lcase;		/* Case for base and extension */
+    uint8_t ntbyte;		/* Case for base and extension, encryption flags and padding size */
     uint8_t ctime_cs;		/* Creation time, centiseconds (0-199) */
     uint16_t ctime;		/* Creation time */
     uint16_t cdate;		/* Creation date */

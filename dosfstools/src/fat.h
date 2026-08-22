@@ -23,10 +23,15 @@
 #ifndef _FAT_H
 #define _FAT_H
 
-void read_fat(DOS_FS * fs);
+void read_fat(DOS_FS * fs, int mode);
 
 /* Loads the FAT of the filesystem described by FS. Initializes the FAT,
    replaces broken FATs and rejects invalid cluster entries. */
+
+void release_fat(DOS_FS * fs);
+
+/* Release the FAT of the filesystem described by FS and free allocated memory.
+   Call it after finish work with FAT. */
 
 void get_fat(FAT_ENTRY * entry, void *fat, uint32_t cluster, DOS_FS * fs);
 
@@ -49,7 +54,7 @@ uint32_t next_cluster(DOS_FS * fs, uint32_t cluster);
    last cluster of the respective cluster chain. CLUSTER must not be a bad
    cluster. */
 
-loff_t cluster_start(DOS_FS * fs, uint32_t cluster);
+off_t cluster_start(DOS_FS * fs, uint32_t cluster);
 
 /* Returns the byte offset of CLUSTER, relative to the respective device. */
 
@@ -61,7 +66,7 @@ void set_owner(DOS_FS * fs, uint32_t cluster, DOS_FILE * owner);
 
 DOS_FILE *get_owner(DOS_FS * fs, uint32_t cluster);
 
-/* Returns the owner of the repective cluster or NULL if the cluster has no
+/* Returns the owner of the respective cluster or NULL if the cluster has no
    owner. */
 
 void fix_bad(DOS_FS * fs);

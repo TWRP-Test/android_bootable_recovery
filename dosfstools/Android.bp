@@ -1,0 +1,84 @@
+package {
+    default_applicable_licenses: ["dosfstools_license"],
+}
+
+license {
+    name: "dosfstools_license",
+    license_kinds: [
+        "SPDX-license-identifier-GPL-3.0",
+    ],
+    license_text: [
+        "COPYING",
+    ],
+}
+
+cc_defaults {
+    name: "dosfstools_defaults",
+    shared_libs: [
+        "libc",
+    ],
+    cflags: [
+        "-D_USING_BIONIC_",
+        "-D_FILE_OFFSET_BITS=64",
+        "-D_GNU_SOURCE",
+        "-DHAVE_ENDIAN_H",
+        "-DHAVE_LINUX_FD_H",
+        "-DHAVE_LINUX_HDREG_H",
+        "-DHAVE_LINUX_LOOP_H",
+        "-DHAVE_LINUX_VERSION_H",
+        "-DHAVE_DECL_GETMNTENT=1",
+        "-DHAVE_DECL_GETMNTINFO=0",
+        "-DHAVE_VASPRINTF",
+        "-Wno-sign-compare",
+        "-Wno-missing-field-initializers",
+    ],
+    local_include_dirs: [
+        "src",
+        "src/blkdev",
+    ],
+}
+
+cc_binary {
+    name: "fsck.fat",
+    recovery: true,
+    defaults: ["dosfstools_defaults"],
+    srcs: [
+        "src/boot.c",
+        "src/check.c",
+        "src/common.c",
+        "src/fat.c",
+        "src/file.c",
+        "src/io.c",
+        "src/lfn.c",
+        "src/charconv.c",
+        "src/fsck.fat.c",
+    ],
+}
+
+cc_binary {
+    name: "fatlabel",
+    recovery: true,
+    defaults: ["dosfstools_defaults"],
+    srcs: [
+        "src/boot.c",
+        "src/common.c",
+        "src/fat.c",
+        "src/io.c",
+        "src/charconv.c",
+        "src/fatlabel.c",
+    ],
+}
+
+cc_binary {
+    name: "mkfs.fat",
+    recovery: true,
+    defaults: ["dosfstools_defaults"],
+    srcs: [
+        "src/mkfs.fat.c",
+        "src/common.c",
+        "src/charconv.c",
+        "src/device_info.c",
+        "src/blkdev/blkdev.c",
+        "src/blkdev/linux_version.c",
+    ],
+}

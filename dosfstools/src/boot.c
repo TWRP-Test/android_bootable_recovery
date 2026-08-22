@@ -3,6 +3,8 @@
    Copyright (C) 1993 Werner Almesberger <werner.almesberger@lrc.di.epfl.ch>
    Copyright (C) 1998 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
    Copyright (C) 2008-2014 Daniel Baumann <mail@daniel-baumann.ch>
+   Copyright (C) 2015-2017 Andreas Bombe <aeb@debian.org>
+   Copyright (C) 2018-2021 Pali Rohár <pali.rohar@gmail.com>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -24,11 +26,15 @@
 /* FAT32, VFAT, Atari format support, and various fixes additions May 1998
  * by Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de> */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <time.h>
+#include <errno.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "fsck.fat.h"
@@ -36,6 +42,7 @@
 #include "io.h"
 #include "boot.h"
 #include "check.h"
+#include "charconv.h"
 
 #define ROUND_TO_MULTIPLE(n,m) ((n) && (m) ? (n)+(m)-1-((n)-1)%(m) : 0)
     /* don't divide by zero */
@@ -43,6 +50,134 @@
 /* cut-over cluster counts for FAT12 and FAT16 */
 #define FAT12_THRESHOLD  4085
 #define FAT16_THRESHOLD 65525
+
+off_t alloc_rootdir_entry(DOS_FS * fs, DIR_ENT * de, const char *pattern, int gen_name)
+{
+    static int curr_num = 0;
+    off_t offset;
+
+    if (fs->root_cluster) {
+	DIR_ENT d2;
+	int i = 0, got = 0;
+	uint32_t clu_num, prev = 0;
+	off_t offset2;
+
+	clu_num = fs->root_cluster;
+	offset = cluster_start(fs, clu_num);
+	while (clu_num > 0 && clu_num != -1) {
+	    fs_read(offset, sizeof(DIR_ENT), &d2);
+	    if (IS_FREE(d2.name) && d2.attr != VFAT_LN_ATTR) {
+		got = 1;
+		break;
+	    }
+	    i += sizeof(DIR_ENT);
+	    offset += sizeof(DIR_ENT);
+	    if ((i % fs->cluster_size) == 0) {
+		prev = clu_num;
+		if ((clu_num = next_cluster(fs, clu_num)) == 0 || clu_num == -1)
+		    break;
+		offset = cluster_start(fs, clu_num);
+	    }
+	}
+	if (!got) {
+	    /* no free slot, need to extend root dir: alloc next free cluster
+	     * after previous one */
+	    if (!prev)
+		die("Root directory has no cluster allocated!");
+	    for (clu_num = prev + 1; clu_num != prev; clu_num++) {
+		FAT_ENTRY entry;
+
+		if (clu_num >= fs->data_clusters + 2)
+		    clu_num = 2;
+		get_fat(&entry, fs->fat, clu_num, fs);
+		if (!entry.value)
+		    break;
+	    }
+	    if (clu_num == prev)
+		die("Root directory full and no free cluster");
+	    set_fat(fs, prev, clu_num);
+	    set_fat(fs, clu_num, -1);
+	    set_owner(fs, clu_num, get_owner(fs, fs->root_cluster));
+	    /* clear new cluster */
+	    memset(&d2, 0, sizeof(d2));
+	    offset = cluster_start(fs, clu_num);
+	    for (i = 0; i < fs->cluster_size; i += sizeof(DIR_ENT))
+		fs_write(offset + i, sizeof(d2), &d2);
+	}
+	memset(de, 0, sizeof(DIR_ENT));
+	if (gen_name) {
+	    while (1) {
+		char expanded[12];
+		if (curr_num >= 10000)
+		    die("Unable to create unique name");
+		sprintf(expanded, pattern, curr_num);
+		curr_num++;
+		memcpy(de->name, expanded, MSDOS_NAME);
+		clu_num = fs->root_cluster;
+		i = 0;
+		offset2 = cluster_start(fs, clu_num);
+		while (clu_num > 0 && clu_num != -1) {
+		    fs_read(offset2, sizeof(DIR_ENT), &d2);
+		    if (offset2 != offset &&
+			!strncmp((const char *)d2.name, (const char *)de->name,
+				 MSDOS_NAME))
+			break;
+		    i += sizeof(DIR_ENT);
+		    offset2 += sizeof(DIR_ENT);
+		    if ((i % fs->cluster_size) == 0) {
+			if ((clu_num = next_cluster(fs, clu_num)) == 0 ||
+			    clu_num == -1)
+			    break;
+			offset2 = cluster_start(fs, clu_num);
+		    }
+		}
+		if (clu_num == 0 || clu_num == -1)
+		    break;
+	    }
+	} else {
+	    memcpy(de->name, pattern, MSDOS_NAME);
+	}
+    } else {
+	DIR_ENT *root;
+	int next_free = 0, scan;
+
+	root = alloc(fs->root_entries * sizeof(DIR_ENT));
+	fs_read(fs->root_start, fs->root_entries * sizeof(DIR_ENT), root);
+
+	while (next_free < fs->root_entries)
+	    if (IS_FREE(root[next_free].name) &&
+		root[next_free].attr != VFAT_LN_ATTR)
+		break;
+	    else
+		next_free++;
+	if (next_free == fs->root_entries)
+	    die("Root directory is full.");
+	offset = fs->root_start + next_free * sizeof(DIR_ENT);
+	memset(de, 0, sizeof(DIR_ENT));
+	if (gen_name) {
+	    while (1) {
+		char expanded[12];
+		if (curr_num >= 10000)
+		    die("Unable to create unique name");
+		sprintf(expanded, pattern, curr_num);
+		curr_num++;
+		memcpy(de->name, expanded, MSDOS_NAME);
+		for (scan = 0; scan < fs->root_entries; scan++)
+		    if (scan != next_free &&
+			!strncmp((const char *)root[scan].name,
+				 (const char *)de->name, MSDOS_NAME))
+			break;
+		if (scan == fs->root_entries)
+		    break;
+	    }
+	} else {
+	    memcpy(de->name, pattern, MSDOS_NAME);
+	}
+	free(root);
+    }
+    ++n_files;
+    return offset;
+}
 
 static struct {
     uint8_t media;
@@ -101,7 +236,7 @@ static void dump_boot(DOS_FS * fs, struct boot_sector *b, unsigned lss)
 	   (unsigned long long)fs->fat_start,
 	   (unsigned long long)fs->fat_start / lss);
     printf("%10d FATs, %d bit entries\n", b->fats, fs->fat_bits);
-    printf("%10d bytes per FAT (= %u sectors)\n", fs->fat_size,
+    printf("%10u bytes per FAT (= %u sectors)\n", fs->fat_size,
 	   fs->fat_size / lss);
     if (!fs->root_cluster) {
 	printf("Root directory starts at byte %llu (sector %llu)\n",
@@ -115,8 +250,9 @@ static void dump_boot(DOS_FS * fs, struct boot_sector *b, unsigned lss)
     printf("Data area starts at byte %llu (sector %llu)\n",
 	   (unsigned long long)fs->data_start,
 	   (unsigned long long)fs->data_start / lss);
-    printf("%10lu data clusters (%llu bytes)\n", (unsigned long)fs->clusters,
-	   (unsigned long long)fs->clusters * fs->cluster_size);
+    printf("%10lu data clusters (%llu bytes)\n",
+	   (unsigned long)fs->data_clusters,
+	   (unsigned long long)fs->data_clusters * fs->cluster_size);
     printf("%u sectors/track, %u heads\n", le16toh(b->secs_track),
 	   le16toh(b->heads));
     printf("%10u hidden sectors\n", atari_format ?
@@ -127,7 +263,7 @@ static void dump_boot(DOS_FS * fs, struct boot_sector *b, unsigned lss)
     printf("%10u sectors total\n", sectors ? sectors : le32toh(b->total_sect));
 }
 
-static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
+static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, unsigned int lss)
 {
     struct boot_sector b2;
 
@@ -137,12 +273,11 @@ static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
 	    printf("And there is no space for creating one!\n");
 	    return;
 	}
-	if (interactive)
-	    printf("1) Create one\n2) Do without a backup\n");
-	else
-	    printf("  Auto-creating backup boot block.\n");
-	if (!interactive || get_key("12", "?") == '1') {
-	    int bbs;
+	if (get_choice(1, "  Auto-creating backup boot block.",
+		       2,
+		       1, "Create one",
+		       2, "Do without a backup") == 1) {
+	    unsigned int bbs;
 	    /* The usual place for the backup boot sector is sector 6. Choose
 	     * that or the last reserved sector. */
 	    if (le16toh(b->reserved) >= 7 && le16toh(b->info_sector) != 6)
@@ -155,7 +290,7 @@ static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
 	    fs->backupboot_start = bbs * lss;
 	    b->backup_boot = htole16(bbs);
 	    fs_write(fs->backupboot_start, sizeof(*b), b);
-	    fs_write((loff_t) offsetof(struct boot_sector, backup_boot),
+	    fs_write(offsetof(struct boot_sector, backup_boot),
 		     sizeof(b->backup_boot), &b->backup_boot);
 	    printf("Created backup of boot sector in sector %d\n", bbs);
 	    return;
@@ -168,7 +303,7 @@ static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
 	/* there are any differences */
 	uint8_t *p, *q;
 	int i, pos, first = 1;
-	char buf[20];
+	char buf[32];
 
 	printf("There are differences between boot sector and its backup.\n");
 	printf("This is mostly harmless. Differences: (offset:original/backup)\n  ");
@@ -187,16 +322,15 @@ static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
 	}
 	printf("\n");
 
-	if (interactive)
-	    printf("1) Copy original to backup\n"
-		   "2) Copy backup to original\n" "3) No action\n");
-	else
-	    printf("  Not automatically fixing this.\n");
-	switch (interactive ? get_key("123", "?") : '3') {
-	case '1':
+	switch (get_choice(3, "  Not automatically fixing this.",
+			   3,
+			   1, "Copy original to backup",
+			   2, "Copy backup to original",
+			   3, "No action")) {
+	case 1:
 	    fs_write(fs->backupboot_start, sizeof(*b), b);
 	    break;
-	case '2':
+	case 2:
 	    fs_write(0, sizeof(b2), &b2);
 	    break;
 	default:
@@ -205,26 +339,25 @@ static void check_backup_boot(DOS_FS * fs, struct boot_sector *b, int lss)
     }
 }
 
-static void init_fsinfo(struct info_sector *i)
+static void init_fsinfo_except_reserved(struct info_sector *i)
 {
     i->magic = htole32(0x41615252);
     i->signature = htole32(0x61417272);
     i->free_clusters = htole32(-1);
     i->next_cluster = htole32(2);
-    i->boot_sign = htole16(0xaa55);
+    i->boot_sign = htole32(0xaa550000);
 }
 
-static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, int lss)
+static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, unsigned int lss)
 {
     struct info_sector i;
 
     if (!b->info_sector) {
 	printf("No FSINFO sector\n");
-	if (interactive)
-	    printf("1) Create one\n2) Do without FSINFO\n");
-	else
-	    printf("  Not automatically creating it.\n");
-	if (interactive && get_key("12", "?") == '1') {
+	if (get_choice(2, "  Not automatically creating it.",
+		       2,
+		       1, "Create one",
+		       2, "Do without FSINFO") == 1) {
 	    /* search for a free reserved sector (not boot sector and not
 	     * backup boot sector) */
 	    uint32_t s;
@@ -232,10 +365,11 @@ static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, int lss)
 		if (s != le16toh(b->backup_boot))
 		    break;
 	    if (s > 0 && s < le16toh(b->reserved)) {
-		init_fsinfo(&i);
-		fs_write((loff_t) s * lss, sizeof(i), &i);
+		memset(&i, 0, sizeof (struct info_sector));
+		init_fsinfo_except_reserved(&i);
+		fs_write((off_t)s * lss, sizeof(i), &i);
 		b->info_sector = htole16(s);
-		fs_write((loff_t) offsetof(struct boot_sector, info_sector),
+		fs_write(offsetof(struct boot_sector, info_sector),
 			 sizeof(b->info_sector), &b->info_sector);
 		if (fs->backupboot_start)
 		    fs_write(fs->backupboot_start +
@@ -254,7 +388,7 @@ static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, int lss)
     fs_read(fs->fsinfo_start, sizeof(i), &i);
 
     if (i.magic != htole32(0x41615252) ||
-	i.signature != htole32(0x61417272) || i.boot_sign != htole16(0xaa55)) {
+	i.signature != htole32(0x61417272) || i.boot_sign != htole32(0xaa550000)) {
 	printf("FSINFO sector has bad magic number(s):\n");
 	if (i.magic != htole32(0x41615252))
 	    printf("  Offset %llu: 0x%08x != expected 0x%08x\n",
@@ -264,16 +398,15 @@ static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, int lss)
 	    printf("  Offset %llu: 0x%08x != expected 0x%08x\n",
 		   (unsigned long long)offsetof(struct info_sector, signature),
 		   le32toh(i.signature), 0x61417272);
-	if (i.boot_sign != htole16(0xaa55))
-	    printf("  Offset %llu: 0x%04x != expected 0x%04x\n",
+	if (i.boot_sign != htole32(0xaa550000))
+	    printf("  Offset %llu: 0x%08x != expected 0x%08x\n",
 		   (unsigned long long)offsetof(struct info_sector, boot_sign),
-		   le16toh(i.boot_sign), 0xaa55);
-	if (interactive)
-	    printf("1) Correct\n2) Don't correct (FSINFO invalid then)\n");
-	else
-	    printf("  Auto-correcting it.\n");
-	if (!interactive || get_key("12", "?") == '1') {
-	    init_fsinfo(&i);
+		   le32toh(i.boot_sign), 0xaa550000);
+	if (get_choice(1, "  Auto-correcting it.",
+		       2,
+		       1, "Correct",
+		       2, "Don't correct (FSINFO invalid then)") == 1) {
+	    init_fsinfo_except_reserved(&i);
 	    fs_write(fs->fsinfo_start, sizeof(i), &i);
 	} else
 	    fs->fsinfo_start = 0;
@@ -283,51 +416,15 @@ static void read_fsinfo(DOS_FS * fs, struct boot_sector *b, int lss)
 	fs->free_clusters = le32toh(i.free_clusters);
 }
 
-static char print_fat_dirty_state(void)
-{
-    printf("Dirty bit is set. Fs was not properly unmounted and"
-	   " some data may be corrupt.\n");
-
-    if (interactive) {
-	printf("1) Remove dirty bit\n" "2) No action\n");
-	return get_key("12", "?");
-    } else
-	printf(" Automatically removing dirty bit.\n");
-    return '1';
-}
-
-static void check_fat_state_bit(DOS_FS * fs, void *b)
-{
-    if (fs->fat_bits == 32) {
-	struct boot_sector *b32 = b;
-
-	if (b32->reserved3 & FAT_STATE_DIRTY) {
-	    printf("0x41: ");
-	    if (print_fat_dirty_state() == '1') {
-		b32->reserved3 &= ~FAT_STATE_DIRTY;
-		fs_write(0, sizeof(*b32), b32);
-	    }
-	}
-    } else {
-	struct boot_sector_16 *b16 = b;
-
-	if (b16->reserved2 & FAT_STATE_DIRTY) {
-	    printf("0x25: ");
-	    if (print_fat_dirty_state() == '1') {
-		b16->reserved2 &= ~FAT_STATE_DIRTY;
-		fs_write(0, sizeof(*b16), b16);
-	    }
-	}
-    }
-}
-
 void read_boot(DOS_FS * fs)
 {
     struct boot_sector b;
     unsigned total_sectors;
-    unsigned short logical_sector_size, sectors;
-    unsigned fat_length;
-    loff_t data_size;
+    unsigned int logical_sector_size, sectors;
+    long long fat_length;
+    unsigned total_fat_entries;
+    off_t data_size;
+    long long position;
 
     fs_read(0, sizeof(b), &b);
     logical_sector_size = GET_UNALIGNED_W(b.sector_size);
@@ -338,7 +435,7 @@ void read_boot(DOS_FS * fs)
     /* if the platform needs special handling of unaligned multibyte accesses */
     /* but such handling isn't being provided. See GET_UNALIGNED_W() above. */
     if (logical_sector_size & (SECTOR_SIZE - 1))
-	die("Logical sector size (%d bytes) is not a multiple of the physical "
+	die("Logical sector size (%u bytes) is not a multiple of the physical "
 	    "sector size.", logical_sector_size);
 
     fs->cluster_size = b.cluster_size * logical_sector_size;
@@ -352,19 +449,38 @@ void read_boot(DOS_FS * fs)
     if (verbose)
 	printf("Checking we can access the last sector of the filesystem\n");
     /* Can't access last odd sector anyway, so round down */
-    fs_test((loff_t) ((total_sectors & ~1) - 1) * (loff_t) logical_sector_size,
-	    logical_sector_size);
+    position = (long long)((total_sectors & ~1) - 1) * logical_sector_size;
+    if (position > OFF_MAX)
+	die("Filesystem is too large.");
+    if (!fs_test(position, logical_sector_size))
+	die("Failed to read sector %u.", (total_sectors & ~1) - 1);
+
     fat_length = le16toh(b.fat_length) ?
 	le16toh(b.fat_length) : le32toh(b.fat32_length);
-    fs->fat_start = (loff_t) le16toh(b.reserved) * logical_sector_size;
-    fs->root_start = ((loff_t) le16toh(b.reserved) + b.fats * fat_length) *
+    if (!fat_length)
+	die("FAT size is zero.");
+
+    fs->fat_start = (off_t)le16toh(b.reserved) * logical_sector_size;
+    position = (le16toh(b.reserved) + b.fats * fat_length) *
 	logical_sector_size;
+    if (position > OFF_MAX)
+	die("Filesystem is too large.");
+    fs->root_start = position;
     fs->root_entries = GET_UNALIGNED_W(b.dir_entries);
-    fs->data_start = fs->root_start + ROUND_TO_MULTIPLE(fs->root_entries <<
-							MSDOS_DIR_BITS,
-							logical_sector_size);
-    data_size = (loff_t) total_sectors *logical_sector_size - fs->data_start;
-    fs->clusters = data_size / fs->cluster_size;
+    position = (long long)fs->root_start +
+			  ROUND_TO_MULTIPLE(fs->root_entries << MSDOS_DIR_BITS,
+					    logical_sector_size);
+    if (position > OFF_MAX)
+	die("Filesystem is too large.");
+    fs->data_start = position;
+    position = (long long)total_sectors * logical_sector_size - fs->data_start;
+    if (position > OFF_MAX)
+	die("Filesystem is too large.");
+    data_size = position;
+    if (data_size < fs->cluster_size)
+	die("Filesystem has no space for any data clusters");
+
+    fs->data_clusters = data_size / fs->cluster_size;
     fs->root_cluster = 0;	/* indicates standard, pre-FAT32 root dir */
     fs->fsinfo_start = 0;	/* no FSINFO structure */
     fs->free_clusters = -1;	/* unknown */
@@ -377,23 +493,22 @@ void read_boot(DOS_FS * fs)
 	     * (root_entries != 0), we handle the root dir the old way. Give a
 	     * warning, but convertig to a root dir in a cluster chain seems
 	     * to complex for now... */
-	    printf("Warning: FAT32 root dir not in cluster chain! "
+	    fprintf(stderr, "Warning: FAT32 root dir not in cluster chain! "
 		   "Compatibility mode...\n");
 	else if (!fs->root_cluster && !fs->root_entries)
 	    die("No root directory!");
 	else if (fs->root_cluster && fs->root_entries)
-	    printf("Warning: FAT32 root dir is in a cluster chain, but "
+	    fprintf(stderr, "Warning: FAT32 root dir is in a cluster chain, but "
 		   "a separate root dir\n"
 		   "  area is defined. Cannot fix this easily.\n");
-	if (fs->clusters < FAT16_THRESHOLD)
-	    printf("Warning: Filesystem is FAT32 according to fat_length "
+	if (fs->data_clusters < FAT16_THRESHOLD)
+	    fprintf(stderr, "Warning: Filesystem is FAT32 according to fat_length "
 		   "and fat32_length fields,\n"
 		   "  but has only %lu clusters, less than the required "
 		   "minimum of %d.\n"
 		   "  This may lead to problems on some systems.\n",
-		   (unsigned long)fs->clusters, FAT16_THRESHOLD);
+		   (unsigned long)fs->data_clusters, FAT16_THRESHOLD);
 
-	check_fat_state_bit(fs, &b);
 	fs->backupboot_start = le16toh(b.backup_boot) * logical_sector_size;
 	check_backup_boot(fs, &b, logical_sector_size);
 
@@ -401,56 +516,57 @@ void read_boot(DOS_FS * fs)
     } else if (!atari_format) {
 	/* On real MS-DOS, a 16 bit FAT is used whenever there would be too
 	 * much clusers otherwise. */
-	fs->fat_bits = (fs->clusters >= FAT12_THRESHOLD) ? 16 : 12;
-	if (fs->clusters >= FAT16_THRESHOLD)
-	    die("Too many clusters (%lu) for FAT16 filesystem.", fs->clusters);
-	check_fat_state_bit(fs, &b);
+	fs->fat_bits = (fs->data_clusters >= FAT12_THRESHOLD) ? 16 : 12;
+	if (fs->data_clusters >= FAT16_THRESHOLD)
+	    die("Too many clusters (%lu) for FAT16 filesystem.",
+		    (unsigned long)fs->data_clusters);
     } else {
 	/* On Atari, things are more difficult: GEMDOS always uses 12bit FATs
 	 * on floppies, and always 16 bit on harddisks. */
 	fs->fat_bits = 16;	/* assume 16 bit FAT for now */
 	/* If more clusters than fat entries in 16-bit fat, we assume
 	 * it's a real MSDOS FS with 12-bit fat. */
-	if (fs->clusters + 2 > fat_length * logical_sector_size * 8 / 16 ||
-	    /* if it's a floppy disk --> 12bit fat */
-	    device_no == 2 ||
-	    /* if it's a ramdisk or loopback device and has one of the usual
-	     * floppy sizes -> 12bit FAT  */
-	    ((device_no == 1 || device_no == 7) &&
-	     (total_sectors == 720 || total_sectors == 1440 ||
-	      total_sectors == 2880)))
+	if (fs->data_clusters + 2 > fat_length * logical_sector_size * 8 / 16 ||
+	    /* if it has one of the usual floppy sizes -> 12bit FAT  */
+	    (total_sectors == 720 || total_sectors == 1440 ||
+	     total_sectors == 2880))
 	    fs->fat_bits = 12;
     }
     /* On FAT32, the high 4 bits of a FAT entry are reserved */
     fs->eff_fat_bits = (fs->fat_bits == 32) ? 28 : fs->fat_bits;
-    fs->fat_size = fat_length * logical_sector_size;
+    position = fat_length * logical_sector_size;
+    if (position > OFF_MAX)
+	die("Filesystem is too large.");
+    fs->fat_size = position;
 
-    fs->label = calloc(12, sizeof(uint8_t));
+    fs->label[0] = 0;
     if (fs->fat_bits == 12 || fs->fat_bits == 16) {
 	struct boot_sector_16 *b16 = (struct boot_sector_16 *)&b;
-	if (b16->extended_sig == 0x29)
+	if (b16->extended_sig == 0x29) {
 	    memmove(fs->label, b16->label, 11);
-	else
-	    fs->label = NULL;
+	    fs->serial = b16->serial;
+	}
     } else if (fs->fat_bits == 32) {
-	if (b.extended_sig == 0x29)
+	if (b.extended_sig == 0x29) {
 	    memmove(fs->label, &b.label, 11);
-	else
-	    fs->label = NULL;
+	    fs->serial = b.serial;
+	}
     }
 
-    if (fs->clusters >
-	((uint64_t)fs->fat_size * 8 / fs->fat_bits) - 2)
-	die("Filesystem has %d clusters but only space for %d FAT entries.",
-	    fs->clusters,
-	    ((unsigned long long)fs->fat_size * 8 / fs->fat_bits) - 2);
+    position = (long long)fs->fat_size * 8 / fs->fat_bits;
+    if (position > UINT_MAX)
+	die("FAT has space for too many entries (%lld).", (long long)position);
+    total_fat_entries = position;
+    if (fs->data_clusters > total_fat_entries - 2)
+	die("Filesystem has %u clusters but only space for %u FAT entries.",
+	    fs->data_clusters, total_fat_entries - 2);
     if (!fs->root_entries && !fs->root_cluster)
 	die("Root directory has zero size.");
     if (fs->root_entries & (MSDOS_DPS - 1))
 	die("Root directory (%d entries) doesn't span an integral number of "
 	    "sectors.", fs->root_entries);
     if (logical_sector_size & (SECTOR_SIZE - 1))
-	die("Logical sector size (%d bytes) is not a multiple of the physical "
+	die("Logical sector size (%u bytes) is not a multiple of the physical "
 	    "sector size.", logical_sector_size);
 #if 0				/* linux kernel doesn't check that either */
     /* ++roman: On Atari, these two fields are often left uninitialized */
@@ -461,7 +577,8 @@ void read_boot(DOS_FS * fs)
 	dump_boot(fs, &b, logical_sector_size);
 }
 
-static void write_boot_label(DOS_FS * fs, char *label)
+static void write_boot_label_or_serial(int label_mode, DOS_FS * fs,
+	const char *label, uint32_t serial)
 {
     if (fs->fat_bits == 12 || fs->fat_bits == 16) {
 	struct boot_sector_16 b16;
@@ -470,10 +587,16 @@ static void write_boot_label(DOS_FS * fs, char *label)
 	if (b16.extended_sig != 0x29) {
 	    b16.extended_sig = 0x29;
 	    b16.serial = 0;
+	    memmove(b16.label, "NO NAME    ", 11);
 	    memmove(b16.fs_type, fs->fat_bits == 12 ? "FAT12   " : "FAT16   ",
 		    8);
 	}
-	memmove(b16.label, label, 11);
+
+	if (label_mode)
+	    memmove(b16.label, label, 11);
+	else
+	    b16.serial = serial;
+
 	fs_write(0, sizeof(b16), &b16);
     } else if (fs->fat_bits == 32) {
 	struct boot_sector b;
@@ -482,19 +605,35 @@ static void write_boot_label(DOS_FS * fs, char *label)
 	if (b.extended_sig != 0x29) {
 	    b.extended_sig = 0x29;
 	    b.serial = 0;
+	    memmove(b.label, "NO NAME    ", 11);
 	    memmove(b.fs_type, "FAT32   ", 8);
 	}
-	memmove(b.label, label, 11);
+
+	if (label_mode)
+	    memmove(b.label, label, 11);
+	else
+	    b.serial = serial;
+
 	fs_write(0, sizeof(b), &b);
 	if (fs->backupboot_start)
 	    fs_write(fs->backupboot_start, sizeof(b), &b);
     }
 }
 
-loff_t find_volume_de(DOS_FS * fs, DIR_ENT * de)
+void write_boot_label(DOS_FS * fs, const char *label)
+{
+    write_boot_label_or_serial(1, fs, label, 0);
+}
+
+void write_serial(DOS_FS * fs, uint32_t serial)
+{
+    write_boot_label_or_serial(0, fs, NULL, serial);
+}
+
+off_t find_volume_de(DOS_FS * fs, DIR_ENT * de)
 {
     uint32_t cluster;
-    loff_t offset;
+    off_t offset;
     int i;
 
     if (fs->root_cluster) {
@@ -504,7 +643,13 @@ loff_t find_volume_de(DOS_FS * fs, DIR_ENT * de)
 	    offset = cluster_start(fs, cluster);
 	    for (i = 0; i * sizeof(DIR_ENT) < fs->cluster_size; i++) {
 		fs_read(offset, sizeof(DIR_ENT), de);
-		if (de->attr != VFAT_LN_ATTR && de->attr & ATTR_VOLUME)
+
+		/* no point in scanning after end of directory marker */
+		if (!de->name[0])
+		    return 0;
+
+		if (!IS_FREE(de->name) &&
+		    de->attr != VFAT_LN_ATTR && de->attr & ATTR_VOLUME)
 		    return offset;
 		offset += sizeof(DIR_ENT);
 	    }
@@ -513,7 +658,13 @@ loff_t find_volume_de(DOS_FS * fs, DIR_ENT * de)
 	for (i = 0; i < fs->root_entries; i++) {
 	    offset = fs->root_start + i * sizeof(DIR_ENT);
 	    fs_read(offset, sizeof(DIR_ENT), de);
-	    if (de->attr != VFAT_LN_ATTR && de->attr & ATTR_VOLUME)
+
+	    /* no point in scanning after end of directory marker */
+	    if (!de->name[0])
+		return 0;
+
+	    if (!IS_FREE(de->name) &&
+		de->attr != VFAT_LN_ATTR && de->attr & ATTR_VOLUME)
 		return offset;
 	}
     }
@@ -521,11 +672,12 @@ loff_t find_volume_de(DOS_FS * fs, DIR_ENT * de)
     return 0;
 }
 
-static void write_volume_label(DOS_FS * fs, char *label)
+void write_volume_label(DOS_FS * fs, char *label)
 {
-    time_t now = time(NULL);
-    struct tm *mtime = localtime(&now);
-    loff_t offset;
+    time_t now;
+    struct tm *mtime;
+    char *source_date_epoch = NULL;
+    off_t offset;
     int created;
     DIR_ENT de;
 
@@ -533,15 +685,43 @@ static void write_volume_label(DOS_FS * fs, char *label)
     offset = find_volume_de(fs, &de);
     if (offset == 0) {
 	created = 1;
-	offset = alloc_rootdir_entry(fs, &de, label);
+	offset = alloc_rootdir_entry(fs, &de, label, 0);
     }
+
     memcpy(de.name, label, 11);
-    de.time = htole16((unsigned short)((mtime->tm_sec >> 1) +
-				       (mtime->tm_min << 5) +
-				       (mtime->tm_hour << 11)));
-    de.date = htole16((unsigned short)(mtime->tm_mday +
-				       ((mtime->tm_mon + 1) << 5) +
-				       ((mtime->tm_year - 80) << 9)));
+    if (de.name[0] == 0xe5)
+	de.name[0] = 0x05;
+
+    source_date_epoch = getenv("SOURCE_DATE_EPOCH");
+    if (source_date_epoch) {
+        char *tmp = NULL;
+        long long conversion = 0;
+        errno = 0;
+        conversion = strtoll(source_date_epoch, &tmp, 10);
+        now = conversion;
+        if (!isdigit((unsigned char)*source_date_epoch) || *tmp != '\0'
+                || errno != 0 || (long long)now != conversion) {
+            die("SOURCE_DATE_EPOCH is too big or contains non-digits: \"%s\"",
+                source_date_epoch);
+        }
+        mtime = gmtime(&now);
+    } else {
+        now = time(NULL);
+        mtime = (now != (time_t)-1) ? localtime(&now) : NULL;
+    }
+
+    if (mtime && mtime->tm_year >= 80 && mtime->tm_year <= 207) {
+	de.time = htole16((unsigned short)((mtime->tm_sec >> 1) +
+					   (mtime->tm_min << 5) +
+					   (mtime->tm_hour << 11)));
+	de.date = htole16((unsigned short)(mtime->tm_mday +
+					 ((mtime->tm_mon + 1) << 5) +
+					 ((mtime->tm_year - 80) << 9)));
+    } else {
+	/* fallback to 1.1.1980 00:00:00 */
+	de.time = htole16(0);
+	de.date = htole16(1 + (1 << 5));
+    }
     if (created) {
 	de.attr = ATTR_VOLUME;
 	de.ctime_ms = 0;
@@ -565,4 +745,52 @@ void write_label(DOS_FS * fs, char *label)
 
     write_boot_label(fs, label);
     write_volume_label(fs, label);
+}
+
+void remove_label(DOS_FS *fs)
+{
+    off_t offset;
+    DIR_ENT de;
+
+    write_boot_label(fs, "NO NAME    ");
+
+    offset = find_volume_de(fs, &de);
+    if (offset) {
+	/* mark entry as deleted */
+	de.name[0] = 0xe5;
+	/* remove ATTR_VOLUME for compatibility with older fatlabel version
+	 * which ignores above deletion mark for entries with ATTR_VOLUME */
+	de.attr = 0;
+	fs_write(offset, sizeof(DIR_ENT), &de);
+    }
+}
+
+const char *pretty_label(const char *label, char rep)
+{
+    static char buffer[256];
+    char *p;
+    int i;
+    int last;
+
+    for (last = 10; last >= 0; last--) {
+        if (label[last] != ' ')
+            break;
+    }
+
+    p = buffer;
+    for (i = 0; i <= last && p < buffer + sizeof(buffer) - 1; ++i) {
+        if (!dos_char_to_printable(&p, label[i], buffer + sizeof(buffer) - 1 - p)) {
+            if (rep) {
+                *p++ = rep;
+            } else if (p + 4 < buffer + sizeof(buffer) - 1) {
+                *p++ = '\\';
+                *p++ = '0' + (label[i] >> 6);
+                *p++ = '0' + ((label[i] >> 3) & 7);
+                *p++ = '0' + (label[i] & 7);
+            }
+        }
+    }
+    *p = 0;
+
+    return buffer;
 }

@@ -701,7 +701,6 @@ include $(commands_TWRP_local_path)/minui/Android.mk
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/libtar/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
-    $(commands_TWRP_local_path)/dosfstools/Android.mk \
     $(commands_TWRP_local_path)/etc/Android.mk \
     $(commands_TWRP_local_path)/attr/Android.mk
 
