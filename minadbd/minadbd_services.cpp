@@ -357,10 +357,3 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* /* transport *
   }
   return unique_fd{};
 }
-
-#if PLATFORM_SDK_VERSION == 23
-int service_to_fd(const char* name) {
-    atransport transport;
-    return service_to_fd(name, &transport);
-}
-#endif
