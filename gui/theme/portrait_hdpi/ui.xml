@@ -270,14 +270,6 @@
 			</fill>
 
 			<text color="%text_color%">
-				<condition var1="tw_no_cpu_temp" var2="1"/>
-				<condition var1="tw_cpu_pos_x" var2="0"/>
-				<font resource="font_m"/>
-				<placement x="%indent%" y="%row1_header_y%"/>
-				<text>%tw_version%</text>
-			</text>
-
-			<text color="%text_color%">
 				<condition var1="tw_no_cpu_temp" var2="0"/>
 				<condition var1="tw_cpu_pos_x" var2="0"/>
 				<font resource="font_m"/>
@@ -306,14 +298,6 @@
 			</text>
 
 			<!-- Custom position for status bar items if defined START -->
-
-			<text color="%text_color%">
-				<condition var1="tw_no_cpu_temp" var2="1"/>
-				<condition var1="tw_cpu_pos_x" op="!=" var2="0"/>
-				<font resource="font_m"/>
-				<placement x="%tw_cpu_pos_x%" y="%row1_header_y%"/>
-				<text>%tw_version%</text>
-			</text>
 
 			<text color="%text_color%">
 				<condition var1="tw_no_cpu_temp" var2="0"/>
