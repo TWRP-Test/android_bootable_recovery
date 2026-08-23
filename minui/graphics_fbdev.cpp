@@ -39,25 +39,8 @@ std::unique_ptr<GRSurfaceFbdev> GRSurfaceFbdev::Create(size_t width, size_t heig
 }
 
 void MinuiBackendFbdev::Blank(bool blank) {
-#if defined(TW_NO_SCREEN_BLANK) && defined(TW_BRIGHTNESS_PATH) && defined(TW_MAX_BRIGHTNESS)
-    int fd;
-    char brightness[4];
-    snprintf(brightness, 4, "%03d", TW_MAX_BRIGHTNESS/2);
-
-    fd = open(TW_BRIGHTNESS_PATH, O_RDWR);
-    if (fd < 0) {
-        perror("cannot open LCD backlight");
-        return;
-    }
-    write(fd, blank ? "000" : brightness, 3);
-    close(fd);
-#else
-    int ret;
-
-    ret = ioctl(fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
-    if (ret < 0)
-        perror("ioctl(): blank");
-#endif
+  int ret = ioctl(fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
+  if (ret < 0) perror("ioctl(): blank");
 }
 
 void MinuiBackendFbdev::Blank(bool blank, DrmConnector index) {

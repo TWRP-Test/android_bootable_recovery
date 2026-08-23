@@ -15,10 +15,6 @@
  */
 
 #pragma once
-#ifndef _MINUI_H_
-#define _MINUI_H_
-
-#ifndef TW_USE_MINUI_21
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -140,13 +136,6 @@ void gr_clear();
 void gr_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 void gr_fill(int x1, int y1, int x2, int y2);
 
-void gr_texticon(int x, int y, GRSurface* icon);
-#ifdef TW_NO_MINUI_CUSTOM_FONTS
-void gr_text(int x, int y, const char *s, bool bold);
-int gr_measure(const char *s);
-void gr_font_size(int *x, int *y);
-void gr_set_font(__attribute__ ((unused))const char* name);
-#else
 void gr_texticon(int x, int y, const GRSurface* icon);
 
 const GRFont* gr_sys_font();
@@ -156,7 +145,7 @@ void gr_text(const GRFont* font, int x, int y, const char* s, bool bold);
 int gr_measure(const GRFont* font, const char* s);
 // Returns -1 if font is nullptr.
 int gr_font_size(const GRFont* font, int* x, int* y);
-#endif
+
 void gr_blit(const GRSurface* source, int sx, int sy, int w, int h, int dx, int dy);
 unsigned int gr_get_width(const GRSurface* surface);
 unsigned int gr_get_height(const GRSurface* surface);
@@ -176,32 +165,17 @@ PixelFormat gr_pixel_format();
 
 struct input_event;
 
-#ifdef TW_USE_MINUI_WITH_DATA
-typedef int (*ev_callback)(int fd, uint32_t epevents, void* data);
-typedef int (*ev_set_key_callback)(int code, int value, void* data);
-
-int ev_init(ev_callback input_cb, void* data);
-int ev_add_fd(int fd, ev_callback cb, void* data);
-int ev_sync_key_state(ev_set_key_callback set_key_cb, void* data);
-#else
 using ev_callback = std::function<int(int fd, uint32_t epevents)>;
 using ev_set_key_callback = std::function<int(int code, int value)>;
 using ev_set_sw_callback = std::function<int(int code, int value)>;
 
-#ifdef TW_USE_MINUI_WITH_OPTIONAL_TOUCH_EVENTS
 int ev_init(ev_callback input_cb, bool allow_touch_inputs = false);
 void ev_exit();
 int ev_add_fd(android::base::unique_fd&& fd, ev_callback cb);
 void ev_iterate_available_keys(const std::function<void(int)>& f);
 void ev_iterate_touch_inputs(const std::function<void(int)>& action);
-#else
-int ev_init(ev_callback input_cb);
-#endif
-int ev_add_fd(int fd, ev_callback cb);
 int ev_sync_key_state(const ev_set_key_callback& set_key_cb);
-#endif
-void ev_exit();
-void ev_iterate_available_keys(const std::function<void(int)>& f);
+int ev_sync_sw_state(const ev_set_sw_callback& set_sw_cb);
 
 // 'timeout' has the same semantics as poll(2).
 //    0 : don't block
@@ -210,7 +184,6 @@ void ev_iterate_available_keys(const std::function<void(int)>& f);
 int ev_wait(int timeout);
 
 int ev_get_input(int fd, uint32_t epevents, input_event* ev);
-int ev_sync_sw_state(const ev_set_sw_callback& set_sw_cb);
 void ev_dispatch();
 int ev_get_epollfd();
 
@@ -237,9 +210,7 @@ int res_create_display_surface(const char* name, GRSurface** pSurface);
 // should have a 'Frames' text chunk whose value is the number of
 // frames this image represents.  The pixel data itself is interlaced
 // by row.
-int res_create_multi_display_surface(const char* name, int* frames,
-                                     int* fps, GRSurface*** pSurface);
-int res_create_multi_display_surface(const char* name, int* frames,
+int res_create_multi_display_surface(const char* name, int* frames, int* fps,
                                      GRSurface*** pSurface);
 
 // Load a single alpha surface from a grayscale PNG image.
@@ -260,95 +231,3 @@ std::vector<std::string> get_locales_in_png(const std::string& png_name);
 // Free a surface allocated by any of the res_create_*_surface()
 // functions.
 void res_free_surface(GRSurface* surface);
-#else //ifndef TW_USE_MINUI_21
-
-// This the old minui21/minui.h for compatibility with building TWRP
-// in pre 6.0 trees.
-
-#include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef void* gr_surface;
-typedef unsigned short gr_pixel;
-
-int gr_init(void);
-void gr_exit(void);
-
-int gr_fb_width(void);
-int gr_fb_height(void);
-gr_pixel *gr_fb_data(void);
-void gr_flip(void);
-void gr_fb_blank(bool blank);
-
-void gr_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
-void gr_fill(int x1, int y1, int x2, int y2);
-
-// system/core/charger uses different gr_print signatures in diferent
-// Android versions, either with or without int bold.
-int gr_text(int x, int y, const char *s, ...);
-int gr_text_impl(int x, int y, const char *s, int bold);
-
- void gr_texticon(int x, int y, gr_surface icon);
-int gr_measure(const char *s);
-void gr_font_size(int *x, int *y);
-void gr_get_memory_surface(gr_surface);
-
-void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy);
-unsigned int gr_get_width(gr_surface surface);
-unsigned int gr_get_height(gr_surface surface);
-
-// input event structure, include <linux/input.h> for the definition.
-// see http://www.mjmwired.net/kernel/Documentation/input/ for info.
-struct input_event;
-
-typedef int (*ev_callback)(int fd, uint32_t epevents, void *data);
-typedef int (*ev_set_key_callback)(int code, int value, void *data);
-
-int ev_init(ev_callback input_cb, void *data);
-void ev_exit(void);
-int ev_add_fd(int fd, ev_callback cb, void *data);
-int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data);
-
-/* timeout has the same semantics as for poll
- *    0 : don't block
- *  < 0 : block forever
- *  > 0 : block for 'timeout' milliseconds
- */
-int ev_wait(int timeout);
-
-int ev_get_input(int fd, uint32_t epevents, struct input_event *ev);
-void ev_dispatch(void);
-int ev_get_epollfd(void);
-
-// Resources
-
-// Returns 0 if no error, else negative.
-int res_create_surface(const char* name, gr_surface* pSurface);
-
-// Load an array of display surfaces from a single PNG image.  The PNG
-// should have a 'Frames' text chunk whose value is the number of
-// frames this image represents.  The pixel data itself is interlaced
-// by row.
-int res_create_multi_display_surface(const char* name,
-                                     int* frames, gr_surface** pSurface);
-
-int res_create_localized_surface(const char* name, gr_surface* pSurface);
-void res_free_surface(gr_surface surface);
-static inline int res_create_display_surface(const char* name, gr_surface* pSurface) {
-    return res_create_surface(name, pSurface);
-}
-
-// These are new graphics functions from 5.0 that were not available in
-// 4.4 that are required by charger and healthd
-void gr_clear();
-
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // ifndef TW_USE_MINUI_21
-#endif // ifndef _MINUI_H_

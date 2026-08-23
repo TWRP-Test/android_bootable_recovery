@@ -326,12 +326,6 @@ exit:
   return result;
 }
 
-int res_create_multi_display_surface(const char* name, int* frames,
-        GRSurface*** pSurface) {
-    int fps = 0;
-    return res_create_multi_display_surface(name, frames, &fps, pSurface);
-}
-
 int res_create_alpha_surface(const char* name, GRSurface** pSurface) {
   *pSurface = nullptr;
 

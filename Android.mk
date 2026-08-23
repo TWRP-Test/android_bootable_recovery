@@ -694,10 +694,6 @@ LOCAL_STATIC_LIBRARIES := \
 
 include $(BUILD_STATIC_LIBRARY)
 
-commands_recovery_local_path := $(LOCAL_PATH)
-
-include $(commands_TWRP_local_path)/minui/Android.mk
-
 #includes for TWRP
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
