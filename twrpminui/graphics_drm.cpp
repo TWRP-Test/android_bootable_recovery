@@ -238,9 +238,12 @@ static struct Crtc crtc_res;
 static struct Connector conn_res;
 static struct Plane plane_res[NUM_PLANES];
 static uint32_t number_of_lms = DEFAULT_NUM_LMS;
+static bool legacy_modeset = false;
 static uint32_t spr_enabled;
 static uint32_t spr_bypass;
 static std::string spr_prop_name;
+
+static int set_legacy_crtc(uint32_t fb_id);
 
 #define find_prop_id(_res, type, Type, obj_id, prop_name, prop_id)    \
   do {                                                                \
@@ -599,6 +602,17 @@ static void drm_blank(minui_backend* backend __unused, bool blank) {
   if (blank == current_blank_state)
     return;
 
+  if (legacy_modeset) {
+    ret = set_legacy_crtc(blank ? 0 : drm_surfaces[current_buffer]->fb_id);
+    if (!ret) {
+      current_blank_state = blank;
+      printf("Legacy modeset %s\n", blank ? "disabled" : "enabled");
+    } else {
+      printf("Legacy modeset failed, rc = %d\n", ret);
+    }
+    return;
+  }
+
   drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
   if (!atomic_req) {
      printf("Atomic Alloc failed\n");
@@ -836,6 +850,36 @@ static drmModeConnector *find_first_connected_connector(int fd,
     return nullptr;
 }
 
+static bool get_kernel_video_mode(uint32_t* width, uint32_t* height) {
+    FILE* cmdline = fopen("/proc/cmdline", "r");
+    if (!cmdline)
+        return false;
+
+    char buffer[4096] = {};
+    size_t length = fread(buffer, 1, sizeof(buffer) - 1, cmdline);
+    fclose(cmdline);
+    buffer[length] = '\0';
+
+    static constexpr char kQemuVideoPrefix[] = "video=Virtual-1:";
+    char* saveptr = nullptr;
+    for (char* token = strtok_r(buffer, " \t\r\n", &saveptr); token;
+         token = strtok_r(nullptr, " \t\r\n", &saveptr)) {
+        if (strncmp(token, kQemuVideoPrefix, sizeof(kQemuVideoPrefix) - 1) != 0)
+            continue;
+
+        unsigned requested_width = 0;
+        unsigned requested_height = 0;
+        if (sscanf(token + sizeof(kQemuVideoPrefix) - 1, "%ux%u",
+                   &requested_width, &requested_height) == 2 &&
+            requested_width > 0 && requested_height > 0) {
+            *width = requested_width;
+            *height = requested_height;
+            return true;
+        }
+    }
+    return false;
+}
+
 static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
         uint32_t *mode_index) {
     /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
@@ -864,6 +908,22 @@ static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
         return nullptr;
 
     *mode_index = 0;
+    uint32_t requested_width = 0;
+    uint32_t requested_height = 0;
+    if (get_kernel_video_mode(&requested_width, &requested_height)) {
+        printf("Kernel video mode requested: %u x %u\n", requested_width,
+               requested_height);
+        for (int modes = 0; modes < main_monitor_connector->count_modes; modes++) {
+            const drmModeModeInfo& mode = main_monitor_connector->modes[modes];
+            if (mode.hdisplay == requested_width && mode.vdisplay == requested_height) {
+                *mode_index = modes;
+                printf("Choosing kernel video mode #%d\n", modes);
+                return main_monitor_connector;
+            }
+        }
+        printf("Requested kernel video mode is unavailable; using DRM preferred mode\n");
+    }
+
     for (int modes = 0; modes < main_monitor_connector->count_modes; modes++) {
         if (main_monitor_connector->modes[modes].type &
                 DRM_MODE_TYPE_PREFERRED) {
@@ -875,9 +935,28 @@ static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
     return main_monitor_connector;
 }
 
+/* virtio-gpu exposes a simple single-plane CRTC. Its atomic properties are
+ * present, but the SDE-oriented multi-plane request below is not valid for it. */
+static int set_legacy_crtc(uint32_t fb_id) {
+  if (!main_monitor_crtc || !main_monitor_connector)
+    return -EINVAL;
+
+  if (fb_id == 0) {
+    return drmModeSetCrtc(drm_fd, main_monitor_crtc->crtc_id, 0, 0, 0,
+                          nullptr, 0, nullptr);
+  }
+
+  uint32_t connector_id = main_monitor_connector->connector_id;
+  return drmModeSetCrtc(drm_fd, main_monitor_crtc->crtc_id, fb_id, 0, 0,
+                        &connector_id, 1, &main_monitor_crtc->mode);
+}
+
 static void disable_non_main_crtcs(int fd,
                     drmModeRes *resources,
                     drmModeCrtc* main_crtc) {
+  if (legacy_modeset)
+    return;
+
   uint32_t prop_id;
   drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
   for (int i = 0; i < resources->count_connectors; i++) {
@@ -903,6 +982,13 @@ static void disable_non_main_crtcs(int fd,
 }
 
 static void update_plane_fb() {
+  if (legacy_modeset) {
+    int ret = set_legacy_crtc(drm_surfaces[current_buffer]->fb_id);
+    if (ret)
+      printf("Legacy modeset failed ret=%d\n", ret);
+    return;
+  }
+
   uint32_t i, prop_id;
 
   /* Set atomic req */
@@ -979,6 +1065,14 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return nullptr;
   }
 
+  legacy_modeset = false;
+  drmVersionPtr drm_version = drmGetVersion(drm_fd);
+  if (drm_version) {
+    printf("DRM driver: %s\n", drm_version->name ? drm_version->name : "unknown");
+    legacy_modeset = drm_version->name && !strcmp(drm_version->name, "virtio_gpu");
+    drmFreeVersion(drm_version);
+  }
+
   uint32_t selected_mode;
   main_monitor_connector = find_main_monitor(drm_fd, res, &selected_mode);
 
@@ -1046,9 +1140,20 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_ATOMIC, 1);
 
- /* Get possible plane_ids */
+  /* Get possible plane_ids */
   drmModePlaneRes *plane_options = drmModeGetPlaneResources(drm_fd);
-  if (!plane_options || !plane_options->planes || (plane_options->count_planes < number_of_lms))
+  if (!plane_options || !plane_options->planes)
+    return NULL;
+
+  if (legacy_modeset) {
+    if (plane_options->count_planes == 0)
+      return NULL;
+    number_of_lms = 1;
+  } else if (plane_options->count_planes < number_of_lms) {
+    return NULL;
+  }
+
+  if (number_of_lms == 0)
     return NULL;
 
   /* Set crtc resources */
@@ -1101,6 +1206,9 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
       }
     }
   }
+
+  if (legacy_modeset)
+    number_of_lms = 1;
 
   /* Set plane resources */
   for(uint32_t i = 0; i < number_of_lms; ++i) {
