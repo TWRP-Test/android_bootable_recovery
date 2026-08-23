@@ -17,6 +17,7 @@
 */
 
 #include <string>
+#include <sys/wait.h>
 
 #include "data.hpp"
 #include "partitions.hpp"
@@ -96,7 +97,9 @@ std::string twrpRepacker::Unpack_Image(const std::string& Source_Path, const std
 
 	std::string magisk_unpack_output;
 	int ret;
-	if ((ret = TWFunc::Exec_Cmd(command, magisk_unpack_output, true)) != 0) {
+	// RETURN_VENDOR (3) is expected when unpacking vendor_boot.
+	if ((ret = TWFunc::Exec_Cmd(command, magisk_unpack_output, true)) != 0 &&
+		(!WIFEXITED(ret) || WEXITSTATUS(ret) != 3)) {
 		LOGINFO("Error unpacking %s, ret: %d!\n", Source_Path.c_str(), ret);
 		gui_msg(Msg(msg::kError, "unpack_error=Error unpacking image."));
 		return std::string();
@@ -110,6 +113,22 @@ std::string twrpRepacker::Unpack_Image(const std::string& Source_Path, const std
 				if (end != std::string::npos) {
 					ramdisk_format = std::move(magisk_unpack_output.substr(start + 1, end - start - 1));
 				}
+		}
+	}
+	if (ramdisk_format.empty()) {
+		// v4 reports each vendor ramdisk separately; use recovery's format.
+		const std::string marker = "VND_RAMDISK name=[recovery]";
+		pos = magisk_unpack_output.find(marker);
+		if (pos == std::string::npos)
+			pos = magisk_unpack_output.find("VND_RAMDISK");
+		if (pos != std::string::npos) {
+			const std::string fmt_marker = "fmt=[";
+			const auto start = magisk_unpack_output.find(fmt_marker, pos);
+			if (start != std::string::npos) {
+				const auto end = magisk_unpack_output.find(']', start + fmt_marker.size());
+				if (end != std::string::npos)
+					ramdisk_format = magisk_unpack_output.substr(start + fmt_marker.size(), end - start - fmt_marker.size());
+			}
 		}
 	}
 	return ramdisk_format;
@@ -139,7 +158,7 @@ bool twrpRepacker::Repack_Image_And_Flash(const std::string& Target_Image, const
 		is_vendor_boot = true;
 		if (DataManager::GetIntValue("tw_boot_header_version") == 4) {
 			is_vendor_boot_v4 = true;
-			ramdisk_cpio = "vendor_ramdisk_recovery.cpio";
+			ramdisk_cpio = "vendor_ramdisk/recovery.cpio";
 			LOGINFO("Vendor_boot with v4 header\n");
 		} else {
 			LOGINFO("Vendor_boot with v3 header\n");
@@ -170,6 +189,8 @@ bool twrpRepacker::Repack_Image_And_Flash(const std::string& Target_Image, const
 	DataManager::SetProgress(.25);
 	if (Repack_Options.Type == REPLACE_RAMDISK_UNPACKED) {
 		if (!Prepare_Empty_Folder(REPACK_NEW_DIR))
+			return false;
+		if (is_vendor_boot_v4 && !TWFunc::Recursive_Mkdir(std::string(REPACK_NEW_DIR) + "vendor_ramdisk"))
 			return false;
 		image_ramdisk_format = "gzip";
 	} else {
