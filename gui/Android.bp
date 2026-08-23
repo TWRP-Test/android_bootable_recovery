@@ -29,7 +29,6 @@ cc_library_static {
     ],
     include_dirs: [
         "bootable/recovery/otautil/include",
-        "bootable/recovery/install/include",
         "system/libziparchive/include",
         "bootable/recovery/recovery_ui/include",
         "bootable/recovery/fuse_sideload/include",
@@ -73,13 +72,13 @@ cc_library_static {
         "patternpassword.cpp",
         "textbox.cpp",
         "terminal.cpp",
-        "twmsg.cpp"
+        "twmsg.cpp",
+        "ziputil.cpp"
     ],
     shared_libs: [
         "libminuitwrp",
         "libc",
         "libstdc++",
-        "libaosprecovery",
         "libselinux",
         "libziparchive"
     ],

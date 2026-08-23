@@ -63,16 +63,17 @@ cc_library_static {
 
     include_dirs: [
         "bootable/recovery",
-        "bootable/recovery/install/include",
         "bootable/recovery/recovery_utils/include",
     ],
 
     srcs: [
         "adb_install.cpp",
         "asn1_decoder.cpp",
+        "get_args.cpp",
         "install.cpp",
         "installcommand.cpp",
         "package.cpp",
+        "set_metadata.cpp",
         "twinstall.cpp",
         "verifier.cpp",
     ],

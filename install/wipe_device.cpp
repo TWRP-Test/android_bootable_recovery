@@ -144,15 +144,15 @@ static std::unique_ptr<Package> ReadWipePackage(size_t wipe_package_size) {
   }
 
   return Package::CreateMemoryPackage(
-      std::vector<uint8_t>(wipe_package.begin(), wipe_package.end()));
+      std::vector<uint8_t>(wipe_package.begin(), wipe_package.end()), nullptr);
 }
 
 // Checks if the wipe package matches expectation. If the check passes, reads the list of
 // partitions to wipe from the package. Checks include
 // 1. verify the package.
 // 2. check metadata (ota-type, pre-device and serial number if having one).
-static bool CheckWipePackage(Package* wipe_package) {
-  if (!verify_package(wipe_package)) {
+static bool CheckWipePackage(Package* wipe_package, RecoveryUI* ui) {
+  if (!verify_package(wipe_package, ui)) {
     LOG(ERROR) << "Failed to verify package";
     return false;
   }
@@ -172,22 +172,22 @@ static bool CheckWipePackage(Package* wipe_package) {
   return CheckPackageMetadata(metadata, OtaType::BRICK);
 }
 
-bool WipeAbDevice(size_t wipe_package_size) {
-  //auto ui = device->GetUI();
-  //ui->SetBackground(RecoveryUI::ERASING);
-  //ui->SetProgressType(RecoveryUI::INDETERMINATE);
+bool WipeAbDevice(Device* device, size_t wipe_package_size) {
+  auto ui = device->GetUI();
+  ui->SetBackground(RecoveryUI::ERASING);
+  ui->SetProgressType(RecoveryUI::INDETERMINATE);
 
   auto wipe_package = ReadWipePackage(wipe_package_size);
   if (!wipe_package) {
     LOG(ERROR) << "Failed to open wipe package";
     return false;
   }
-  return WipeAbDevice(wipe_package.get());
+  return WipeAbDevice(device, wipe_package.get());
 }
 
-bool WipeAbDevice(Package* wipe_package) {
-  //auto ui = device->GetUI();
-  if (!CheckWipePackage(wipe_package)) {
+bool WipeAbDevice(Device* device, Package* wipe_package) {
+  auto ui = device->GetUI();
+  if (!CheckWipePackage(wipe_package, ui)) {
     LOG(ERROR) << "Failed to verify wipe package";
     return false;
   }

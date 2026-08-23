@@ -100,18 +100,16 @@ cc_library_shared {
         "bootable/recovery/otautil/include",
         "bootable/recovery/minadbd",
         "bootable/recovery/minadbd/include",
-        "bootable/recovery/twrpinstall/include",
         "system/libvintf/include"
     ],
     srcs: [
         "install/adb_install.cpp",
-        "install/get_args.cpp", 
+        "install/fuse_install.cpp",
         "install/install.cpp",
+        "install/snapshot_utils.cpp",
         "install/spl_check.cpp",
         "install/wipe_data.cpp",
         "install/wipe_device.cpp",
-        "install/set_metadata.cpp",
-        "install/ZipUtil.cpp"
     ],
     shared_libs: [
         "libbase",
@@ -132,10 +130,10 @@ cc_library_shared {
         "libc++"
     ],
     static_libs: [
-        "libinstall",
         "librecovery_fastboot",
         "libminui",
         "libotautil",
+        "libsnapshot_nobinder",
         "libvintf", 
         "libhidl-gen-utils",
         "librecovery_utils",

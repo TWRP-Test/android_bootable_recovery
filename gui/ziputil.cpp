@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#include "ZipUtil.h"
+#include "ziputil.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <utime.h>
 
 #include <string>
-
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <selinux/label.h>
@@ -54,9 +53,7 @@ bool ExtractPackageRecursive(ZipArchiveHandle zip, const std::string& zip_path,
     if (!zip_path.empty() && zip_path.back() != '/') {
         prefix_path += '/';
     }
-    const ZipString zip_prefix(prefix_path.c_str());
-
-    int ret = StartIteration(zip, &cookie, &zip_prefix);
+    int ret = StartIteration(zip, &cookie, prefix_path);
     if (ret != 0) {
         LOG(ERROR) << "failed to start iterating zip entries.";
         return false;
@@ -64,18 +61,15 @@ bool ExtractPackageRecursive(ZipArchiveHandle zip, const std::string& zip_path,
 
     std::unique_ptr<void, decltype(&EndIteration)> guard(cookie, EndIteration);
     ZipEntry64 entry;
-    ZipString name;
+    std::string name;
     int extractCount = 0;
     while (Next(cookie, &entry, &name) == 0) {
-        std::string entry_name(name.name, name.name + name.name_length);
-        CHECK_LE(prefix_path.size(), entry_name.size());
-        std::string path = target_dir + entry_name.substr(prefix_path.size());
+        CHECK_LE(prefix_path.size(), name.size());
+        std::string path = target_dir + name.substr(prefix_path.size());
         // Skip dir.
         if (path.back() == '/') {
             continue;
         }
-        //TODO(b/31917448) handle the symlink.
-
         if (dirCreateHierarchy(path.c_str(), UNZIP_DIRMODE, timestamp, true, sehnd) != 0) {
             LOG(ERROR) << "failed to create dir for " << path;
             return false;

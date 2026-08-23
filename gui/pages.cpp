@@ -41,7 +41,7 @@
 
 
 #include <ziparchive/zip_archive.h>
-#include "ZipUtil.h"
+#include "ziputil.h"
 
 extern "C" {
 #include "../twcommon.h"
@@ -1341,7 +1341,7 @@ void PageManager::LoadLanguageList(ZipArchiveHandle package) {
 		TWFunc::removeDir(TWRES "customlanguages", true);
 	if (package) {
 		TWFunc::Recursive_Mkdir(TWRES "customlanguages");
-		ExtractPackageRecursive(package, "/", TWRES "customlanguages", nullptr, nullptr);
+		ExtractPackageRecursive(package, "", TWRES "customlanguages", nullptr, nullptr);
 
 		// package->ExtractRecursive("languages", TWRES "customlanguages/");
 		LoadLanguageListDir(TWRES "customlanguages/");

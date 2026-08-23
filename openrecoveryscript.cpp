@@ -44,7 +44,6 @@
 #include "openrecoveryscript.hpp"
 #include "progresstracking.hpp"
 #include "variables.h"
-#include "install/adb_install.h"
 #include "data.hpp"
 #include "fuse_sideload.h"
 #include "gui/gui.hpp"

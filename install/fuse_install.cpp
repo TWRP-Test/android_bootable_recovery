@@ -182,9 +182,10 @@ InstallResult InstallWithFuseFromPath(std::string_view path, Device* device) {
       }
     }
     auto package =
-        Package::CreateFilePackage(FUSE_SIDELOAD_HOST_PATHNAME, nullptr);
-    result =
-        InstallPackage(package.get(), FUSE_SIDELOAD_HOST_PATHNAME, false, 0 /* retry_count */);
+        Package::CreateFilePackage(FUSE_SIDELOAD_HOST_PATHNAME,
+                                   std::bind(&RecoveryUI::SetProgress, ui, std::placeholders::_1));
+    result = InstallPackage(package.get(), FUSE_SIDELOAD_HOST_PATHNAME, false, 0 /* retry_count */,
+                            device);
     break;
   }
 

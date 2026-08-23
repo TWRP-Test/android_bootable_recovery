@@ -112,20 +112,17 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/gui/include \
     $(LOCAL_PATH)/recovery_ui/include \
     $(LOCAL_PATH)/otautil/include \
-    $(LOCAL_PATH)/install/include \
     $(LOCAL_PATH)/fuse_sideload/include \
-    $(LOCAL_PATH)/install/include \
     $(LOCAL_PATH)/twrpinstall/include \
     $(LOCAL_PATH)/recovery_utils/include \
     $(LOCAL_PATH)/libpixelflinger/include \
     $(LOCAL_PATH)/minuitwrp/include \
     $(LOCAL_PATH)/twinstall/include
 
-LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts
+LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts libotautil libsparse
 LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libtwrpadbbu
-LOCAL_SHARED_LIBRARIES += libbootloader_message libtwrpdigest libc++ libaosprecovery libcrypto libbase
+LOCAL_SHARED_LIBRARIES += libbootloader_message libtwrpdigest libc++ libcrypto libbase
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
-LOCAL_SHARED_LIBRARIES += libsparse
 
 
 ifeq ($(AB_OTA_UPDATER),true)
