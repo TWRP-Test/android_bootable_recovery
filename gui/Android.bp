@@ -36,7 +36,7 @@ cc_library_static {
         "bootable/recovery/twrpinstall",
         "bootable/recovery/twrpinstall/include",
         "bootable/recovery/libpixelflinger/include",
-        "bootable/recovery/minuitwrp/include",
+        "bootable/recovery/twrpminui/include",
         "bionic",
         "system/libbase/include",
         "system/core/libcutils/include",
@@ -76,7 +76,7 @@ cc_library_static {
         "ziputil.cpp"
     ],
     shared_libs: [
-        "libminuitwrp",
+        "libtwrpminui",
         "libc",
         "libstdc++",
         "libselinux",

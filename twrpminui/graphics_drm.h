@@ -24,7 +24,7 @@
 #include <xf86drmMode.h>
 
 #include "graphics.h"
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 class GRSurfaceDrm : public GRSurface {
  public:

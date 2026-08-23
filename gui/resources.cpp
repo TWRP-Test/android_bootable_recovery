@@ -37,8 +37,8 @@ extern "C" {
 #include "gui.h"
 }
 
-#include "minuitwrp/truetype.hpp"
-#include "minuitwrp/minui.h"
+#include "twrpminui/truetype.hpp"
+#include "twrpminui/minui.h"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"

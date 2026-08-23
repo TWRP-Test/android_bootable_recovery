@@ -26,10 +26,10 @@
 #include <map>
 #include "rapidxml.hpp"
 #include "ziparchive/zip_archive.h"
-#include "minuitwrp/truetype.hpp"
+#include "twrpminui/truetype.hpp"
 
 extern "C" {
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 }
 
 // Base Objects

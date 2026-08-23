@@ -22,7 +22,7 @@
 extern "C" {
 #include "../twcommon.h"
 }
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"

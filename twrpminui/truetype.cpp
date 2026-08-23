@@ -26,7 +26,7 @@
 #include <pthread.h>
 #include <algorithm>
 #include <string>
-#include "minuitwrp/truetype.hpp"
+#include "twrpminui/truetype.hpp"
 
 extern unsigned int gr_rotation;
 

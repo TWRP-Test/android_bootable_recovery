@@ -1,25 +1,25 @@
 bootstrap_go_package {
-    name: "soong-libminuitwrp_defaults",
-    pkgPath: "bootable/recovery/minuitwrp",
+    name: "soong-libtwrpminui_defaults",
+    pkgPath: "bootable/recovery/twrpminui",
     deps: [
         "soong",
         "soong-android",
         "soong-cc"
     ],
     srcs: [
-        "libminuitwrp_defaults.go",
+        "libtwrpminui_defaults.go",
         "../soong/makevars.go"
     ],
     pluginFor: ["soong_build"]
 }
 
-libminuitwrp_defaults {
-    name: "libminuitwrp_defaults"
+libtwrpminui_defaults {
+    name: "libtwrpminui_defaults"
 }
 
 cc_library_shared {
-    name: "libminuitwrp",
-    defaults: ["libminuitwrp_defaults", "twrp_defaults"],
+    name: "libtwrpminui",
+    defaults: ["libtwrpminui_defaults", "twrp_defaults"],
     cflags: [
         "-DTWRES=\"/twres/\""
     ],

@@ -34,11 +34,11 @@
 #include <cutils/properties.h>
 #include <pixelflinger/pixelflinger.h>
 #include "gui/placement.h"
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 #include "graphics.h"
 // For std::min and std::max
 #include <algorithm>
-#include "minuitwrp/truetype.hpp"
+#include "twrpminui/truetype.hpp"
 
 struct GRFont {
     GRSurface* texture;

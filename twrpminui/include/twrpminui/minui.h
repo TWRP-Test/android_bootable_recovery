@@ -74,7 +74,7 @@ int gr_free_surface(gr_surface surface);
 // Functions in graphics_utils.c
 int gr_save_screenshot(const char *dest);
 
-// Transform minuitwrp API coordinates into display coordinates,
+// Transform twrpminui API coordinates into display coordinates,
 // for panels that are hardware-mounted in a rotated manner.
 int ROTATION_X_DISP(int x, int y, int w);
 

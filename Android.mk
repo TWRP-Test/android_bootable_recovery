@@ -116,11 +116,11 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/twrpinstall/include \
     $(LOCAL_PATH)/recovery_utils/include \
     $(LOCAL_PATH)/libpixelflinger/include \
-    $(LOCAL_PATH)/minuitwrp/include \
+    $(LOCAL_PATH)/twrpminui/include \
     $(LOCAL_PATH)/twinstall/include
 
 LOCAL_STATIC_LIBRARIES += libguitwrp libvold libmounts libotautil libsparse
-LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libtwrpadbbu
+LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libtwrpminui libtwrpadbbu
 LOCAL_SHARED_LIBRARIES += libbootloader_message libtwrpdigest libc++ libcrypto libbase
 LOCAL_SHARED_LIBRARIES += libziparchive libselinux libdl_android.bootstrap
 

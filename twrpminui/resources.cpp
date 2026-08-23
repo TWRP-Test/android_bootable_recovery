@@ -36,7 +36,7 @@ extern "C" {
 #include "jpeglib.h"
 }
 #endif
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 #define SURFACE_DATA_ALIGNMENT 8
 

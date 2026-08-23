@@ -61,7 +61,7 @@
 #include <xf86drmMode.h>
 #include <sstream>
 
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 #include "graphics.h"
 #include <pixelflinger/pixelflinger.h>
 

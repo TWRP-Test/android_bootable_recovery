@@ -33,8 +33,8 @@
 extern "C" {
 #include "../twcommon.h"
 }
-#include "minuitwrp/minui.h"
-#include "minuitwrp/truetype.hpp"
+#include "twrpminui/minui.h"
+#include "twrpminui/truetype.hpp"
 
 #include "gui.hpp"
 

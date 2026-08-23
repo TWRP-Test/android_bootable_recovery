@@ -26,7 +26,7 @@
 #include <android-base/unique_fd.h>
 
 #include "graphics.h"
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 class GRSurfaceFbdev : public GRSurface {
  public:

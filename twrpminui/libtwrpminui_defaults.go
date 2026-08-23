@@ -108,13 +108,13 @@ func globalIncludes(ctx android.BaseContext) []string {
 			includes = append(includes, getMakeVars(ctx, "TARGET_OUT_INTERMEDIATES")+"/KERNEL_OBJ/usr/include")
 		} else {
 			if getMakeVars(ctx, "TARGET_CUSTOM_KERNEL_HEADERS") != "" {
-				includes = append(includes, "bootable/recovery/minuitwrp")
+				includes = append(includes, "bootable/recovery/twrpminui")
 			} else {
 				includes = append(includes, getMakeVars(ctx, "TARGET_CUSTOM_KERNEL_HEADERS"))
 			}
 		}
 	} else {
-		includes = append(includes, "bootable/recovery/minuitwrp")
+		includes = append(includes, "bootable/recovery/twrpminui")
 	}
 
 	if getMakeVars(ctx, "TW_INCLUDE_JPEG") != "" {
@@ -170,7 +170,7 @@ func globalRequiredModules(ctx android.BaseContext) []string {
 	return requiredModules
 }
 
-func libMinuiTwrpDefaults(ctx android.LoadHookContext) {
+func libTwrpMinuiDefaults(ctx android.LoadHookContext) {
 	type props struct {
 		Target struct {
 			Android struct {
@@ -202,12 +202,12 @@ func libMinuiTwrpDefaults(ctx android.LoadHookContext) {
 }
 
 func init() {
-	android.RegisterModuleType("libminuitwrp_defaults", libMinuiTwrpDefaultsFactory)
+	android.RegisterModuleType("libtwrpminui_defaults", libTwrpMinuiDefaultsFactory)
 }
 
-func libMinuiTwrpDefaultsFactory() android.Module {
+func libTwrpMinuiDefaultsFactory() android.Module {
 	module := cc.DefaultsFactory()
-	android.AddLoadHook(module, libMinuiTwrpDefaults)
+	android.AddLoadHook(module, libTwrpMinuiDefaults)
 
 	return module
 }

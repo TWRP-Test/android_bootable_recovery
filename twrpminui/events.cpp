@@ -52,7 +52,7 @@ static std::atomic_int vib_on_count = 0;
 #include "common.h"
 #include "twcommon.h"
 
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 //#define _EVENT_LOGGING
 

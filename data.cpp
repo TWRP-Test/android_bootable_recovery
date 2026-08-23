@@ -44,7 +44,7 @@ extern "C"
 	#include "gui/pages.h"
 	void gui_notifyVarChange(const char *name, const char* value);
 }
-#include "minuitwrp/minui.h"
+#include "twrpminui/minui.h"
 
 #define FILE_VERSION 0x00010010 // Do not set to 0
 
