@@ -1,0 +1,13 @@
+cc_library_shared {
+    name: "libgpt_twrp",
+    srcs: [
+        "gpt.c",
+        "gptcrc32.c",
+    ],
+    cflags: [
+        "-Wno-format",
+        "-Wno-format-security",
+    ],
+
+    shared_libs: ["libc"],
+}

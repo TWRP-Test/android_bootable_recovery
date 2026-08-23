@@ -43,7 +43,9 @@ cc_library_static {
         "system/core/include",
         "external/freetype/include",
         "external/libpng"
-
+    ],
+    header_libs: [
+        "libvold_headers"
     ],
     srcs: [
         "gui.cpp",
