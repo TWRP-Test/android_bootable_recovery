@@ -514,7 +514,7 @@ ifeq ($(TW_INCLUDE_7ZA), true)
 endif
 
 ifneq (,$(filter $(TW_INCLUDE_REPACKTOOLS) $(TW_INCLUDE_RESETPROP) $(TW_INCLUDE_LIBRESETPROP), true))
-    ifeq ($(wildcard external/magisk-prebuilt/Android.mk),)
+    ifeq ($(wildcard external/magisk-prebuilt/prebuilt/Android.bp),)
         $(warning Magisk prebuilt tools not found!)
         $(warning Please place https://github.com/TeamWin/external_magisk-prebuilt)
         $(warning into external/magisk-prebuilt)
