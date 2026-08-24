@@ -179,7 +179,7 @@ int GUIProgressBar::Update(void)
 
 	if (RenderInternal() != 0)
 		return -1;
-	return 2;
+	return 1;
 }
 
 int GUIProgressBar::NotifyVarChange(const std::string& varName, const std::string& value)

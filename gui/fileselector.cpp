@@ -175,8 +175,7 @@ int GUIFileSelector::Update(void)
 
 	if (mUpdate) {
 		mUpdate = 0;
-		if (Render() == 0)
-			return 2;
+		return 2;
 	}
 	return 0;
 }

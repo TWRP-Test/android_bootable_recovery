@@ -578,11 +578,27 @@ int Page::Update(void)
 	std::vector<RenderObject*>::iterator iter;
 	for (iter = mRenders.begin(); iter != mRenders.end(); iter++)
 	{
+		int oldX, oldY, oldW, oldH;
+		const bool oldBoundsValid = (*iter)->GetRenderPos(oldX, oldY, oldW, oldH) == 0 &&
+			oldW > 0 && oldH > 0;
 		int ret = (*iter)->Update();
 		if (ret < 0)
 			LOGERR("An update request has failed.\n");
-		else if (ret > retCode)
-			retCode = ret;
+		else {
+			if (ret > 1) {
+				int newX, newY, newW, newH;
+				const bool newBoundsValid = (*iter)->GetRenderPos(newX, newY, newW, newH) == 0 &&
+					newW > 0 && newH > 0;
+				if (oldBoundsValid && newBoundsValid) {
+					gr_invalidate(oldX, oldY, oldW, oldH);
+					gr_invalidate(newX, newY, newW, newH);
+				} else {
+					gr_invalidate(0, 0, gr_fb_width(), gr_fb_height());
+				}
+			}
+			if (ret > retCode)
+				retCode = ret;
+		}
 	}
 
 	return retCode;
@@ -1157,20 +1173,19 @@ int PageSet::Render(void)
 
 int PageSet::Update(void)
 {
-	int ret;
-
-	ret = (mCurrentPage ? mCurrentPage->Update() : -1);
-	if (ret < 0 || ret > 1)
-		return ret;
+	int result = (mCurrentPage ? mCurrentPage->Update() : -1);
+	if (result < 0)
+		return result;
 
 	std::vector<Page*>::iterator iter;
 
 	for (iter = mOverlays.begin(); iter != mOverlays.end(); iter++) {
-		ret = ((*iter) ? (*iter)->Update() : -1);
+		const int ret = ((*iter) ? (*iter)->Update() : -1);
 		if (ret < 0)
 			return ret;
+		result = std::max(result, ret);
 	}
-	return ret;
+	return result;
 }
 
 int PageSet::NotifyTouch(TOUCH_STATE state, int x, int y)
@@ -1613,14 +1628,17 @@ int PageManager::IsCurrentPage(Page* page)
 	return (mCurrentSet ? mCurrentSet->IsCurrentPage(page) : 0);
 }
 
-int PageManager::Render(void)
+int PageManager::Render(bool partial)
 {
 	if (blankTimer.isScreenOff())
 		return 0;
 
+	const bool clipped = partial && gr_begin_damage_clip();
 	int res = (mCurrentSet ? mCurrentSet->Render() : -1);
 	if (mMouseCursor)
 		mMouseCursor->Render();
+	if (clipped)
+		gr_end_damage_clip();
 	return res;
 }
 

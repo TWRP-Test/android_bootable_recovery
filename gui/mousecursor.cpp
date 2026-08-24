@@ -61,7 +61,9 @@ void MouseCursor::ResetData(int resX, int resY)
 
 	ConvertStrToColor("red", &m_color);
 
-	SetRenderPos(resX/2, resY/2, 10, 10);
+	RenderObject::SetRenderPos(resX/2, resY/2, 10, 10);
+	m_prevX = mRenderX;
+	m_prevY = mRenderY;
 }
 
 void MouseCursor::LoadData(xml_node<>* node)
@@ -92,6 +94,8 @@ void MouseCursor::LoadData(xml_node<>* node)
 		if (attr)
 			m_speedMultiplier = atof(attr->value());
 	}
+	m_prevX = mRenderX;
+	m_prevY = mRenderY;
 }
 
 int MouseCursor::Render(void)
@@ -118,11 +122,20 @@ int MouseCursor::Update(void)
 		m_present = ev_has_mouse();
 		if (m_present)
 			SetRenderPos(m_resX/2, m_resY/2);
+		gr_invalidate(m_prevX, m_prevY, mRenderW, mRenderH);
+		gr_invalidate(mRenderX, mRenderY, mRenderW, mRenderH);
+		m_prevX = mRenderX;
+		m_prevY = mRenderY;
+		m_moved = false;
 		return 2;
 	}
 
 	if (m_present && m_moved)
 	{
+		gr_invalidate(m_prevX, m_prevY, mRenderW, mRenderH);
+		gr_invalidate(mRenderX, mRenderY, mRenderW, mRenderH);
+		m_prevX = mRenderX;
+		m_prevY = mRenderY;
 		m_moved = false;
 		return 2;
 	}
@@ -131,14 +144,25 @@ int MouseCursor::Update(void)
 
 int MouseCursor::SetRenderPos(int x, int y, int w, int h)
 {
-	if (x == mRenderX && y == mRenderY)
+	if (x != mRenderX || y != mRenderY)
+	{
+		if (!m_moved) {
+			m_prevX = mRenderX;
+			m_prevY = mRenderY;
+		}
 		m_moved = true;
+	}
 
 	return RenderObject::SetRenderPos(x, y, w, h);
 }
 
 void MouseCursor::Move(int deltaX, int deltaY)
 {
+	if ((deltaX != 0 || deltaY != 0) && !m_moved) {
+		m_prevX = mRenderX;
+		m_prevY = mRenderY;
+	}
+
 	if (deltaX != 0)
 	{
 		mRenderX += deltaX*m_speedMultiplier;

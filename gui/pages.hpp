@@ -176,7 +176,7 @@ public:
 	static int IsCurrentPage(Page* page);
 
 	// These are routing routines
-	static int Render(void);
+	static int Render(bool partial = false);
 	static int Update(void);
 	static int NotifyTouch(TOUCH_STATE state, int x, int y);
 	static int NotifyKey(int key, bool down);

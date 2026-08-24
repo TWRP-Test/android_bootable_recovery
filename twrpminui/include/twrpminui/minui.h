@@ -45,6 +45,9 @@ void gr_flip(void);
 void gr_fb_blank(bool blank);
 
 void gr_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+void gr_invalidate(int x, int y, int w, int h);
+bool gr_begin_damage_clip();
+void gr_end_damage_clip();
 void gr_clip(int x, int y, int w, int h);
 void gr_noclip();
 void gr_fill(int x, int y, int w, int h);

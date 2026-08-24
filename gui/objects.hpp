@@ -65,7 +65,7 @@ public:
 	virtual int Render(void) = 0;
 
 	// Update - Update any UI component animations (called <= 30 FPS)
-	//  Return 0 if nothing to update, 1 on success and contiue, >1 if full render required, and <0 on error
+	//  Return 0 if unchanged, 1 if drawn, >1 if the object's bounds need a page redraw, or <0 on error
 	virtual int Update(void) { return 0; }
 
 	// GetRenderPos - Returns the current position of the object
@@ -195,6 +195,7 @@ public:
 
 	// Retrieve the size of the current string (dynamic strings may change per call)
 	virtual int GetCurrentBounds(int& w, int& h);
+	virtual int GetRenderPos(int& x, int& y, int& w, int& h);
 
 	// Notify of a variable change
 	virtual int NotifyVarChange(const std::string& varName, const std::string& value);
@@ -218,6 +219,7 @@ protected:
 	int mIsStatic;
 	int mVarChanged;
 	int mFontHeight;
+	int mLastWidth;
 };
 
 // GUIImage - Used for static image
@@ -1283,6 +1285,8 @@ private:
 	COLOR m_color;
 	ImageResource *m_image;
 	bool m_present;
+	int m_prevX;
+	int m_prevY;
 };
 
 class GUIPatternPassword : public GUIObject, public RenderObject, public ActionObject

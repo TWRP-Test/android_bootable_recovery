@@ -107,7 +107,6 @@ int GUIWlanList::Update(void)
 
 	if (mUpdate) {
 		mUpdate = 0;
-		Render();
 		return 2;
 	}
 

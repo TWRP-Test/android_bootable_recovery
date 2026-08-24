@@ -624,7 +624,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 
 #ifndef PRINT_RENDER_TIME
 			if (ret > 1)
-				PageManager::Render();
+				PageManager::Render(true);
 
 			if (ret > 0)
 				flip();
@@ -634,7 +634,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 				timespec start, end;
 				int32_t render_t, flip_t;
 				clock_gettime(CLOCK_MONOTONIC, &start);
-				PageManager::Render();
+				PageManager::Render(true);
 				clock_gettime(CLOCK_MONOTONIC, &end);
 				render_t = TWFunc::timespec_diff_ms(start, end);
 

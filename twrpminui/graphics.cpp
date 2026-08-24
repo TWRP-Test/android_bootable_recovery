@@ -62,8 +62,69 @@ static GGLContext *gr_context = 0;
 GGLSurface gr_mem_surface;
 static int gr_is_curr_clr_opaque = 0;
 static GRRect gr_frame_damage = { 0, 0, 0, 0 };
+static GRRect gr_damage_clip = { 0, 0, 0, 0 };
+static GRRect gr_object_clip = { 0, 0, 0, 0 };
+static bool gr_damage_clip_enabled = false;
+static bool gr_object_clip_enabled = false;
 
 unsigned int gr_rotation = 0;
+
+static bool rect_empty(const GRRect& rect)
+{
+    return rect.left >= rect.right || rect.top >= rect.bottom;
+}
+
+static GRRect intersect_rects(const GRRect& first, const GRRect& second)
+{
+    return {
+        std::max(first.left, second.left),
+        std::max(first.top, second.top),
+        std::min(first.right, second.right),
+        std::min(first.bottom, second.bottom),
+    };
+}
+
+static GRRect display_rect(int x, int y, int w, int h)
+{
+    const int x0 = ROTATION_X_DISP(x, y, gr_draw->width);
+    const int y0 = ROTATION_Y_DISP(x, y, gr_draw->height);
+    const int x1 = ROTATION_X_DISP(x + w, y + h, gr_draw->width);
+    const int y1 = ROTATION_Y_DISP(x + w, y + h, gr_draw->height);
+    return {
+        std::min(x0, x1), std::min(y0, y1),
+        std::max(x0, x1), std::max(y0, y1),
+    };
+}
+
+static void apply_render_clip()
+{
+    if (!gr_context)
+        return;
+
+    GRRect clip = { 0, 0, gr_draw->width, gr_draw->height };
+    bool enabled = false;
+    if (gr_damage_clip_enabled) {
+        clip = gr_damage_clip;
+        enabled = true;
+    }
+    if (gr_object_clip_enabled) {
+        clip = enabled ? intersect_rects(clip, gr_object_clip) : gr_object_clip;
+        enabled = true;
+    }
+
+    if (!enabled) {
+        gr_context->disable(gr_context, GGL_SCISSOR_TEST);
+        return;
+    }
+
+    clip.left = std::clamp(clip.left, 0, gr_draw->width);
+    clip.top = std::clamp(clip.top, 0, gr_draw->height);
+    clip.right = std::clamp(clip.right, clip.left, gr_draw->width);
+    clip.bottom = std::clamp(clip.bottom, clip.top, gr_draw->height);
+    gr_context->scissor(gr_context, clip.left, clip.top,
+                        clip.right - clip.left, clip.bottom - clip.top);
+    gr_context->enable(gr_context, GGL_SCISSOR_TEST);
+}
 
 void gr_damage(int left, int top, int right, int bottom)
 {
@@ -74,6 +135,15 @@ void gr_damage(int left, int top, int right, int bottom)
     top = std::clamp(top, 0, gr_draw->height);
     right = std::clamp(right, 0, gr_draw->width);
     bottom = std::clamp(bottom, 0, gr_draw->height);
+    GRRect damage = { left, top, right, bottom };
+    if (gr_damage_clip_enabled)
+        damage = intersect_rects(damage, gr_damage_clip);
+    if (gr_object_clip_enabled)
+        damage = intersect_rects(damage, gr_object_clip);
+    left = damage.left;
+    top = damage.top;
+    right = damage.right;
+    bottom = damage.bottom;
     if (left >= right || top >= bottom)
         return;
 
@@ -97,6 +167,33 @@ GRRect gr_get_damage()
 void gr_reset_damage()
 {
     gr_frame_damage = { 0, 0, 0, 0 };
+}
+
+void gr_invalidate(int x, int y, int w, int h)
+{
+    if (!gr_draw || w <= 0 || h <= 0)
+        return;
+
+    const GRRect damage = display_rect(x, y, w, h);
+    gr_damage(damage.left, damage.top, damage.right, damage.bottom);
+}
+
+bool gr_begin_damage_clip()
+{
+    if (rect_empty(gr_frame_damage))
+        return false;
+
+    gr_damage_clip = gr_frame_damage;
+    gr_damage_clip_enabled = true;
+    apply_render_clip();
+    return true;
+}
+
+void gr_end_damage_clip()
+{
+    gr_damage_clip_enabled = false;
+    gr_object_clip_enabled = false;
+    apply_render_clip();
 }
 
 int gr_textEx_scaleW(int x, int y, const char *s, void* pFont, int max_width, int placement, int scale)
@@ -151,32 +248,15 @@ int gr_textEx_scaleW(int x, int y, const char *s, void* pFont, int max_width, in
 
 void gr_clip(int x, int y, int w, int h)
 {
-    GGLContext *gl = gr_context;
-
-    switch (gr_rotation) {
-        case 90:
-            gl->scissor(gl, gr_draw->width - y - h, x, h, w);
-            break;
-        case 180:
-            gl->scissor(gl, gr_draw->width - x - w, gr_draw->height - y - h, w, h);
-            break;
-        case 270:
-            gl->scissor(gl, y, gr_draw->height - x - w, h, w);
-            break;
-        default:
-            gl->scissor(gl, x, y, w, h);
-            break;
-    }
-    gl->enable(gl, GGL_SCISSOR_TEST);
+    gr_object_clip = display_rect(x, y, w, h);
+    gr_object_clip_enabled = true;
+    apply_render_clip();
 }
 
 void gr_noclip()
 {
-    GGLContext *gl = gr_context;
-    gl->scissor(gl, 0, 0,
-                gr_draw->width - 2 * overscan_offset_x,
-                gr_draw->height - 2 * overscan_offset_y);
-    gl->disable(gl, GGL_SCISSOR_TEST);
+    gr_object_clip_enabled = false;
+    apply_render_clip();
 }
 
 void gr_line(int x0, int y0, int x1, int y1, int width)
