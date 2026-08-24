@@ -19,6 +19,13 @@
 
 #include "twrpminui/minui.h"
 
+struct GRRect {
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+
 // TODO: lose the function pointers.
 struct minui_backend {
     // Initializes the backend and returns a GRSurface* to draw into.
@@ -34,10 +41,19 @@ struct minui_backend {
 
     // Device cleanup when drawing is done.
     void (*exit)(minui_backend*);
+
+    // Direct scanout backends need a complete frame before every flip.
+    bool requires_full_redraw;
 };
 
 minui_backend* open_fbdev();
 minui_backend* open_drm();
 minui_backend* open_overlay();
+
+// Drawing damage is expressed in physical display coordinates with right and
+// bottom excluded. Backends may use it to avoid copying an entire frame.
+void gr_damage(int left, int top, int right, int bottom);
+GRRect gr_get_damage();
+void gr_reset_damage();
 
 #endif

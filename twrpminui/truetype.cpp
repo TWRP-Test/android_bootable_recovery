@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <string>
 #include "twrpminui/truetype.hpp"
+#include "graphics.h"
 
 extern unsigned int gr_rotation;
 
@@ -625,6 +626,7 @@ int twrpTruetype::gr_ttf_textExWH(void *context, int x, int y,
 	gl->enable(gl, GGL_TEXTURE_2D);
 	gl->texCoord2i(gl, -l_disp, -t_disp);
 	gl->recti(gl, l_disp, t_disp, r_disp, b_disp);
+	gr_damage(l_disp, t_disp, r_disp, b_disp);
 	gl->disable(gl, GGL_TEXTURE_2D);
 
 	if (gr_rotation != 0)

@@ -53,7 +53,9 @@
 
 #include <android-base/properties.h>
 
+#include <algorithm>
 #include <array>
+#include <cinttypes>
 #include <map>
 #include <string>
 #include <drm_fourcc.h>
@@ -226,6 +228,14 @@ struct drm_msm_spr_init_cfg_v2 {
 static drm_surface *drm_surfaces[2];
 static int current_buffer;
 static GRSurface *draw_buf = nullptr;
+static GRRect pending_damage[2];
+static int displayed_buffer = -1;
+static bool legacy_page_flip = true;
+static bool atomic_page_flip = true;
+static uint64_t stats_frames;
+static uint64_t stats_copied_bytes;
+static uint64_t stats_full_bytes;
+static constexpr uint64_t kStatsInterval = 10;
 
 static drmModeCrtc *main_monitor_crtc;
 static drmModeConnector *main_monitor_connector;
@@ -244,6 +254,66 @@ static uint32_t spr_bypass;
 static std::string spr_prop_name;
 
 static int set_legacy_crtc(uint32_t fb_id);
+
+static bool rect_empty(const GRRect& rect) {
+  return rect.left >= rect.right || rect.top >= rect.bottom;
+}
+
+static void union_damage(GRRect* dst, const GRRect& src) {
+  if (rect_empty(src))
+    return;
+  if (rect_empty(*dst)) {
+    *dst = src;
+    return;
+  }
+
+  dst->left = std::min(dst->left, src.left);
+  dst->top = std::min(dst->top, src.top);
+  dst->right = std::max(dst->right, src.right);
+  dst->bottom = std::max(dst->bottom, src.bottom);
+}
+
+static size_t copy_damage(const GRSurface* source, GRSurface* destination,
+                          const GRRect& damage) {
+  if (rect_empty(damage))
+    return 0;
+
+  const size_t row_bytes =
+      static_cast<size_t>(damage.right - damage.left) * source->pixel_bytes;
+  const int rows = damage.bottom - damage.top;
+  if (damage.left == 0 && row_bytes == static_cast<size_t>(source->row_bytes)) {
+    memcpy(destination->data + damage.top * destination->row_bytes,
+           source->data + damage.top * source->row_bytes, row_bytes * rows);
+  } else {
+    for (int y = damage.top; y < damage.bottom; ++y) {
+      memcpy(destination->data + y * destination->row_bytes +
+                 damage.left * destination->pixel_bytes,
+             source->data + y * source->row_bytes + damage.left * source->pixel_bytes,
+             row_bytes);
+    }
+  }
+  return row_bytes * rows;
+}
+
+static void log_copy_stats(size_t copied_bytes, const GRSurface* surface) {
+  ++stats_frames;
+  stats_copied_bytes += copied_bytes;
+  stats_full_bytes += static_cast<uint64_t>(surface->height) * surface->row_bytes;
+  if (stats_frames % kStatsInterval != 0)
+    return;
+
+  if (android::base::GetBoolProperty("twrp.drm.stats", false)) {
+    const uint64_t saved_percent = stats_full_bytes == 0
+        ? 0 : 100 - std::min<uint64_t>(100, stats_copied_bytes * 100 / stats_full_bytes);
+    printf("DRM copy stats: frames=%" PRIu64 ", copied=%" PRIu64
+           "/%" PRIu64 " bytes, saved=%" PRIu64 "%%\n",
+           stats_frames, stats_copied_bytes, stats_full_bytes, saved_percent);
+    fflush(stdout);
+  }
+  stats_frames = 0;
+  stats_copied_bytes = 0;
+  stats_full_bytes = 0;
+}
 
 #define find_prop_id(_res, type, Type, obj_id, prop_name, prop_id)    \
   do {                                                                \
@@ -464,7 +534,8 @@ static int SetupSprBlob(int fd, const std::string& prop_name, uint32_t* blob_id)
   return ret;
 }
 
-static int atomic_populate_plane(int plane, drmModeAtomicReqPtr atomic_req) {
+static int atomic_populate_plane(int plane, int buffer,
+                                 drmModeAtomicReqPtr atomic_req) {
   uint32_t src_x, src_y, src_w, src_h;
   uint32_t crtc_x, crtc_y, crtc_w, crtc_h;
   int width = main_monitor_crtc->mode.hdisplay;
@@ -489,7 +560,7 @@ static int atomic_populate_plane(int plane, drmModeAtomicReqPtr atomic_req) {
 
   if (atomic_add_prop_to_plane(plane_res, atomic_req,
                                plane_res[plane].plane->plane_id, "FB_ID",
-                               drm_surfaces[current_buffer]->fb_id))
+                               drm_surfaces[buffer]->fb_id))
     return -EINVAL;
 
   if (atomic_add_prop_to_plane(plane_res, atomic_req,
@@ -565,7 +636,7 @@ static int drm_disable_crtc(drmModeAtomicReqPtr atomic_req) {
   return teardown_pipeline(atomic_req);
 }
 
-static int setup_pipeline(drmModeAtomicReqPtr atomic_req) {
+static int setup_pipeline(int buffer, drmModeAtomicReqPtr atomic_req) {
   uint32_t i, prop_id;
   int ret;
 
@@ -582,7 +653,7 @@ static int setup_pipeline(drmModeAtomicReqPtr atomic_req) {
 
   /* Setup planes */
   for(i = 0; i < number_of_lms; i++) {
-    ret = atomic_populate_plane(i, atomic_req);
+    ret = atomic_populate_plane(i, buffer, atomic_req);
     if (ret < 0) {
       printf("Error populating plane_id = %d\n", plane_res[i].plane->plane_id);
       return ret;
@@ -592,8 +663,8 @@ static int setup_pipeline(drmModeAtomicReqPtr atomic_req) {
   return 0;
 
 }
-static int drm_enable_crtc(drmModeAtomicReqPtr atomic_req) {
-  return setup_pipeline(atomic_req);
+static int drm_enable_crtc(int buffer, drmModeAtomicReqPtr atomic_req) {
+  return setup_pipeline(buffer, atomic_req);
 }
 
 static void drm_blank(minui_backend* backend __unused, bool blank) {
@@ -603,9 +674,12 @@ static void drm_blank(minui_backend* backend __unused, bool blank) {
     return;
 
   if (legacy_modeset) {
-    ret = set_legacy_crtc(blank ? 0 : drm_surfaces[current_buffer]->fb_id);
+    const int buffer = displayed_buffer >= 0 ? displayed_buffer : current_buffer;
+    ret = set_legacy_crtc(blank ? 0 : drm_surfaces[buffer]->fb_id);
     if (!ret) {
       current_blank_state = blank;
+      if (!blank)
+        displayed_buffer = buffer;
       printf("Legacy modeset %s\n", blank ? "disabled" : "enabled");
     } else {
       printf("Legacy modeset failed, rc = %d\n", ret);
@@ -619,17 +693,20 @@ static void drm_blank(minui_backend* backend __unused, bool blank) {
      return;
   }
 
+  const int buffer = displayed_buffer >= 0 ? displayed_buffer : current_buffer;
   if (blank)
     ret = drm_disable_crtc(atomic_req);
   else
-    ret = drm_enable_crtc(atomic_req);
+    ret = drm_enable_crtc(buffer, atomic_req);
 
   if (!ret)
     ret = drmModeAtomicCommit(drm_fd, atomic_req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
 
   if (!ret) {
-    printf("Atomic Commit succeed");
+    printf("Atomic Commit succeed\n");
     current_blank_state = blank;
+    if (!blank)
+      displayed_buffer = buffer;
   } else {
     printf("Atomic Commit failed, rc = %d\n", ret);
   }
@@ -951,6 +1028,117 @@ static int set_legacy_crtc(uint32_t fb_id) {
                         &connector_id, 1, &main_monitor_crtc->mode);
 }
 
+static void page_flip_handler(int, unsigned int, unsigned int, unsigned int,
+                              void* user_data) {
+  *static_cast<bool*>(user_data) = false;
+}
+
+static int wait_for_page_flip(bool* waiting) {
+  drmEventContext event_context = {};
+  event_context.version = DRM_EVENT_CONTEXT_VERSION;
+  event_context.page_flip_handler = page_flip_handler;
+
+  while (*waiting) {
+    pollfd pfd = {};
+    pfd.fd = drm_fd;
+    pfd.events = POLLIN;
+    int ret;
+    do {
+      ret = poll(&pfd, 1, 1000);
+    } while (ret < 0 && errno == EINTR);
+    if (ret <= 0)
+      return ret == 0 ? -ETIMEDOUT : -errno;
+    if (drmHandleEvent(drm_fd, &event_context) != 0)
+      return -errno;
+  }
+  return 0;
+}
+
+static int present_legacy_buffer(int buffer) {
+  if (displayed_buffer == buffer)
+    return 0;
+
+  if (legacy_page_flip) {
+    bool waiting = true;
+    int ret = drmModePageFlip(drm_fd, main_monitor_crtc->crtc_id,
+                              drm_surfaces[buffer]->fb_id,
+                              DRM_MODE_PAGE_FLIP_EVENT, &waiting);
+    if (ret == 0)
+      ret = wait_for_page_flip(&waiting);
+    if (ret == 0) {
+      displayed_buffer = buffer;
+      return 0;
+    }
+
+    printf("Legacy page flip failed ret=%d; falling back to modeset\n", ret);
+    fflush(stdout);
+    legacy_page_flip = false;
+  }
+
+  int ret = set_legacy_crtc(drm_surfaces[buffer]->fb_id);
+  if (ret == 0)
+    displayed_buffer = buffer;
+  return ret;
+}
+
+static drmModeAtomicReqPtr create_atomic_flip_request(int buffer) {
+  drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
+  if (!atomic_req)
+    return nullptr;
+
+  uint32_t prop_id;
+  add_prop(&conn_res, connector, Connector,
+           main_monitor_connector->connector_id, "CRTC_ID",
+           main_monitor_crtc->crtc_id);
+
+  for (uint32_t i = 0; i < number_of_lms; ++i) {
+    if (drmModeAtomicAddProperty(atomic_req, plane_res[i].plane->plane_id,
+                                 fb_prop_id,
+                                 drm_surfaces[buffer]->fb_id) < 0) {
+      drmModeAtomicFree(atomic_req);
+      return nullptr;
+    }
+  }
+
+  return atomic_req;
+}
+
+static int commit_atomic_buffer(int buffer, uint32_t flags, void* user_data) {
+  drmModeAtomicReqPtr atomic_req = create_atomic_flip_request(buffer);
+  if (!atomic_req)
+    return -ENOMEM;
+
+  int ret = drmModeAtomicCommit(drm_fd, atomic_req, flags, user_data);
+  drmModeAtomicFree(atomic_req);
+  return ret;
+}
+
+static int present_atomic_buffer(int buffer) {
+  if (displayed_buffer == buffer)
+    return 0;
+
+  if (atomic_page_flip) {
+    bool waiting = true;
+    int ret = commit_atomic_buffer(
+        buffer, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &waiting);
+    if (ret == 0)
+      ret = wait_for_page_flip(&waiting);
+    if (ret == 0) {
+      displayed_buffer = buffer;
+      return 0;
+    }
+
+    printf("Atomic page flip failed ret=%d; falling back to blocking commit\n", ret);
+    fflush(stdout);
+    atomic_page_flip = false;
+  }
+
+  int ret = commit_atomic_buffer(buffer, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
+  if (ret == 0)
+    displayed_buffer = buffer;
+  return ret;
+}
+
 static void disable_non_main_crtcs(int fd,
                     drmModeRes *resources,
                     drmModeCrtc* main_crtc) {
@@ -981,47 +1169,14 @@ static void disable_non_main_crtcs(int fd,
   drmModeAtomicFree(atomic_req);
 }
 
-static void update_plane_fb() {
+static int update_plane_fb(int buffer) {
   if (legacy_modeset) {
-    int ret = set_legacy_crtc(drm_surfaces[current_buffer]->fb_id);
-    if (ret)
-      printf("Legacy modeset failed ret=%d\n", ret);
-    return;
+    return present_legacy_buffer(buffer);
   }
-
-  uint32_t i, prop_id;
-
-  /* Set atomic req */
-  drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
-  if (!atomic_req) {
-     printf("Atomic Alloc failed. Could not update fb_id\n");
-     return;
-  }
-
-  /* Add conn-crtc association property required
-   * for driver to recognize quadpipe topology.
-   */
-  add_prop(&conn_res, connector, Connector, main_monitor_connector->connector_id,
-           "CRTC_ID", main_monitor_crtc->crtc_id);
-
-  /* Add property */
-  for(i = 0; i < number_of_lms; i++)
-    drmModeAtomicAddProperty(atomic_req, plane_res[i].plane->plane_id,
-                             fb_prop_id, drm_surfaces[current_buffer]->fb_id);
-
-  /* Commit changes */
-  int32_t ret;
-  ret = drmModeAtomicCommit(drm_fd, atomic_req,
-                 DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-
-  drmModeAtomicFree(atomic_req);
-
-  if (ret)
-    printf("Atomic commit failed ret=%d\n", ret);
-
+  return present_atomic_buffer(buffer);
 }
 
-static GRSurface* drm_init(minui_backend* backend __unused) {
+static GRSurface* drm_init(minui_backend* backend) {
   drmModeRes* res = nullptr;
 
   spr_enabled = android::base::GetIntProperty("vendor.display.enable_spr", 0);
@@ -1113,29 +1268,49 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return nullptr;
   }
 
-  draw_buf = (GRSurface *)malloc(sizeof(GRSurface));
-  if (!draw_buf) {
-    printf("failed to alloc draw_buf\n");
-    drm_destroy_surface(drm_surfaces[0]);
-    drm_destroy_surface(drm_surfaces[1]);
-    drmModeFreeResources(res);
-    close(drm_fd);
-    return nullptr;
-  }
-
-  memcpy(draw_buf, &drm_surfaces[0]->base, sizeof(GRSurface));
-  draw_buf->data = (unsigned char *)calloc(draw_buf->height * draw_buf->row_bytes, 1);
-  if (!draw_buf->data) {
-    printf("failed to alloc draw_buf surface\n");
-    free(draw_buf);
-    drm_destroy_surface(drm_surfaces[0]);
-    drm_destroy_surface(drm_surfaces[1]);
-    drmModeFreeResources(res);
-    close(drm_fd);
-    return nullptr;
-  }
-
   current_buffer = 0;
+  displayed_buffer = -1;
+  legacy_page_flip = true;
+  atomic_page_flip = true;
+  backend->requires_full_redraw = legacy_modeset ||
+      android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
+  draw_buf = nullptr;
+
+  if (backend->requires_full_redraw) {
+    memset(drm_surfaces[0]->base.data, 0,
+           drm_surfaces[0]->base.height * drm_surfaces[0]->base.row_bytes);
+    memset(drm_surfaces[1]->base.data, 0,
+           drm_surfaces[1]->base.height * drm_surfaces[1]->base.row_bytes);
+  } else {
+    draw_buf = static_cast<GRSurface*>(malloc(sizeof(GRSurface)));
+    if (!draw_buf) {
+      printf("failed to alloc draw_buf\n");
+      drm_destroy_surface(drm_surfaces[0]);
+      drm_destroy_surface(drm_surfaces[1]);
+      close(drm_fd);
+      return nullptr;
+    }
+
+    memcpy(draw_buf, &drm_surfaces[0]->base, sizeof(GRSurface));
+    draw_buf->data = static_cast<unsigned char*>(
+        calloc(draw_buf->height * draw_buf->row_bytes, 1));
+    if (!draw_buf->data) {
+      printf("failed to alloc draw_buf surface\n");
+      free(draw_buf);
+      draw_buf = nullptr;
+      drm_destroy_surface(drm_surfaces[0]);
+      drm_destroy_surface(drm_surfaces[1]);
+      close(drm_fd);
+      return nullptr;
+    }
+  }
+
+  const GRRect full_damage = { 0, 0, width, height };
+  pending_damage[0] = full_damage;
+  pending_damage[1] = full_damage;
+  stats_frames = 0;
+  stats_copied_bytes = 0;
+  stats_full_bytes = 0;
 
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_ATOMIC, 1);
@@ -1263,22 +1438,51 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
 
   drm_blank(nullptr, false);
 
-  return draw_buf;
+  if (displayed_buffer == current_buffer)
+    current_buffer = 1 - current_buffer;
+
+  return backend->requires_full_redraw
+      ? &drm_surfaces[current_buffer]->base : draw_buf;
 }
 
-static GRSurface* drm_flip(minui_backend* backend __unused) {
-    memcpy(drm_surfaces[current_buffer]->base.data,
-            draw_buf->data, draw_buf->height * draw_buf->row_bytes);
-    update_plane_fb();
-    current_buffer = 1 - current_buffer;
+static GRSurface* drm_flip(minui_backend* backend) {
+    if (backend->requires_full_redraw) {
+        log_copy_stats(0, &drm_surfaces[current_buffer]->base);
+        const int ret = update_plane_fb(current_buffer);
+        if (ret) {
+            printf("DRM present failed ret=%d\n", ret);
+            return &drm_surfaces[current_buffer]->base;
+        }
+        current_buffer = 1 - current_buffer;
+        return &drm_surfaces[current_buffer]->base;
+    }
+
+    const GRRect frame_damage = gr_get_damage();
+    union_damage(&pending_damage[0], frame_damage);
+    union_damage(&pending_damage[1], frame_damage);
+    const size_t copied_bytes = copy_damage(
+        draw_buf, &drm_surfaces[current_buffer]->base, pending_damage[current_buffer]);
+    pending_damage[current_buffer] = { 0, 0, 0, 0 };
+    log_copy_stats(copied_bytes, draw_buf);
+    const int ret = update_plane_fb(current_buffer);
+    if (ret)
+        printf("DRM present failed ret=%d\n", ret);
+    else
+        current_buffer = 1 - current_buffer;
     return draw_buf;
 }
 
-static void drm_exit(minui_backend* backend __unused) {
+static void drm_exit(minui_backend* backend) {
     drm_blank(nullptr, true);
     drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
     drm_destroy_surface(drm_surfaces[0]);
     drm_destroy_surface(drm_surfaces[1]);
+    if (draw_buf) {
+        free(draw_buf->data);
+        free(draw_buf);
+    }
+    draw_buf = nullptr;
+    backend->requires_full_redraw = false;
     close(drm_fd);
     drm_fd = -1;
 }

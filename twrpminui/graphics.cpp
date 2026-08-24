@@ -61,8 +61,43 @@ GRSurface* gr_draw = NULL;
 static GGLContext *gr_context = 0;
 GGLSurface gr_mem_surface;
 static int gr_is_curr_clr_opaque = 0;
+static GRRect gr_frame_damage = { 0, 0, 0, 0 };
 
 unsigned int gr_rotation = 0;
+
+void gr_damage(int left, int top, int right, int bottom)
+{
+    if (!gr_draw)
+        return;
+
+    left = std::clamp(left, 0, gr_draw->width);
+    top = std::clamp(top, 0, gr_draw->height);
+    right = std::clamp(right, 0, gr_draw->width);
+    bottom = std::clamp(bottom, 0, gr_draw->height);
+    if (left >= right || top >= bottom)
+        return;
+
+    if (gr_frame_damage.left >= gr_frame_damage.right ||
+        gr_frame_damage.top >= gr_frame_damage.bottom) {
+        gr_frame_damage = { left, top, right, bottom };
+        return;
+    }
+
+    gr_frame_damage.left = std::min(gr_frame_damage.left, left);
+    gr_frame_damage.top = std::min(gr_frame_damage.top, top);
+    gr_frame_damage.right = std::max(gr_frame_damage.right, right);
+    gr_frame_damage.bottom = std::max(gr_frame_damage.bottom, bottom);
+}
+
+GRRect gr_get_damage()
+{
+    return gr_frame_damage;
+}
+
+void gr_reset_damage()
+{
+    gr_frame_damage = { 0, 0, 0, 0 };
+}
 
 int gr_textEx_scaleW(int x, int y, const char *s, void* pFont, int max_width, int placement, int scale)
 {
@@ -160,6 +195,11 @@ void gr_line(int x0, int y0, int x1, int y1, int width)
     const int coords0[2] = { x0_disp << 4, y0_disp << 4 };
     const int coords1[2] = { x1_disp << 4, y1_disp << 4 };
     gl->linex(gl, coords0, coords1, width << 4);
+    const int half_width = (width + 1) / 2;
+    gr_damage(std::min(x0_disp, x1_disp) - half_width,
+              std::min(y0_disp, y1_disp) - half_width,
+              std::max(x0_disp, x1_disp) + half_width + 1,
+              std::max(y0_disp, y1_disp) + half_width + 1);
 
     if(gr_is_curr_clr_opaque)
         gl->enable(gl, GGL_BLEND);
@@ -241,6 +281,7 @@ void gr_clear()
             px += gr_draw->row_bytes - (gr_draw->width * gr_draw->pixel_bytes);
         }
     }
+    gr_damage(0, 0, gr_draw->width, gr_draw->height);
 }
 
 void gr_fill(int x, int y, int w, int h)
@@ -261,6 +302,7 @@ void gr_fill(int x, int y, int w, int h)
     t_disp = std::min(y0_disp, y1_disp);
     b_disp = std::max(y0_disp, y1_disp);
     gl->recti(gl, l_disp, t_disp, r_disp, b_disp);
+    gr_damage(l_disp, t_disp, r_disp, b_disp);
 
     if(gr_is_curr_clr_opaque)
         gl->enable(gl, GGL_BLEND);
@@ -317,6 +359,7 @@ void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy)
     gl->enable(gl, GGL_TEXTURE_2D);
     gl->texCoord2i(gl, sx - l_disp, sy - t_disp);
     gl->recti(gl, l_disp, t_disp, r_disp, b_disp);
+    gr_damage(l_disp, t_disp, r_disp, b_disp);
     gl->disable(gl, GGL_TEXTURE_2D);
 
     if (gr_rotation != 0)
@@ -342,10 +385,15 @@ unsigned int gr_get_height(gr_surface surface) {
 
 void gr_flip() {
     gr_draw = gr_backend->flip(gr_backend);
+    gr_reset_damage();
     // On double buffered back ends, when we flip, we need to tell
     // pixel flinger to draw to the other buffer
     gr_mem_surface.data = (GGLubyte*)gr_draw->data;
     gr_context->colorBuffer(gr_context, &gr_mem_surface);
+}
+
+bool gr_requires_full_redraw(void) {
+    return gr_backend && gr_backend->requires_full_redraw;
 }
 
 static void get_memory_surface(GGLSurface* ms) {

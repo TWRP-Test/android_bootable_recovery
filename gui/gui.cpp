@@ -623,13 +623,13 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 			input_timeout_ms = idle_frames > 15 ? 1000 : 0;
 
 #ifndef PRINT_RENDER_TIME
-			if (ret > 1)
+			if (ret > 1 || (ret > 0 && gr_requires_full_redraw()))
 				PageManager::Render();
 
 			if (ret > 0)
 				flip();
 #else
-			if (ret > 1)
+			if (ret > 1 || (ret > 0 && gr_requires_full_redraw()))
 			{
 				timespec start, end;
 				int32_t render_t, flip_t;
