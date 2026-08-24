@@ -277,8 +277,8 @@ func globalFlags(ctx android.BaseContext) []string {
     if getMakeVars(ctx, "AB_OTA_UPDATER") == "true" {
         cflags = append(cflags, "-DAB_OTA_UPDATER=1")
     }
-    if getMakeVars(ctx, "TW_NO_NETWORK") == "true" {
-        cflags = append(cflags, "-DTW_NO_NETWORK")
+    if getMakeVars(ctx, "TW_INCLUDE_WIFI") == "true" {
+        cflags = append(cflags, "-DTW_INCLUDE_WIFI")
     }
     return cflags
 }
@@ -291,7 +291,7 @@ func globalSrcs(ctx android.BaseContext) []string {
     } else {
         srcs = append(srcs, "hardwarekeyboard.cpp")
     }
-    if getMakeVars(ctx, "TW_NO_NETWORK") != "true" {
+    if getMakeVars(ctx, "TW_INCLUDE_WIFI") == "true" {
         srcs = append(srcs, "borderedlogbox.cpp")
         srcs = append(srcs, "wlanlist.cpp")
     }

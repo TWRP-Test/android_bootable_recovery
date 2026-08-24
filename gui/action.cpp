@@ -249,7 +249,7 @@ GUIAction::GUIAction(xml_node<>* node)
 		ADD_ACTION(editfile);
 #endif
 		ADD_ACTION(mergesnapshots);
-#ifndef TW_NO_NETWORK
+#ifdef TW_INCLUDE_WIFI
         ADD_ACTION(wlanstart);
         ADD_ACTION(wlanstop);
         ADD_ACTION(wlanscan);
@@ -2160,7 +2160,7 @@ int GUIAction::disableAVB2(string arg __unused) {
 	return 0;
 }
 
-#ifndef TW_NO_NETWORK
+#ifdef TW_INCLUDE_WIFI
 static GUIBorderedLogBox* s_wlanLogBox = NULL;
 
 void SetWlanLogBox(GUIBorderedLogBox* logBox) {

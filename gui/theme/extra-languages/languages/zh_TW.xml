@@ -778,7 +778,6 @@
 		<string name="wlan_password_prompt">輸入網路密碼：</string>
 		<string name="wlan_encryption_hdr">加密：</string>
 		<string name="wlan_password_hint">按返回取消。</string>
-		<string name="wlan_log_hdr">此頁面由 Jason 建立</string>
 		<string name="wlan_get_status_btn">取得狀態</string>
 		<string name="wlan_test_network_btn">測試網路</string>
 		<string name="wlan_scan_btn">掃描</string>

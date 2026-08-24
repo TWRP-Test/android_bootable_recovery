@@ -280,16 +280,18 @@ endif
 ifeq ($(TW_NO_HAPTICS), true)
     LOCAL_CFLAGS += -DTW_NO_HAPTICS
 endif
-ifeq ($(TW_NO_NETWORK), true)
-    LOCAL_CFLAGS += -DTW_NO_NETWORK
+ifeq ($(TW_INCLUDE_WIFI), true)
+    LOCAL_CFLAGS += -DTW_INCLUDE_WIFI
 endif
-ifneq ($(TW_NO_NETWORK), true)
+ifeq ($(TW_INCLUDE_WIFI), true)
     TWRP_REQUIRED_MODULES += \
         microhttpd \
         index.html \
         microhttpd.rc \
         ttyd \
-        ttyd.rc
+        ttyd.rc \
+        wpa_supplicant_recovery \
+        wpa_cli_recovery
 endif
 ifneq ($(TW_ADDITIONAL_APEX_FILES),)
     LOCAL_CFLAGS += -DTW_ADDITIONAL_APEX_FILES=$(TW_ADDITIONAL_APEX_FILES)

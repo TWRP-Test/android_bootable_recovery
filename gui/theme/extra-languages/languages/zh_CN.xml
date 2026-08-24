@@ -769,7 +769,6 @@
 		<string name="wlan_password_prompt">请输入当前网络密码:</string>
 		<string name="wlan_encryption_hdr">安全性:</string>
 		<string name="wlan_password_hint">按返回按钮取消。</string>
-		<string name="wlan_log_hdr">此界面由 Jason 构建</string>
 		<string name="wlan_get_status_btn">获取状态</string>
 		<string name="wlan_test_network_btn">测试网络</string>
 		<string name="wlan_scan_btn">扫描</string>

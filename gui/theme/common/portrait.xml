@@ -3826,11 +3826,6 @@
 				<text>Network Disabled for Device</text>
 			</text>
 
-			<text style="text_m">
-				<placement x="%col1_x_header%" y="%row4_header_y%"/>
-				<text>{@wlan_log_hdr=This page is building by Jason}</text>
-			</text>
-
 			<borderedlogbox toprow="%row3_y%" bottomrow="%row16a_y%" borderwidth="2" leftmargin="75" rightmargin="75">
 				<placement x="%indent%" w="%content_width%"/>
 				<color foreground="%text_color%" background="%background_color%" border="%accent_color%"/>

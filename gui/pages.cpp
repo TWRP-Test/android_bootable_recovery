@@ -475,7 +475,7 @@ bool Page::ProcessNode(xml_node<>* page, std::vector<xml_node<>*> *templates, in
 		}
         else if (type == "wlanlist")
         {
-#ifndef TW_NO_NETWORK
+#ifdef TW_INCLUDE_WIFI
             GUIWlanList* element = new GUIWlanList(child);
             mObjects.push_back(element);
             mRenders.push_back(element);
@@ -498,7 +498,7 @@ bool Page::ProcessNode(xml_node<>* page, std::vector<xml_node<>*> *templates, in
 		}
         else if (type == "borderedlogbox")
         {
-#ifndef TW_NO_NETWORK
+#ifdef TW_INCLUDE_WIFI
             GUIBorderedLogBox* element = new GUIBorderedLogBox(child);
             mObjects.push_back(element);
             mRenders.push_back(element);

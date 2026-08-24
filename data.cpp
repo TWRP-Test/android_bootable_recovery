@@ -441,10 +441,10 @@ void DataManager::SetDefaultValues()
     mConst.SetValue("tw_disable_haptics", "1");
 #endif
 
-#ifndef TW_NO_NETWORK
+#ifdef TW_INCLUDE_WIFI
     mConst.SetValue("tw_disable_network", "0");
 #else
-    LOGINFO("TW_NO_NETWORK := true\n");
+    LOGINFO("TW_INCLUDE_WIFI is not enabled\n");
     mConst.SetValue("tw_disable_network", "1");
 #endif
 

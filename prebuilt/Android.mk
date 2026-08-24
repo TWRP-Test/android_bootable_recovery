@@ -262,8 +262,17 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
          #RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libhidl-gen-hash.so
     endif
 endif
-ifneq ($(TW_NO_NETWORK), true)
+ifeq ($(TW_INCLUDE_WIFI), true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/microhttpd
+    RECOVERY_BINARY_SOURCE_FILES += $(LOCAL_PATH)/dhcpcd
+    include $(CLEAR_VARS)
+    LOCAL_MODULE := dhcpcd
+    LOCAL_MODULE_TAGS := optional
+    LOCAL_MODULE_CLASS := EXECUTABLES
+    LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/bin
+    LOCAL_SRC_FILES := dhcpcd
+    include $(BUILD_PREBUILT)
+
     include $(CLEAR_VARS)
     LOCAL_MODULE := ttyd
     LOCAL_MODULE_TAGS := optional
