@@ -3876,7 +3876,6 @@
 				<condition var1="tw_disable_network" var2="0"/>
 				<placement x="%center_x%" y="%row21a_y%"/>
 				<text>{@wlan_start_service_btn=Start Service}</text>
-				<action function="cmd">wpa_cli -iwlan0 -p/tmp/recovery/sockets add_network</action>
 				<action function="wlanstart"/>
 			</button>
 

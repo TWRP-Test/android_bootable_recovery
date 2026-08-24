@@ -2171,6 +2171,8 @@ static GUIBorderedLogBox* FindWlanLogBox() {
     return s_wlanLogBox;
 }
 
+static std::string run_command_get_output(const std::string& cmd);
+
 int GUIAction::wlanstart(string arg __unused) {
 	GUIBorderedLogBox* logBox = FindWlanLogBox();
 	if (logBox) {
@@ -2179,6 +2181,16 @@ int GUIAction::wlanstart(string arg __unused) {
 		logBox->AddLogLine("[INFO] WLAN service started successfully", "normal");
 		logBox->AddLogLine("[INFO] Interface: wlan0", "normal");
 		logBox->AddLogLine("[INFO] Status: UP", "normal");
+
+		const std::string scan_reply = run_command_get_output(
+			"wpa_cli -iwlan0 -p/tmp/recovery/sockets scan");
+		if (scan_reply.find("OK") != std::string::npos) {
+			logBox->AddLogLine("[INFO] Initial WLAN scan requested", "normal");
+		} else if (scan_reply.find("FAIL-BUSY") != std::string::npos) {
+			logBox->AddLogLine("[INFO] WLAN scan already in progress", "normal");
+		} else {
+			logBox->AddLogLine("[WARNING] Initial WLAN scan could not be started", "warning");
+		}
 		gui_forceRender();
 	} else {
 		LOGERR("WLAN log box not found\n");
@@ -2230,20 +2242,26 @@ int GUIAction::wlanscan(std::string arg __unused) {
         }
         pclose(fp);
 
-        if (reply.find("OK") == std::string::npos) {
+        if (reply.find("OK") == std::string::npos &&
+            reply.find("FAIL-BUSY") == std::string::npos) {
             logBox->AddLogLine("[ERROR] wpa_cli scan failed", "error");
             logBox->AddLogLine("        Reply: " + reply, "error");
             gui_forceRender();
             return -1;
         }
+
+        if (reply.find("FAIL-BUSY") != std::string::npos)
+            logBox->AddLogLine("[INFO] Scan already in progress; waiting for results...", "normal");
     }
 
-    // 给扫描一点时间（1 秒）
-    usleep(1000 * 1000);
-
-    // ========= 2. 执行 scan_results =========
+    // scan is asynchronous. Poll scan_results until the driver has returned
+    // at least one AP or the timeout expires.
     std::vector<std::string> lines;
-    {
+    const int scan_timeout_ms = 10000;
+    const int scan_poll_interval_ms = 500;
+    for (int elapsed_ms = 0; elapsed_ms <= scan_timeout_ms; elapsed_ms += scan_poll_interval_ms) {
+        lines.clear();
+        // ========= 2. 执行 scan_results =========
         std::string command = std::string(WPACLI) + " -i" + IFACE + " -p" + CTRL_DIR + " scan_results";
         FILE* fp = popen(command.c_str(), "r");
         if (!fp) {
@@ -2262,6 +2280,11 @@ int GUIAction::wlanscan(std::string arg __unused) {
                 lines.push_back(line);
         }
         pclose(fp);
+
+        if (lines.size() > 1 || elapsed_ms == scan_timeout_ms)
+            break;
+
+        usleep(scan_poll_interval_ms * 1000);
     }
 
     if (lines.size() <= 1) {
