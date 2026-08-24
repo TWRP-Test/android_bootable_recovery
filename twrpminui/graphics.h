@@ -41,9 +41,6 @@ struct minui_backend {
 
     // Device cleanup when drawing is done.
     void (*exit)(minui_backend*);
-
-    // Direct scanout backends need a complete frame before every flip.
-    bool requires_full_redraw;
 };
 
 minui_backend* open_fbdev();

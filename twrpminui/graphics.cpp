@@ -392,10 +392,6 @@ void gr_flip() {
     gr_context->colorBuffer(gr_context, &gr_mem_surface);
 }
 
-bool gr_requires_full_redraw(void) {
-    return gr_backend && gr_backend->requires_full_redraw;
-}
-
 static void get_memory_surface(GGLSurface* ms) {
     ms->version = sizeof(*ms);
     ms->width = gr_draw->width;

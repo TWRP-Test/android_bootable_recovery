@@ -228,10 +228,13 @@ struct drm_msm_spr_init_cfg_v2 {
 static drm_surface *drm_surfaces[2];
 static int current_buffer;
 static GRSurface *draw_buf = nullptr;
-static GRRect pending_damage[2];
+static GRRect staging_pending_damage[2];
+static GRRect direct_pending_damage;
 static int displayed_buffer = -1;
 static bool legacy_page_flip = true;
 static bool atomic_page_flip = true;
+static bool direct_scanout;
+static bool warned_empty_damage;
 static uint64_t stats_frames;
 static uint64_t stats_copied_bytes;
 static uint64_t stats_full_bytes;
@@ -295,7 +298,8 @@ static size_t copy_damage(const GRSurface* source, GRSurface* destination,
   return row_bytes * rows;
 }
 
-static void log_copy_stats(size_t copied_bytes, const GRSurface* surface) {
+static void log_copy_stats(size_t copied_bytes, const GRSurface* surface,
+                           const char* mode) {
   ++stats_frames;
   stats_copied_bytes += copied_bytes;
   stats_full_bytes += static_cast<uint64_t>(surface->height) * surface->row_bytes;
@@ -305,9 +309,9 @@ static void log_copy_stats(size_t copied_bytes, const GRSurface* surface) {
   if (android::base::GetBoolProperty("twrp.drm.stats", false)) {
     const uint64_t saved_percent = stats_full_bytes == 0
         ? 0 : 100 - std::min<uint64_t>(100, stats_copied_bytes * 100 / stats_full_bytes);
-    printf("DRM copy stats: frames=%" PRIu64 ", copied=%" PRIu64
+    printf("DRM copy stats: mode=%s, frames=%" PRIu64 ", copied=%" PRIu64
            "/%" PRIu64 " bytes, saved=%" PRIu64 "%%\n",
-           stats_frames, stats_copied_bytes, stats_full_bytes, saved_percent);
+           mode, stats_frames, stats_copied_bytes, stats_full_bytes, saved_percent);
     fflush(stdout);
   }
   stats_frames = 0;
@@ -1176,7 +1180,7 @@ static int update_plane_fb(int buffer) {
   return present_atomic_buffer(buffer);
 }
 
-static GRSurface* drm_init(minui_backend* backend) {
+static GRSurface* drm_init(minui_backend* backend __unused) {
   drmModeRes* res = nullptr;
 
   spr_enabled = android::base::GetIntProperty("vendor.display.enable_spr", 0);
@@ -1272,11 +1276,12 @@ static GRSurface* drm_init(minui_backend* backend) {
   displayed_buffer = -1;
   legacy_page_flip = true;
   atomic_page_flip = true;
-  backend->requires_full_redraw = legacy_modeset ||
+  direct_scanout = legacy_modeset ||
       android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
+  warned_empty_damage = false;
   draw_buf = nullptr;
 
-  if (backend->requires_full_redraw) {
+  if (direct_scanout) {
     memset(drm_surfaces[0]->base.data, 0,
            drm_surfaces[0]->base.height * drm_surfaces[0]->base.row_bytes);
     memset(drm_surfaces[1]->base.data, 0,
@@ -1306,8 +1311,9 @@ static GRSurface* drm_init(minui_backend* backend) {
   }
 
   const GRRect full_damage = { 0, 0, width, height };
-  pending_damage[0] = full_damage;
-  pending_damage[1] = full_damage;
+  staging_pending_damage[0] = full_damage;
+  staging_pending_damage[1] = full_damage;
+  direct_pending_damage = full_damage;
   stats_frames = 0;
   stats_copied_bytes = 0;
   stats_full_bytes = 0;
@@ -1441,29 +1447,55 @@ static GRSurface* drm_init(minui_backend* backend) {
   if (displayed_buffer == current_buffer)
     current_buffer = 1 - current_buffer;
 
-  return backend->requires_full_redraw
+  return direct_scanout
       ? &drm_surfaces[current_buffer]->base : draw_buf;
 }
 
-static GRSurface* drm_flip(minui_backend* backend) {
-    if (backend->requires_full_redraw) {
-        log_copy_stats(0, &drm_surfaces[current_buffer]->base);
-        const int ret = update_plane_fb(current_buffer);
+static GRSurface* drm_flip(minui_backend* backend __unused) {
+    if (direct_scanout) {
+        const GRRect frame_damage = gr_get_damage();
+        union_damage(&direct_pending_damage, frame_damage);
+        if (rect_empty(direct_pending_damage)) {
+            direct_pending_damage = {
+                0, 0, drm_surfaces[current_buffer]->base.width,
+                drm_surfaces[current_buffer]->base.height };
+            if (!warned_empty_damage) {
+                printf("DRM flip had no recorded damage; synchronizing full frame\n");
+                warned_empty_damage = true;
+            }
+        }
+
+        const int presenting_buffer = current_buffer;
+        int released_buffer = displayed_buffer;
+        const int ret = update_plane_fb(presenting_buffer);
         if (ret) {
             printf("DRM present failed ret=%d\n", ret);
             return &drm_surfaces[current_buffer]->base;
         }
-        current_buffer = 1 - current_buffer;
+
+        if (released_buffer < 0 || released_buffer == presenting_buffer)
+            released_buffer = 1 - presenting_buffer;
+
+        // The completed flip releases the old scanout. Copy damage forward so
+        // the next draw buffer matches the displayed frame.
+        const size_t copied_bytes = copy_damage(
+            &drm_surfaces[presenting_buffer]->base,
+            &drm_surfaces[released_buffer]->base, direct_pending_damage);
+        log_copy_stats(copied_bytes, &drm_surfaces[presenting_buffer]->base,
+                       "direct");
+        direct_pending_damage = { 0, 0, 0, 0 };
+        current_buffer = released_buffer;
         return &drm_surfaces[current_buffer]->base;
     }
 
     const GRRect frame_damage = gr_get_damage();
-    union_damage(&pending_damage[0], frame_damage);
-    union_damage(&pending_damage[1], frame_damage);
+    union_damage(&staging_pending_damage[0], frame_damage);
+    union_damage(&staging_pending_damage[1], frame_damage);
     const size_t copied_bytes = copy_damage(
-        draw_buf, &drm_surfaces[current_buffer]->base, pending_damage[current_buffer]);
-    pending_damage[current_buffer] = { 0, 0, 0, 0 };
-    log_copy_stats(copied_bytes, draw_buf);
+        draw_buf, &drm_surfaces[current_buffer]->base,
+        staging_pending_damage[current_buffer]);
+    staging_pending_damage[current_buffer] = { 0, 0, 0, 0 };
+    log_copy_stats(copied_bytes, draw_buf, "staging");
     const int ret = update_plane_fb(current_buffer);
     if (ret)
         printf("DRM present failed ret=%d\n", ret);
@@ -1472,7 +1504,7 @@ static GRSurface* drm_flip(minui_backend* backend) {
     return draw_buf;
 }
 
-static void drm_exit(minui_backend* backend) {
+static void drm_exit(minui_backend* backend __unused) {
     drm_blank(nullptr, true);
     drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
     drm_destroy_surface(drm_surfaces[0]);
@@ -1482,7 +1514,7 @@ static void drm_exit(minui_backend* backend) {
         free(draw_buf);
     }
     draw_buf = nullptr;
-    backend->requires_full_redraw = false;
+    direct_scanout = false;
     close(drm_fd);
     drm_fd = -1;
 }
