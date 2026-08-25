@@ -32,16 +32,29 @@ struct GRSurface {
 typedef void* gr_surface;
 typedef unsigned short gr_pixel;
 
+enum gr_pixel_format {
+    GR_PIXEL_FORMAT_RGB565 = 1,
+    // 32-bit values describe byte order in memory, not the DRM fourcc name.
+    GR_PIXEL_FORMAT_RGBA8888,
+    GR_PIXEL_FORMAT_BGRA8888,
+    GR_PIXEL_FORMAT_RGBX8888,
+    GR_PIXEL_FORMAT_BGRX8888,
+    GR_PIXEL_FORMAT_ABGR8888,
+};
+
 #define FONT_TYPE_TWRP 0
 #define FONT_TYPE_TTF  1
 
 int gr_init(void);
+int gr_init_display(void);
 void gr_exit(void);
 
 int gr_fb_width(void);
 int gr_fb_height(void);
+int gr_get_pixel_format(void);
 gr_pixel *gr_fb_data(void);
 void gr_flip(void);
+void gr_flip_display(void);
 void gr_fb_blank(bool blank);
 
 void gr_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
@@ -69,6 +82,9 @@ int gr_ttf_getMaxFontHeight(void *font);
 void gr_ttf_dump_stats(void);
 
 void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy);
+// Copy a rendered region into the current draw buffer and record damage.
+// Coordinates are physical display coordinates; rotation must be zero.
+int gr_upload_pixels(int x, int y, int w, int h, int stride_bytes, const void* pixels, int pixel_bytes);
 unsigned int gr_get_width(gr_surface surface);
 unsigned int gr_get_height(gr_surface surface);
 int gr_get_surface(gr_surface* surface);

@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <atomic>
@@ -951,6 +952,35 @@ extern "C" int gui_init(void)
 #endif
 	ev_init();
 	return 0;
+}
+
+extern "C" int gui_run_gui2(void)
+{
+	ev_exit();
+	gr_exit();
+
+	pid_t pid = fork();
+	if (pid < 0) {
+		LOGERR("gui2: fork failed: %s\n", strerror(errno));
+		gr_init();
+		ev_init();
+		return -1;
+	}
+	if (pid == 0) {
+		execl("/system/bin/gui2", "gui2", nullptr);
+		LOGERR("gui2: exec failed: %s\n", strerror(errno));
+		_exit(127);
+	}
+
+	int status = 0;
+	waitpid(pid, &status, 0);
+	LOGINFO("gui2: exited with status %d\n", WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+
+	if (gr_init() != 0)
+		LOGERR("gui2: gr_init after gui2 failed\n");
+	ev_init();
+	gui_forceRender();
+	return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
 extern "C" int gui_loadResources(void)

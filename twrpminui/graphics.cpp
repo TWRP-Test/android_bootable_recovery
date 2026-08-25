@@ -449,6 +449,80 @@ void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy)
         gl->enable(gl, GGL_BLEND);
 }
 
+int gr_upload_pixels(int x, int y, int w, int h, int stride_bytes, const void* pixels, int pixel_bytes)
+{
+    if (!gr_draw || !pixels || w <= 0 || h <= 0)
+        return -1;
+
+    if (gr_rotation != 0)
+        return -1;
+
+    if (x < 0 || y < 0 || x + w > gr_draw->width || y + h > gr_draw->height)
+        return -1;
+    if (stride_bytes < w * pixel_bytes)
+        return -1;
+
+    const uint8_t* src = static_cast<const uint8_t*>(pixels);
+    const int target_format = gr_get_pixel_format();
+    if (target_format == GR_PIXEL_FORMAT_RGB565 && pixel_bytes == 2 &&
+        gr_draw->pixel_bytes == 2) {
+        const size_t row_bytes = static_cast<size_t>(w) * pixel_bytes;
+        for (int row = 0; row < h; ++row)
+            memcpy(gr_draw->data + (y + row) * gr_draw->row_bytes + x * pixel_bytes,
+                   src + row * stride_bytes, row_bytes);
+    } else if (target_format == GR_PIXEL_FORMAT_RGB565 && pixel_bytes == 4 &&
+               gr_draw->pixel_bytes == 2) {
+        // Convert the LVGL source pixels to the target RGB565 layout.
+        for (int row = 0; row < h; ++row) {
+            const uint8_t* src_row = src + row * stride_bytes;
+            uint16_t* dst_row = reinterpret_cast<uint16_t*>(
+                gr_draw->data + (y + row) * gr_draw->row_bytes + x * 2);
+            for (int col = 0; col < w; ++col) {
+                const uint8_t* px = src_row + col * 4;
+                const uint16_t r = px[2] >> 3;
+                const uint16_t g = px[1] >> 2;
+                const uint16_t b = px[0] >> 3;
+                dst_row[col] = static_cast<uint16_t>((r << 11) | (g << 5) | b);
+            }
+        }
+    } else if (pixel_bytes == 4 && gr_draw->pixel_bytes == 4 &&
+               target_format == GR_PIXEL_FORMAT_BGRA8888) {
+        // The source and target use the same four-byte memory layout.
+        const size_t row_bytes = static_cast<size_t>(w) * 4;
+        for (int row = 0; row < h; ++row)
+            memcpy(gr_draw->data + (y + row) * gr_draw->row_bytes + x * 4,
+                   src + row * stride_bytes, row_bytes);
+    } else if (pixel_bytes == 4 && gr_draw->pixel_bytes == 4) {
+        // Reorder LVGL's bytes to the selected recovery format.
+        for (int row = 0; row < h; ++row) {
+            const uint8_t* src_row = src + row * stride_bytes;
+            uint8_t* dst_row = gr_draw->data + (y + row) * gr_draw->row_bytes + x * 4;
+            for (int col = 0; col < w; ++col) {
+                const uint8_t* s = src_row + col * 4;
+                uint8_t* d = dst_row + col * 4;
+                switch (target_format) {
+                    case GR_PIXEL_FORMAT_RGBA8888:
+                        d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3];
+                        break;
+                    case GR_PIXEL_FORMAT_RGBX8888:
+                        d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 0xFF;
+                        break;
+                    case GR_PIXEL_FORMAT_ABGR8888:
+                        d[0] = s[3]; d[1] = s[0]; d[2] = s[1]; d[3] = s[2];
+                        break;
+                    default:
+                        return -1;
+                }
+            }
+        }
+    } else {
+        return -1;
+    }
+
+    gr_damage(x, y, x + w, y + h);
+    return 0;
+}
+
 unsigned int gr_get_width(gr_surface surface) {
     if (surface == NULL) {
         return 0;
@@ -481,7 +555,7 @@ static void get_memory_surface(GGLSurface* ms) {
     ms->format = gr_draw->format;
 }
 
-int gr_init(void)
+static int init_backend()
 {
     gr_draw = NULL;
 
@@ -527,6 +601,23 @@ int gr_init(void)
     overscan_offset_x = gr_draw->width * overscan_percent / 100;
     overscan_offset_y = gr_draw->height * overscan_percent / 100;
 
+    return 0;
+}
+
+int gr_init_display(void)
+{
+    if (init_backend() != 0)
+        return -1;
+    gr_draw = gr_backend->flip(gr_backend);
+    gr_draw = gr_backend->flip(gr_backend);
+    return 0;
+}
+
+int gr_init(void)
+{
+    if (init_backend() != 0)
+        return -1;
+
     // Set up pixelflinger
     get_memory_surface(&gr_mem_surface);
     gglInit(&gr_context);
@@ -548,6 +639,12 @@ void gr_exit(void)
     gr_backend->exit(gr_backend);
 }
 
+void gr_flip_display(void)
+{
+    gr_draw = gr_backend->flip(gr_backend);
+    gr_reset_damage();
+}
+
 int gr_fb_width(void)
 {
     return (gr_rotation == 0 || gr_rotation == 180) ?
@@ -560,6 +657,26 @@ int gr_fb_height(void)
     return (gr_rotation == 0 || gr_rotation == 180) ?
             gr_draw->height - 2 * overscan_offset_y :
             gr_draw->width  - 2 * overscan_offset_x;
+}
+
+int gr_get_pixel_format(void)
+{
+    if (!gr_draw)
+        return 0;
+    if (gr_draw->pixel_bytes == 2)
+        return GR_PIXEL_FORMAT_RGB565;
+#if defined(RECOVERY_ABGR)
+    // Match the byte layout selected by graphics_drm.
+    return GR_PIXEL_FORMAT_ABGR8888;
+#elif defined(RECOVERY_RGBA)
+    return GR_PIXEL_FORMAT_RGBA8888;
+#elif defined(RECOVERY_RGBX)
+    return GR_PIXEL_FORMAT_RGBX8888;
+#elif defined(RECOVERY_BGRA)
+    return GR_PIXEL_FORMAT_BGRA8888;
+#else
+    return GR_PIXEL_FORMAT_RGBX8888;
+#endif
 }
 
 void gr_fb_blank(bool blank)

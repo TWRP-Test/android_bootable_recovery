@@ -21,6 +21,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
@@ -399,6 +400,12 @@ int main(int argc, char **argv) {
 
 	printf("Starting the UI...\n");
 	gui_init();
+
+#ifdef TW_USE_LVGL_GUI
+	// Try the independent LVGL GUI first. It is a one-shot attempt; any
+	// failure or user exit falls back to the legacy GUI.
+	gui_run_gui2();
+#endif
 
 	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
 

@@ -52,6 +52,7 @@
 extern "C" {
 #include "../twcommon.h"
 #include "../variables.h"
+#include "gui.h"
 #include "cutils/properties.h"
 #include "twinstall/adb_install.h"
 };
@@ -198,6 +199,7 @@ GUIAction::GUIAction(xml_node<>* node)
 		ADD_ACTION(getpartitiondetails);
 		ADD_ACTION(screenshot);
 		ADD_ACTION(setbrightness);
+		ADD_ACTION(gui2);
 		ADD_ACTION(fileexists);
 		ADD_ACTION(killterminal);
 		ADD_ACTION(checkbackupname);
@@ -1027,6 +1029,11 @@ int GUIAction::screenshot(std::string arg __unused)
 int GUIAction::setbrightness(std::string arg)
 {
 	return TWFunc::Set_Brightness(arg);
+}
+
+int GUIAction::gui2(std::string arg __unused)
+{
+	return gui_run_gui2() < 0 ? -1 : 0;
 }
 
 int GUIAction::fileexists(std::string arg)

@@ -1,0 +1,47 @@
+// Independent LVGL-based GUI2. Deliberately does NOT link libtwrpgui and
+// does not depend on RapidXML/PageManager/GUIAction/DataManager.
+
+soong_config_module_type {
+    name: "twrp_gui2",
+    module_type: "cc_binary",
+    config_namespace: "twrpGlobalVars",
+    bool_variables: ["tw_use_lvgl_gui"],
+    properties: ["enabled"],
+}
+
+twrp_gui2 {
+    name: "gui2",
+    enabled: false,
+    defaults: ["twrp_defaults"],
+    recovery_available: true,
+    cflags: [
+        "-std=gnu++2a",
+        "-Wno-unused-parameter",
+    ],
+    include_dirs: [
+        "bootable/recovery/twrpminui/include",
+        "bootable/recovery/gui/include",
+        "bootable/recovery/twrpperf/include",
+    ],
+    srcs: [
+        "gui2.cpp",
+    ],
+    static_libs: [
+        "liblvgl",
+        "libtwrpperf",
+    ],
+    shared_libs: [
+        "libtwrpminui",
+        "libbase",
+        "liblog",
+        "libcutils",
+        "libc",
+        "libm",
+        "libc++",
+    ],
+    soong_config_variables: {
+        tw_use_lvgl_gui: {
+            enabled: true,
+        },
+    },
+}

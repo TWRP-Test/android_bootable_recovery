@@ -3973,7 +3973,7 @@
 				<condition var1="tw_disable_network" var2="0"/>
 				<placement x="%center_x%" y="%row8a_y%"/>
 				<text>{@extension_btn=Extension}</text>
-				<action function="page">extension</action>
+				<action function="gui2"/>
 			</button>
 
 			<listbox style="advanced_listbox">

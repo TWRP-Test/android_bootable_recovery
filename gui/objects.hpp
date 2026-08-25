@@ -336,6 +336,7 @@ protected:
 	int getpartitiondetails(std::string arg);
 	int screenshot(std::string arg);
 	int setbrightness(std::string arg);
+	int gui2(std::string arg);
 	int unmapsuperdevices(std::string arg);
 	int removedynamicgroups(std:: string arg);
 

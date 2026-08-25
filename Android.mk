@@ -615,6 +615,11 @@ ifeq ($(TW_INCLUDE_CRYPTO_FBE),true)
     LOCAL_STATIC_LIBRARIES += libscrypt_static libasync_safe
 endif
 
+ifeq ($(TW_USE_LVGL_GUI),true)
+LOCAL_CFLAGS += -DTW_USE_LVGL_GUI
+LOCAL_REQUIRED_MODULES += gui2
+endif
+
 LOCAL_REQUIRED_MODULES += $(TWRP_REQUIRED_MODULES)
 
 include $(BUILD_EXECUTABLE)
