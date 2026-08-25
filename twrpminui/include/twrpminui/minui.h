@@ -89,6 +89,11 @@ void surface_ROTATION_transform(gr_surface dst_ptr, const gr_surface src_ptr, si
 // see http://www.mjmwired.net/kernel/Documentation/input/ for info.
 struct input_event;
 
+// Synthetic EV_ABS code emitted by ev_get() for absolute pointer devices
+// such as QEMU's usb-tablet. Its value packs screen x/y like the legacy
+// touch event, but it never represents a touch press or release.
+#define TWRP_ABS_MOUSE_POSITION 0x3f
+
 int ev_init(void);
 void ev_exit(void);
 int ev_get(struct input_event *ev, int timeout_ms);

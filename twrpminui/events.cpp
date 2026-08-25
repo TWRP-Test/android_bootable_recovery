@@ -120,6 +120,7 @@ struct ev {
 
     struct position p, mt_p;
     int down;
+    int absolute_mouse;
 };
 
 static struct pollfd ev_fds[MAX_DEVICES];
@@ -128,6 +129,12 @@ static unsigned ev_count = 0;
 static struct timeval lastInputStat;
 static time_t lastInputMTime;
 static int has_mouse = 0;
+
+#define BITS_PER_LONG (sizeof(long) * 8)
+#define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
+#define OFF(x)  ((x)%BITS_PER_LONG)
+#define LONG(x) ((x)/BITS_PER_LONG)
+#define test_bit(bit, array) ((array[LONG(bit)] >> OFF(bit)) & 1)
 
 static inline int ABS(int x) {
     return x<0?-x:x;
@@ -226,6 +233,8 @@ static int vk_init(struct ev *e)
     int vk_fd;
     int i;
 
+    e->absolute_mouse = 0;
+
     e->vk_count = 0;
 
     len = strlen(vk_path);
@@ -238,6 +247,21 @@ static int vk_init(struct ev *e)
 #ifdef _EVENT_LOGGING
     printf("Event object: %s\n", e->deviceName);
 #endif
+
+    unsigned long capabilities[EV_MAX][NBITS(KEY_MAX)];
+    memset(capabilities, 0, sizeof(capabilities));
+    ioctl(e->fd->fd, EVIOCGBIT(0, EV_MAX), capabilities[0]);
+    if (test_bit(EV_ABS, capabilities[0]) && test_bit(EV_KEY, capabilities[0])) {
+        ioctl(e->fd->fd, EVIOCGBIT(EV_ABS, KEY_MAX), capabilities[EV_ABS]);
+        ioctl(e->fd->fd, EVIOCGBIT(EV_KEY, KEY_MAX), capabilities[EV_KEY]);
+        const bool has_absolute_xy = test_bit(ABS_X, capabilities[EV_ABS]) &&
+                                     test_bit(ABS_Y, capabilities[EV_ABS]);
+        const bool has_mouse_button = test_bit(BTN_LEFT, capabilities[EV_KEY]);
+        const bool has_touch_protocol = test_bit(BTN_TOUCH, capabilities[EV_KEY]) ||
+                                        (test_bit(ABS_MT_POSITION_X, capabilities[EV_ABS]) &&
+                                         test_bit(ABS_MT_POSITION_Y, capabilities[EV_ABS]));
+        e->absolute_mouse = has_absolute_xy && has_mouse_button && !has_touch_protocol;
+    }
 
 #ifdef WHITELIST_INPUT
     if (strcmp(e->deviceName, EXPAND(WHITELIST_INPUT)) != 0)
@@ -339,12 +363,6 @@ static int vk_init(struct ev *e)
     return 0;
 }
 
-#define BITS_PER_LONG (sizeof(long) * 8)
-#define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
-#define OFF(x)  ((x)%BITS_PER_LONG)
-#define LONG(x) ((x)/BITS_PER_LONG)
-#define test_bit(bit, array)	((array[LONG(bit)] >> OFF(bit)) & 1)
-
 // Check for EV_REL (REL_X and REL_Y) and, because touchscreens can have those too,
 // check also for EV_KEY (BTN_LEFT and BTN_RIGHT)
 static void check_mouse(int fd, const char* deviceName)
@@ -401,8 +419,14 @@ int ev_init(void)
             /* Load virtualkeys if there are any */
             vk_init(&evs[ev_count]);
 
-            if (!evs[ev_count].ignored)
-                check_mouse(fd, evs[ev_count].deviceName);
+            if (!evs[ev_count].ignored) {
+                if (evs[ev_count].absolute_mouse) {
+                    has_mouse = 1;
+                    LOGI("Found absolute mouse '%s'\n", evs[ev_count].deviceName);
+                } else {
+                    check_mouse(fd, evs[ev_count].deviceName);
+                }
+            }
 
             ev_count++;
             if(ev_count == MAX_DEVICES) break;
@@ -510,6 +534,47 @@ static int vk_modify(struct ev *e, struct input_event *ev)
 	if (ev->type == EV_KEY) {
 		return 0;
 	}
+
+    if (e->absolute_mouse) {
+        if (ev->type == EV_ABS) {
+            if (ev->code == ABS_X) {
+                e->p.synced |= 0x01;
+                e->p.x = ev->value;
+            } else if (ev->code == ABS_Y) {
+                e->p.synced |= 0x02;
+                e->p.y = ev->value;
+            }
+            return 1;
+        }
+
+        if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
+            if ((e->p.synced & 0x03) != 0x03)
+                return 1;
+
+            if (vk_tp_to_screen(&e->p, &x, &y) != 0) {
+                e->p.synced = 0;
+                return 1;
+            }
+
+#ifdef RECOVERY_TOUCHSCREEN_SWAP_XY
+            x ^= y;
+            y ^= x;
+            x ^= y;
+#endif
+#ifdef RECOVERY_TOUCHSCREEN_FLIP_X
+            x = gr_fb_width() - x;
+#endif
+#ifdef RECOVERY_TOUCHSCREEN_FLIP_Y
+            y = gr_fb_height() - y;
+#endif
+
+            e->p.synced = 0;
+            ev->type = EV_ABS;
+            ev->code = TWRP_ABS_MOUSE_POSITION;
+            ev->value = (x << 16) | y;
+            return 0;
+        }
+    }
 
     if (ev->type == EV_ABS) {
         switch (ev->code) {
