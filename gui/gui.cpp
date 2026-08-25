@@ -490,6 +490,10 @@ void InputHandler::process_EV_REL(input_event& ev)
 		cursor->Move(ev.value, 0);
 	else if (ev.code == REL_Y)
 		cursor->Move(0, ev.value);
+	else if (ev.code == REL_WHEEL) {
+		cursor->GetPos(x, y);
+		PageManager::NotifyScroll(x, y, ev.value);
+	}
 
 	if (touch_status) {
 		cursor->GetPos(x, y);

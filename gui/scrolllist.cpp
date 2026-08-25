@@ -527,6 +527,24 @@ int GUIScrollList::NotifyTouch(TOUCH_STATE state, int x, int y)
 	return 0;
 }
 
+int GUIScrollList::NotifyScroll(int amount)
+{
+	if (!isConditionTrue())
+		return -1;
+	if (!hasScroll || amount == 0)
+		return 0;
+
+	// Reuse touch inertia; 2/5 yields roughly three rows per wheel step.
+	int wheelSpeed = amount * std::max(SCROLLING_FLOOR, actualItemHeight * 2 / 5);
+	if (scrollingSpeed != 0 && (scrollingSpeed > 0) != (wheelSpeed > 0))
+		scrollingSpeed = wheelSpeed;
+	else
+		scrollingSpeed += wheelSpeed;
+	selectedItem = NO_ITEM;
+	mUpdate = 1;
+	return 0;
+}
+
 void GUIScrollList::HandleScrolling()
 {
 	// handle dragging downward, scrolling upward

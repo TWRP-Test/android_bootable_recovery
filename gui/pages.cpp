@@ -642,6 +642,20 @@ int Page::NotifyTouch(TOUCH_STATE state, int x, int y)
 	return ret;
 }
 
+int Page::NotifyScroll(int x, int y, int amount)
+{
+	// Check top-most objects first.
+	for (auto iter = mActions.rbegin(); iter != mActions.rend(); iter++) {
+		if (!(*iter)->IsInRegion(x, y))
+			continue;
+
+		int ret = (*iter)->NotifyScroll(amount);
+		if (ret <= 0)
+			return ret;
+	}
+	return 1;
+}
+
 int Page::NotifyKey(int key, bool down)
 {
 	std::vector<ActionObject*>::reverse_iterator iter;
@@ -1196,6 +1210,14 @@ int PageSet::NotifyTouch(TOUCH_STATE state, int x, int y)
 	return (mCurrentPage ? mCurrentPage->NotifyTouch(state, x, y) : -1);
 }
 
+int PageSet::NotifyScroll(int x, int y, int amount)
+{
+	if (!mOverlays.empty())
+		return mOverlays.back()->NotifyScroll(x, y, amount);
+
+	return (mCurrentPage ? mCurrentPage->NotifyScroll(x, y, amount) : -1);
+}
+
 int PageSet::NotifyKey(int key, bool down)
 {
 	if (!mOverlays.empty())
@@ -1709,6 +1731,11 @@ int PageManager::Update(void)
 int PageManager::NotifyTouch(TOUCH_STATE state, int x, int y)
 {
 	return (mCurrentSet ? mCurrentSet->NotifyTouch(state, x, y) : -1);
+}
+
+int PageManager::NotifyScroll(int x, int y, int amount)
+{
+	return (mCurrentSet ? mCurrentSet->NotifyScroll(x, y, amount) : -1);
 }
 
 int PageManager::NotifyKey(int key, bool down)

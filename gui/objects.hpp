@@ -105,6 +105,10 @@ public:
 	//  Return 0 on success (and consume key), >0 to pass key to next handler, and <0 on error
 	virtual int NotifyKey(int key __unused, bool down __unused) { return 1; }
 
+	// NotifyScroll - Notify of mouse wheel movement
+	//  Return 0 to consume, >0 to pass, and <0 on error
+	virtual int NotifyScroll(int amount __unused) { return 1; }
+
 	virtual int GetActionPos(int& x, int& y, int& w, int& h) { x = mActionX; y = mActionY; w = mActionW; h = mActionH; return 0; }
 
 	//  Return 0 on success, <0 on error
@@ -482,6 +486,9 @@ public:
 	// NotifyTouch - Notify of a touch event
 	//  Return 0 on success, >0 to ignore remainder of touch, and <0 on error
 	virtual int NotifyTouch(TOUCH_STATE state, int x, int y);
+
+	// NotifyScroll - Scroll from mouse wheel input
+	virtual int NotifyScroll(int amount);
 
 	// NotifyVarChange - Notify of a variable change
 	virtual int NotifyVarChange(const std::string& varName, const std::string& value);

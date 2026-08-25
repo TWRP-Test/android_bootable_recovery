@@ -86,6 +86,7 @@ public:
 	virtual int Render(void);
 	virtual int Update(void);
 	virtual int NotifyTouch(TOUCH_STATE state, int x, int y);
+	virtual int NotifyScroll(int x, int y, int amount);
 	virtual int NotifyKey(int key, bool down);
 	virtual int NotifyCharInput(int ch);
 	virtual int SetKeyBoardFocus(int inFocus);
@@ -132,6 +133,7 @@ public:
 	int Render(void);
 	int Update(void);
 	int NotifyTouch(TOUCH_STATE state, int x, int y);
+	int NotifyScroll(int x, int y, int amount);
 	int NotifyKey(int key, bool down);
 	int NotifyCharInput(int ch);
 	int SetKeyBoardFocus(int inFocus);
@@ -179,6 +181,7 @@ public:
 	static int Render(bool partial = false);
 	static int Update(void);
 	static int NotifyTouch(TOUCH_STATE state, int x, int y);
+	static int NotifyScroll(int x, int y, int amount);
 	static int NotifyKey(int key, bool down);
 	static int NotifyCharInput(int ch);
 	static int SetKeyBoardFocus(int inFocus);
