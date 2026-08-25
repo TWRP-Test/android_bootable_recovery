@@ -377,6 +377,12 @@ void InputHandler::process_EV_ABS(input_event& ev)
 	x = ev.value >> 16;
 	y = ev.value & 0xFFFF;
 
+	if (ev.code == TWRP_ABS_MOUSE_POSITION)
+	{
+		PageManager::GetMouseCursor()->SetRenderPos(x, y);
+		return;
+	}
+
 #ifdef TW_USE_MEIZU_TOUCH_MAPPING
 	if (x > gr_fb_width() || y > gr_fb_height()) {
 		x /= 10;
