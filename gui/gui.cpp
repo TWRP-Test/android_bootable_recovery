@@ -516,14 +516,15 @@ static void ors_command_read()
 	}
 }
 
-// Get and dispatch input events until it's time to draw the next frame
-// This special function will return immediately the first time, but then
-// always returns 1/30th of a second (or immediately if called later) from
-// the last time it was called
+// Get and dispatch input events until it's time to draw the next frame.
 static void loopTimer(int input_timeout_ms)
 {
 	static timespec lastCall;
 	static int initialized = 0;
+	constexpr int maxCatchUpEvents = 64;
+	constexpr long long maxCatchUpNs = 1000000;
+	constexpr long long nsPerSecond = 1000000000LL;
+	const long long frameIntervalNs = nsPerSecond / TW_FRAMERATE;
 
 	if (!initialized)
 	{
@@ -532,32 +533,34 @@ static void loopTimer(int input_timeout_ms)
 		return;
 	}
 
-	do
-	{
-		bool got_event = input_handler.processInput(input_timeout_ms); // get inputs but don't send drag notices
+	do {
+		const bool got_event = input_handler.processInput(input_timeout_ms);
 		timespec curTime;
 		clock_gettime(CLOCK_MONOTONIC, &curTime);
-
 		timespec diff = TWFunc::timespec_diff(lastCall, curTime);
+		const long long elapsedNs = diff.tv_sec * nsPerSecond + diff.tv_nsec;
 
-		// This is really 2 or TW_FRAMERATE times per second
-		// As long as we get events, increase the timeout so we can catch up with input
-		long timeout = got_event ? 500000000 : (1.0 / TW_FRAMERATE * 1000000000);
+		if (elapsedNs >= frameIntervalNs) {
+			if (got_event) {
+				timespec catchUpStart = curTime;
+				for (int drained = 1; drained < maxCatchUpEvents; ++drained) {
+					if (!input_handler.processInput(0))
+						break;
 
-		if (diff.tv_sec || diff.tv_nsec > timeout)
-		{
-			// int32_t input_time = TWFunc::timespec_diff_ms(lastCall, curTime);
-			// LOGINFO("loopTimer(): %u ms, count: %u\n", input_time, count);
+					clock_gettime(CLOCK_MONOTONIC, &curTime);
+					timespec catchUp = TWFunc::timespec_diff(catchUpStart, curTime);
+					if (catchUp.tv_sec || catchUp.tv_nsec >= maxCatchUpNs)
+						break;
+				}
+			}
 
+			clock_gettime(CLOCK_MONOTONIC, &curTime);
 			lastCall = curTime;
-			input_handler.handleDrag(); // send only drag notices if needed
+			input_handler.handleDrag();
 			return;
 		}
 
-		// We need to sleep some period time microseconds
-		//unsigned int sleepTime = 33333 -(diff.tv_nsec / 1000);
-		//usleep(sleepTime); // removed so we can scan for input
-		input_timeout_ms = 0;
+		input_timeout_ms = (frameIntervalNs - elapsedNs) / 1000000;
 	} while (1);
 }
 
