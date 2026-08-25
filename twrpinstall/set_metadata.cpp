@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include "selinux/selinux.h"
 
-static security_context_t selinux_context;
+static char* selinux_context;
 struct stat s;
 static int has_stat = 0;
 

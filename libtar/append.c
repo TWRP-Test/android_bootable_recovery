@@ -120,7 +120,7 @@ tar_append_file(TAR *t, const char *realname, const char *savename)
 			t->th_buf.selinux_context = NULL;
 		}
 
-		security_context_t selinux_context = NULL;
+		char* selinux_context = NULL;
 		if (lgetfilecon(realname, &selinux_context) >= 0)
 		{
 			t->th_buf.selinux_context = strdup(selinux_context);
