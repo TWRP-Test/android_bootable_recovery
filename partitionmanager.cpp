@@ -2476,7 +2476,8 @@ void TWPartitionManager::UnMount_Main_Partitions(void) {
 	TWPartition *Partition = Find_Partition_By_Path ("/vendor");
 
 	if (Partition != NULL) UnMount_By_Path("/vendor", false);
-	UnMount_By_Path (Get_Android_Root_Path(), true);
+	Partition = Find_Partition_By_Path(Get_Android_Root_Path());
+	if (Partition != NULL) UnMount_By_Path(Get_Android_Root_Path(), true);
 	Partition = Find_Partition_By_Path ("/product");
 	if (Partition != NULL) UnMount_By_Path("/product", false);
 	if (!datamedia)
