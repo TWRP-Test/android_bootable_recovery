@@ -44,6 +44,7 @@ extern "C"
 }
 #include "twrpminui/minui.h"
 #include "twrpminui/truetype.hpp"
+#include "twrpperf/perf_manager.hpp"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
@@ -675,6 +676,9 @@ static InputCycleStats loopTimer(int input_timeout_ms)
 
 static int runPages(const char *page_name, const int stop_on_page_done)
 {
+	auto& perf_manager = twrp::TwrpPerfManager::Get();
+	perf_manager.Initialize();
+
 	DataManager::SetValue("tw_page_done", 0);
 	DataManager::SetValue("tw_gui_done", 0);
 
@@ -698,8 +702,12 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	{
 		// Apply completed background size scans on the GUI thread.
 		PartitionManager.Process_Async_Data_Size();
+		perf_manager.Update();
+		input_timeout_ms = perf_manager.ClampTimeoutMs(input_timeout_ms);
 		const bool collect_stats = gui_stats_enabled();
 		const InputCycleStats input_stats = loopTimer(input_timeout_ms);
+		if (input_stats.events > 0)
+			perf_manager.NotifyInteraction();
 		if (collect_stats) {
 			++gui_perf_stats.cycles;
 			gui_perf_stats.input_events += input_stats.events;
@@ -743,6 +751,8 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 				break; // Theme reload failure
 			else
 				idle_frames = 0;
+			if (ret > 0)
+				perf_manager.NotifyFrameActivity();
 			// due to possible animation objects, we need to delay activating the input timeout
 			input_timeout_ms = idle_frames > 15 ? 1000 : 0;
 
@@ -783,6 +793,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 		else
 		{
 			gForceRender = false;
+			perf_manager.NotifyFrameActivity();
 			const uint64_t render_start_ns = collect_stats ? monotonic_ns() : 0;
 			PageManager::Render();
 			if (collect_stats)
@@ -811,6 +822,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	ors_read_fd = -1;
 	set_select_fd();
 	gGuiRunning = 0;
+	perf_manager.Release();
 	return 0;
 }
 
