@@ -195,6 +195,7 @@ void twrpTruetype::gr_ttf_freeFont(void *font) {
 			gr_ttf_freeStringCache(stringCacheEntryIt->second->key, stringCacheEntryIt->second, nullptr);
 			stringCacheEntryIt = d->string_cache.erase(stringCacheEntryIt);
 		}
+		d->string_cache_lru.clear();
 
 		TrueTypeCacheEntryMap::iterator ttcIt = d->glyph_cache.begin();
 		while(ttcIt != d->glyph_cache.end()) {
@@ -439,18 +440,20 @@ StringCacheEntry* twrpTruetype::gr_ttf_string_cache_peek(TrueTypeFont *font,
 }
 
 void twrpTruetype::gr_ttf_string_cache_truncate(TrueTypeFont *font) {
-	StringCacheMap::iterator stringCacheItr;
+	if (font->string_cache.size() < STRING_CACHE_MAX_ENTRIES)
+		return;
 
-	if (font->string_cache.size() == STRING_CACHE_MAX_ENTRIES) {
-		StringCacheEntry *truncateEntry = nullptr;
-		stringCacheItr = font->string_cache.begin();
-		int deleteCtr = 0;
-		while (stringCacheItr != font->string_cache.end() || deleteCtr == (STRING_CACHE_MAX_ENTRIES - 1)) {
-			truncateEntry = stringCacheItr->second;
-			gr_ttf_freeStringCache(truncateEntry->key, truncateEntry, nullptr);
-			stringCacheItr = font->string_cache.erase(stringCacheItr);
-			deleteCtr++;
-		}
+	const size_t entries = std::min<size_t>(STRING_CACHE_TRUNCATE_ENTRIES,
+			font->string_cache.size());
+	for (size_t i = 0; i < entries && !font->string_cache_lru.empty(); ++i) {
+		auto stringCacheItr = font->string_cache.find(font->string_cache_lru.front());
+		font->string_cache_lru.pop_front();
+		if (stringCacheItr == font->string_cache.end())
+			continue;
+
+		StringCacheEntry *truncateEntry = stringCacheItr->second;
+		gr_ttf_freeStringCache(truncateEntry->key, truncateEntry, nullptr);
+		font->string_cache.erase(stringCacheItr);
 	}
 }
 
@@ -465,6 +468,7 @@ StringCacheEntry* twrpTruetype::gr_ttf_string_cache_get(TrueTypeFont *font, cons
 
 	stringCacheItr = font->string_cache.find(k);
 	if (stringCacheItr == font->string_cache.end()) {
+		gr_ttf_string_cache_truncate(font);
 		res = new StringCacheEntry;
 		res->rendered_bytes = gr_ttf_render_text(font, &res->surface, text, max_width);
 		if(res->rendered_bytes < 0) {
@@ -476,11 +480,15 @@ StringCacheEntry* twrpTruetype::gr_ttf_string_cache_get(TrueTypeFont *font, cons
 		new_key->max_width = max_width;
 		new_key->text = text;
 		res->key = new_key;
-		font->string_cache[*new_key] = res; 
+		font->string_cache_lru.push_back(*new_key);
+		res->lru_iterator = --font->string_cache_lru.end();
+		font->string_cache[*new_key] = res;
 	}
 	else
 	{
 		res = stringCacheItr->second;
+		font->string_cache_lru.splice(font->string_cache_lru.end(),
+				font->string_cache_lru, res->lru_iterator);
 	}
 	return res;
 }
@@ -490,7 +498,6 @@ int twrpTruetype::gr_ttf_measureEx(const char *s, void *font) {
 	int res = -1;
 
 	pthread_mutex_lock(&f->mutex);
-	gr_ttf_string_cache_truncate(f);
 	StringCacheEntry *e = gr_ttf_string_cache_get(f, s, -1);
 	if(e)
 		res = e->surface.width;

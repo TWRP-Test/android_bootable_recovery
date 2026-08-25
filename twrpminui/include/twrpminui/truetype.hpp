@@ -17,6 +17,7 @@
 #ifndef _TWRP_TRUETYPE_HPP
 #define _TWRP_TRUETYPE_HPP
 
+#include <list>
 #include <map>
 #include <string>
 #include <ft2build.h>
@@ -50,10 +51,13 @@ inline bool operator<(const StringCacheKey &sckLeft, const StringCacheKey &sckRi
     return std::tie(sckLeft.text, sckLeft.max_width) < std::tie(sckRight.text, sckRight.max_width);
 }
 
+typedef std::list<StringCacheKey> StringCacheLru;
+
 typedef struct StringCacheEntry {
     GGLSurface surface;
     int rendered_bytes; // number of bytes from C string rendered, not number of UTF8 characters!
     StringCacheKey *key;
+    StringCacheLru::iterator lru_iterator;
 } StringCacheEntry;
 
 typedef struct {
@@ -66,6 +70,7 @@ typedef struct {
     FT_Face face;
     std::map<int, TrueTypeCacheEntry*> glyph_cache;
     std::map<StringCacheKey, StringCacheEntry*> string_cache;
+    StringCacheLru string_cache_lru;
     pthread_mutex_t mutex;
     TrueTypeFontKey *key;
 } TrueTypeFont;
