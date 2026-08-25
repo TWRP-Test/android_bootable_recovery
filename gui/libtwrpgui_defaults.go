@@ -298,7 +298,7 @@ func globalSrcs(ctx android.BaseContext) []string {
     return srcs
 }
 
-func libGuiDefaults(ctx android.LoadHookContext) {
+func libTwrpGuiDefaults(ctx android.LoadHookContext) {
 	type props struct {
 		Target struct {
 			Android struct {
@@ -322,12 +322,12 @@ func libGuiDefaults(ctx android.LoadHookContext) {
 }
 
 func init() {
-	android.RegisterModuleType("libguitwrp_defaults", libGuiDefaultsFactory)
+	android.RegisterModuleType("libtwrpgui_defaults", libTwrpGuiDefaultsFactory)
 }
 
-func libGuiDefaultsFactory() android.Module {
+func libTwrpGuiDefaultsFactory() android.Module {
 	module := cc.DefaultsFactory()
-	android.AddLoadHook(module, libGuiDefaults)
+	android.AddLoadHook(module, libTwrpGuiDefaults)
 
 	return module
 }

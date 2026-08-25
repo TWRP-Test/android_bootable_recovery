@@ -1,5 +1,5 @@
 bootstrap_go_package {
-    name: "soong-libguitwrp_defaults",
+    name: "soong-libtwrpgui_defaults",
     pkgPath: "bootable/recovery/gui",
     deps: [
         "soong",
@@ -7,20 +7,20 @@ bootstrap_go_package {
         "soong-cc"
     ],
     srcs: [
-        "libguitwrp_defaults.go",
+        "libtwrpgui_defaults.go",
         "../soong/copy.go",
         "../soong/makevars.go"
     ],
     pluginFor: ["soong_build"]
 }
 
-libguitwrp_defaults {
-    name: "libguitwrp_defaults"
+libtwrpgui_defaults {
+    name: "libtwrpgui_defaults"
 }
 
 cc_library_static {
-    name: "libguitwrp",
-    defaults: ["libguitwrp_defaults", "twrp_defaults"],
+    name: "libtwrpgui",
+    defaults: ["libtwrpgui_defaults", "twrp_defaults"],
     cflags: [
         "-fno-strict-aliasing", 
         "-Wno-implicit-fallthrough",
