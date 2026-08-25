@@ -17,6 +17,7 @@
 #ifndef _TWRP_TRUETYPE_HPP
 #define _TWRP_TRUETYPE_HPP
 
+#include <cstdint>
 #include <list>
 #include <map>
 #include <string>
@@ -119,5 +120,7 @@ public:
                     const gr_surface gr_draw_surface);
     static int gr_ttf_getMaxFontHeight(void *font);
     static void gr_ttf_string_cache_truncate(TrueTypeFont *font);
+    static void gr_ttf_get_cache_stats(uint64_t *entries, uint64_t *hits,
+                    uint64_t *misses, uint64_t *evictions);
 };
 #endif // _TWRP_TRUETYPE_HPP

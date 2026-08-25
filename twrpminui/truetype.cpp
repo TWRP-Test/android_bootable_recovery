@@ -25,6 +25,7 @@
 
 #include <pthread.h>
 #include <algorithm>
+#include <atomic>
 #include <string>
 #include "twrpminui/truetype.hpp"
 #include "graphics.h"
@@ -35,6 +36,11 @@ static FontData font_data = {
 	.ft_library = NULL,
 	.mutex = PTHREAD_MUTEX_INITIALIZER
 };
+
+static std::atomic<uint64_t> string_cache_entries{0};
+static std::atomic<uint64_t> string_cache_hits{0};
+static std::atomic<uint64_t> string_cache_misses{0};
+static std::atomic<uint64_t> string_cache_evictions{0};
 
 twrpTruetype::twrpTruetype(void) {
 
@@ -178,6 +184,7 @@ void twrpTruetype::gr_ttf_freeStringCache(void *key, void *value, void *context 
 	StringCacheEntry *e = (StringCacheEntry *)value;
 	free(e->surface.data);
 	delete e;
+	string_cache_entries.fetch_sub(1, std::memory_order_relaxed);
 }
 
 void twrpTruetype::gr_ttf_freeFont(void *font) {
@@ -452,6 +459,7 @@ void twrpTruetype::gr_ttf_string_cache_truncate(TrueTypeFont *font) {
 			continue;
 
 		StringCacheEntry *truncateEntry = stringCacheItr->second;
+		string_cache_evictions.fetch_add(1, std::memory_order_relaxed);
 		gr_ttf_freeStringCache(truncateEntry->key, truncateEntry, nullptr);
 		font->string_cache.erase(stringCacheItr);
 	}
@@ -468,6 +476,7 @@ StringCacheEntry* twrpTruetype::gr_ttf_string_cache_get(TrueTypeFont *font, cons
 
 	stringCacheItr = font->string_cache.find(k);
 	if (stringCacheItr == font->string_cache.end()) {
+		string_cache_misses.fetch_add(1, std::memory_order_relaxed);
 		gr_ttf_string_cache_truncate(font);
 		res = new StringCacheEntry;
 		res->rendered_bytes = gr_ttf_render_text(font, &res->surface, text, max_width);
@@ -483,14 +492,24 @@ StringCacheEntry* twrpTruetype::gr_ttf_string_cache_get(TrueTypeFont *font, cons
 		font->string_cache_lru.push_back(*new_key);
 		res->lru_iterator = --font->string_cache_lru.end();
 		font->string_cache[*new_key] = res;
+		string_cache_entries.fetch_add(1, std::memory_order_relaxed);
 	}
 	else
 	{
+		string_cache_hits.fetch_add(1, std::memory_order_relaxed);
 		res = stringCacheItr->second;
 		font->string_cache_lru.splice(font->string_cache_lru.end(),
 				font->string_cache_lru, res->lru_iterator);
 	}
 	return res;
+}
+
+void twrpTruetype::gr_ttf_get_cache_stats(uint64_t *entries, uint64_t *hits,
+		uint64_t *misses, uint64_t *evictions) {
+	*entries = string_cache_entries.load(std::memory_order_relaxed);
+	*hits = string_cache_hits.exchange(0, std::memory_order_relaxed);
+	*misses = string_cache_misses.exchange(0, std::memory_order_relaxed);
+	*evictions = string_cache_evictions.exchange(0, std::memory_order_relaxed);
 }
 
 int twrpTruetype::gr_ttf_measureEx(const char *s, void *font) {

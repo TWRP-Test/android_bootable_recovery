@@ -238,7 +238,7 @@ static bool warned_empty_damage;
 static uint64_t stats_frames;
 static uint64_t stats_copied_bytes;
 static uint64_t stats_full_bytes;
-static constexpr uint64_t kStatsInterval = 10;
+static constexpr uint64_t kStatsInterval = 120;
 
 static drmModeCrtc *main_monitor_crtc;
 static drmModeConnector *main_monitor_connector;

@@ -17,6 +17,7 @@
 */
 
 #include <linux/input.h>
+#include <android-base/properties.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -41,6 +43,7 @@ extern "C"
 #include <pixelflinger/pixelflinger.h>
 }
 #include "twrpminui/minui.h"
+#include "twrpminui/truetype.hpp"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
@@ -71,6 +74,107 @@ int ors_read_fd = -1;
 static FILE* orsout = NULL;
 static float scale_theme_w = 1;
 static float scale_theme_h = 1;
+
+static constexpr uint64_t kGuiStatsInterval = 120;
+
+struct InputCycleStats {
+	uint64_t events = 0;
+	bool catch_up = false;
+};
+
+struct PerfTiming {
+	uint64_t calls = 0;
+	uint64_t total_ns = 0;
+	uint64_t max_ns = 0;
+};
+
+struct GuiPerfStats {
+	uint64_t cycles = 0;
+	uint64_t input_events = 0;
+	uint64_t catch_up_frames = 0;
+	uint64_t max_event_batch = 0;
+	PerfTiming update;
+	PerfTiming render;
+	PerfTiming flip;
+
+	void Reset()
+	{
+		cycles = 0;
+		input_events = 0;
+		catch_up_frames = 0;
+		max_event_batch = 0;
+		update = {};
+		render = {};
+		flip = {};
+	}
+};
+
+static GuiPerfStats gui_perf_stats;
+
+static uint64_t monotonic_ns()
+{
+	timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return static_cast<uint64_t>(now.tv_sec) * 1000000000ULL + now.tv_nsec;
+}
+
+static void record_timing(PerfTiming *timing, uint64_t elapsed_ns)
+{
+	++timing->calls;
+	timing->total_ns += elapsed_ns;
+	if (elapsed_ns > timing->max_ns)
+		timing->max_ns = elapsed_ns;
+}
+
+static uint64_t average_us(const PerfTiming& timing)
+{
+	return timing.calls == 0 ? 0 : timing.total_ns / timing.calls / 1000;
+}
+
+static bool gui_stats_enabled()
+{
+	static bool enabled = false;
+	static uint64_t next_check_ns = 0;
+	const uint64_t now_ns = monotonic_ns();
+	if (now_ns < next_check_ns)
+		return enabled;
+
+	next_check_ns = now_ns + 1000000000ULL;
+	const bool new_enabled = android::base::GetBoolProperty("twrp.gui.stats", false);
+	if (new_enabled != enabled) {
+		enabled = new_enabled;
+		gui_perf_stats.Reset();
+		uint64_t entries, hits, misses, evictions;
+		twrpTruetype::gr_ttf_get_cache_stats(&entries, &hits, &misses, &evictions);
+		LOGINFO("GUI perf stats %s\n", enabled ? "enabled" : "disabled");
+	}
+	return enabled;
+}
+
+static void log_gui_stats()
+{
+	const uint64_t input_x100 = gui_perf_stats.cycles == 0 ? 0 :
+		gui_perf_stats.input_events * 100 / gui_perf_stats.cycles;
+	LOGINFO("GUI perf: cycles=%" PRIu64 ", input=%" PRIu64
+		" (%" PRIu64 ".%02" PRIu64 "/cycle), catchup=%" PRIu64
+		", batch_max=%" PRIu64 ", update=%" PRIu64 " avg/max=%" PRIu64
+		"/%" PRIu64 " us, render=%" PRIu64 " avg/max=%" PRIu64
+		"/%" PRIu64 " us, flip=%" PRIu64 " avg/max=%" PRIu64 "/%" PRIu64 " us\n",
+		gui_perf_stats.cycles, gui_perf_stats.input_events, input_x100 / 100,
+		input_x100 % 100, gui_perf_stats.catch_up_frames,
+		gui_perf_stats.max_event_batch, gui_perf_stats.update.calls,
+		average_us(gui_perf_stats.update), gui_perf_stats.update.max_ns / 1000,
+		gui_perf_stats.render.calls, average_us(gui_perf_stats.render),
+		gui_perf_stats.render.max_ns / 1000, gui_perf_stats.flip.calls,
+		average_us(gui_perf_stats.flip), gui_perf_stats.flip.max_ns / 1000);
+
+	uint64_t entries, hits, misses, evictions;
+	twrpTruetype::gr_ttf_get_cache_stats(&entries, &hits, &misses, &evictions);
+	LOGINFO("TTF cache: entries=%" PRIu64 ", hits=%" PRIu64
+		", misses=%" PRIu64 ", evictions=%" PRIu64 "\n",
+		entries, hits, misses, evictions);
+	gui_perf_stats.Reset();
+}
 
 // Needed by pages.cpp too
 int gGuiRunning = 0;
@@ -517,10 +621,11 @@ static void ors_command_read()
 }
 
 // Get and dispatch input events until it's time to draw the next frame.
-static void loopTimer(int input_timeout_ms)
+static InputCycleStats loopTimer(int input_timeout_ms)
 {
 	static timespec lastCall;
 	static int initialized = 0;
+	InputCycleStats stats;
 	constexpr int maxCatchUpEvents = 64;
 	constexpr long long maxCatchUpNs = 1000000;
 	constexpr long long nsPerSecond = 1000000000LL;
@@ -530,11 +635,13 @@ static void loopTimer(int input_timeout_ms)
 	{
 		clock_gettime(CLOCK_MONOTONIC, &lastCall);
 		initialized = 1;
-		return;
+		return stats;
 	}
 
 	do {
 		const bool got_event = input_handler.processInput(input_timeout_ms);
+		if (got_event)
+			++stats.events;
 		timespec curTime;
 		clock_gettime(CLOCK_MONOTONIC, &curTime);
 		timespec diff = TWFunc::timespec_diff(lastCall, curTime);
@@ -546,6 +653,8 @@ static void loopTimer(int input_timeout_ms)
 				for (int drained = 1; drained < maxCatchUpEvents; ++drained) {
 					if (!input_handler.processInput(0))
 						break;
+					++stats.events;
+					stats.catch_up = true;
 
 					clock_gettime(CLOCK_MONOTONIC, &curTime);
 					timespec catchUp = TWFunc::timespec_diff(catchUpStart, curTime);
@@ -557,7 +666,7 @@ static void loopTimer(int input_timeout_ms)
 			clock_gettime(CLOCK_MONOTONIC, &curTime);
 			lastCall = curTime;
 			input_handler.handleDrag();
-			return;
+			return stats;
 		}
 
 		input_timeout_ms = (frameIntervalNs - elapsedNs) / 1000000;
@@ -589,7 +698,16 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	{
 		// Apply completed background size scans on the GUI thread.
 		PartitionManager.Process_Async_Data_Size();
-		loopTimer(input_timeout_ms);
+		const bool collect_stats = gui_stats_enabled();
+		const InputCycleStats input_stats = loopTimer(input_timeout_ms);
+		if (collect_stats) {
+			++gui_perf_stats.cycles;
+			gui_perf_stats.input_events += input_stats.events;
+			if (input_stats.catch_up)
+				++gui_perf_stats.catch_up_frames;
+			if (input_stats.events > gui_perf_stats.max_event_batch)
+				gui_perf_stats.max_event_batch = input_stats.events;
+		}
 		FD_ZERO(&fdset);
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 1;
@@ -615,7 +733,10 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 
 		if (!gForceRender)
 		{
+			const uint64_t update_start_ns = collect_stats ? monotonic_ns() : 0;
 			int ret = PageManager::Update();
+			if (collect_stats)
+				record_timing(&gui_perf_stats.update, monotonic_ns() - update_start_ns);
 			if (ret == 0)
 				++idle_frames;
 			else if (ret == -2)
@@ -626,11 +747,19 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 			input_timeout_ms = idle_frames > 15 ? 1000 : 0;
 
 #ifndef PRINT_RENDER_TIME
-			if (ret > 1)
+			if (ret > 1) {
+				const uint64_t render_start_ns = collect_stats ? monotonic_ns() : 0;
 				PageManager::Render(true);
+				if (collect_stats)
+					record_timing(&gui_perf_stats.render, monotonic_ns() - render_start_ns);
+			}
 
-			if (ret > 0)
+			if (ret > 0) {
+				const uint64_t flip_start_ns = collect_stats ? monotonic_ns() : 0;
 				flip();
+				if (collect_stats)
+					record_timing(&gui_perf_stats.flip, monotonic_ns() - flip_start_ns);
+			}
 #else
 			if (ret > 1)
 			{
@@ -654,10 +783,18 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 		else
 		{
 			gForceRender = false;
+			const uint64_t render_start_ns = collect_stats ? monotonic_ns() : 0;
 			PageManager::Render();
+			if (collect_stats)
+				record_timing(&gui_perf_stats.render, monotonic_ns() - render_start_ns);
+			const uint64_t flip_start_ns = collect_stats ? monotonic_ns() : 0;
 			flip();
+			if (collect_stats)
+				record_timing(&gui_perf_stats.flip, monotonic_ns() - flip_start_ns);
 			input_timeout_ms = 0;
 		}
+		if (collect_stats && gui_perf_stats.cycles >= kGuiStatsInterval)
+			log_gui_stats();
 
 		blankTimer.checkForTimeout();
 		if (stop_on_page_done && DataManager::GetIntValue("tw_page_done") != 0)
