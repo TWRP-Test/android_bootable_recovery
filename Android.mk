@@ -667,8 +667,7 @@ include $(BUILD_STATIC_LIBRARY)
 #includes for TWRP
 include $(commands_TWRP_local_path)/prebuilt/Android.mk \
     $(commands_TWRP_local_path)/twrpTarMain/Android.mk \
-    $(commands_TWRP_local_path)/etc/Android.mk \
-    $(commands_TWRP_local_path)/attr/Android.mk
+    $(commands_TWRP_local_path)/etc/Android.mk
 
 ifneq ($(TW_OZIP_DECRYPT_KEY),)
     TWRP_REQUIRED_MODULES += ozip_decrypt
