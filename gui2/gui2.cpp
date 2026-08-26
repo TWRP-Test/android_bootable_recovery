@@ -97,6 +97,15 @@ void PointerReadCb(lv_indev_t* indev, lv_indev_data_t* data) {
                                                  : LV_INDEV_STATE_RELEASED;
 }
 
+lv_obj_t* CreateMouseCursor(lv_obj_t* parent) {
+    lv_obj_t* cursor = lv_label_create(parent);
+    lv_label_set_text(cursor, LV_SYMBOL_PLAY);
+    lv_obj_set_style_text_color(cursor, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(cursor, &lv_font_montserrat_28, LV_PART_MAIN);
+    lv_obj_clear_flag(cursor, LV_OBJ_FLAG_CLICKABLE);
+    return cursor;
+}
+
 void QuitButtonCb(lv_event_t* event) {
     g_input.quit_requested.store(true);
 }
@@ -384,6 +393,9 @@ int main(int argc, char** argv) {
     lv_obj_t* screen = lv_obj_create(nullptr);
     lv_scr_load(screen);
     BuildFirstScreen(screen);
+    if (ev_has_mouse()) {
+        lv_indev_set_cursor(pointer, CreateMouseCursor(screen));
+    }
     g_wheel_timer = lv_timer_create(WheelScrollTimerCb, 16, nullptr);
     lv_timer_pause(g_wheel_timer);
 
