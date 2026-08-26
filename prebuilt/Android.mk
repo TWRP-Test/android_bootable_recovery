@@ -118,6 +118,7 @@ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libblkid.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libfusesideload.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libbootloader_message.so
 
+WITH_CRYPTO_UTILS := $(if $(wildcard system/core/libcrypto_utils/android_pubkey.cpp),true)
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libcrypto.so \
 $(if $(WITH_CRYPTO_UTILS),$(TARGET_OUT_SHARED_LIBRARIES)/libcrypto_utils.so)
 
@@ -276,24 +277,15 @@ ifeq ($(TW_INCLUDE_WIFI), true)
     LOCAL_SRC_FILES := $(LOCAL_MODULE)
     include $(BUILD_PREBUILT)
 endif
-ifeq ($(TW_USE_DMCTL), true)
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/dmctl
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/dmuserd
-endif
-ifeq ($(AB_OTA_UPDATER), true)
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/update_engine_sideload
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_EXECUTABLES)/hw/android.hardware.boot@1.0-service
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_EXECUTABLES)/hw/android.hardware.boot@1.1-service
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_EXECUTABLES)/hw/android.hardware.boot@1.2-service
-endif
+
 ifeq ($(PRODUCT_USE_DYNAMIC_PARTITIONS),true)
     ifeq ($(TW_ENABLE_ALL_PARTITION_TOOLS),true)
-	TW_INCLUDE_LPDUMP := true
-	TW_INCLUDE_LPTOOLS := true
-	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpmake
-	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpadd
-	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpflash
-	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpunpack
+        TW_INCLUDE_LPDUMP := true
+        TW_INCLUDE_LPTOOLS := true
+        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpmake
+        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpadd
+        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpflash
+        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpunpack
     endif
     ifneq ($(TW_INCLUDE_LPDUMP),)
         RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/bootctl
@@ -309,16 +301,6 @@ ifeq ($(PRODUCT_USE_DYNAMIC_PARTITIONS),true)
     endif
 endif
 
-ifneq ($(wildcard system/core/libsparse/Android.*),)
-    RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libsparse.so
-endif
-ifeq ($(TARGET_USERIMAGES_USE_F2FS), true)
-        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/make_f2fs
-        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/fsck.f2fs
-        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/sload_f2fs
-        RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/dump.f2fs
-        RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/liblz4.so
-endif
 ifneq ($(wildcard system/core/reboot/Android.*),)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/reboot
 endif
@@ -409,13 +391,6 @@ endif
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/liblogwrap.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libext2_misc.so
 
-ifneq ($(TW_EXCLUDE_NANO), true)
-    RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_EXECUTABLES)/nano
-    RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_SHARED_LIBRARIES)/libncurses.so
-    RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)/libssh.so
-    RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libssl.so
-endif
-
 ifneq ($(TW_EXCLUDE_BASH), true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_EXECUTABLES)/bash
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_SHARED_LIBRARIES)/libncurses.so
@@ -461,37 +436,6 @@ LOCAL_POST_INSTALL_CMD += $(RELINK) $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin/hw $(
 TARGET_VENDOR_BINARY_RELINK_FILES := $(notdir $(RECOVERY_VENDOR_HW_BINARY_FILES))
 LOCAL_REQUIRED_MODULES += $(TARGET_VENDOR_BINARY_RELINK_FILES)
 $(warning vendor_hw: $(LOCAL_POST_INSTALL_CMD))
-include $(BUILD_PHONY_PACKAGE)
-
-#build out TWRP ramdisk
-include $(CLEAR_VARS)
-LOCAL_MODULE := twrp_ramdisk
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)
-LOCAL_POST_INSTALL_CMD += \
-    mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/sbin; ln -sf /system/bin/sh $(TARGET_RECOVERY_ROOT_OUT)/sbin/sh && \
-    mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/system/etc/selinux/ && \
-    mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/vendor/etc/selinux/ && \
-    mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/system/etc/task_profiles/ && \
-    cp $(TARGET_OUT_ETC)/selinux/plat_service_contexts $(TARGET_RECOVERY_ROOT_OUT)/system/etc/selinux/plat_service_contexts && \
-    cp $(TARGET_OUT_ETC)/selinux/plat_hwservice_contexts $(TARGET_RECOVERY_ROOT_OUT)/system/etc/selinux/plat_hwservice_contexts && \
-    cp $(TARGET_OUT_VENDOR_ETC)/selinux/vndservice_contexts $(TARGET_RECOVERY_ROOT_OUT)/vendor/etc/selinux/vndservice_contexts && \
-    cp $(TARGET_OUT_VENDOR_ETC)/selinux/vendor_hwservice_contexts $(TARGET_RECOVERY_ROOT_OUT)/vendor/etc/selinux/vendor_hwservice_contexts && \
-    cp $(TARGET_OUT_ETC)/selinux/plat_keystore2_key_contexts $(TARGET_RECOVERY_ROOT_OUT)/system/etc/selinux/plat_keystore2_key_contexts && \
-    cp $(TARGET_OUT_ETC)/task_profiles.json $(TARGET_RECOVERY_ROOT_OUT)/system/etc/task_profiles/task_profiles_30.json
-    ifeq ($(TARGET_USES_MKE2FS), true)
-        LOCAL_POST_INSTALL_CMD += \
-            && cp $(TARGET_OUT_ETC)/mke2fs.conf $(TARGET_RECOVERY_ROOT_OUT)/system/etc/mke2fs.conf
-    endif
-LOCAL_REQUIRED_MODULES += init_second_stage.recovery \
-    reboot.recovery \
-    plat_service_contexts \
-    plat_hwservice_contexts \
-    plat_hardware_contexts \
-    vndservice_contexts \
-    plat_keystore2_key_contexts \
-    vendor_hwservice_contexts
 
 include $(BUILD_PHONY_PACKAGE)
 
@@ -525,33 +469,6 @@ ifneq (,$(filter $(TW_INCLUDE_REPACKTOOLS) $(TW_INCLUDE_RESETPROP) $(TW_INCLUDE_
     endif
 endif
 
-# Include tzdata in TWRP to fix "__bionic_open_tzdata" log spam
-# Dummy file to apply post-install patch
-ifneq ($(TW_EXCLUDE_TZDATA), true)
-    include $(CLEAR_VARS)
-    LOCAL_MODULE := tzdata_twrp
-    LOCAL_MODULE_TAGS := optional
-    LOCAL_MODULE_CLASS := ETC
-    LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)/system/bin
-    LOCAL_REQUIRED_MODULES := tzdata
-
-    LOCAL_POST_INSTALL_CMD += \
-        mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/system/usr/share/zoneinfo; \
-        cp -f $(TARGET_OUT)/usr/share/zoneinfo/tzdata $(TARGET_RECOVERY_ROOT_OUT)/system/usr/share/zoneinfo/;
-    include $(BUILD_PHONY_PACKAGE)
-endif
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := nano_twrp
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)/system/bin
-LOCAL_REQUIRED_MODULES := nano libncurses
-LOCAL_POST_INSTALL_CMD += \
-    cp -rf $(TARGET_OUT_SYSTEM_EXT_ETC)/nano $(TARGET_RECOVERY_ROOT_OUT)/system/etc/; \
-    cp -rf external/libncurses/lib/terminfo $(TARGET_RECOVERY_ROOT_OUT)/system/etc/;
-include $(BUILD_PHONY_PACKAGE)
-
 ifneq ($(TW_EXCLUDE_BASH), true)
 	include $(CLEAR_VARS)
 	LOCAL_MODULE := bash_twrp
@@ -564,8 +481,6 @@ ifneq ($(TW_EXCLUDE_BASH), true)
 		mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/system/etc/bash/; \
 		cp -rf external/bash/etc/* $(TARGET_RECOVERY_ROOT_OUT)/system/etc/bash/; \
         sed -i 's/ro.lineage.device/ro.product.device/' $(TARGET_RECOVERY_ROOT_OUT)/system/etc/bash/bashrc; \
-        sed -i '/export TERM/d' $(TARGET_RECOVERY_ROOT_OUT)/system/etc/bash/bashrc; \
-        mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/sbin; \
-        ln -sf /system/bin/bash $(TARGET_RECOVERY_ROOT_OUT)/sbin/bash;
+        sed -i '/export TERM/d' $(TARGET_RECOVERY_ROOT_OUT)/system/etc/bash/bashrc;
 	include $(BUILD_PHONY_PACKAGE)
 endif

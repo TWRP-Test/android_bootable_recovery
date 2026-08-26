@@ -1,6 +1,7 @@
 #include "kernel_module_loader.hpp"
 #include "common.h"
 #include "variables.h"
+#include <android-base/strings.h>
 
 #ifdef TW_INCLUDE_CRYPTO
 #include <android-base/file.h>
@@ -16,7 +17,7 @@ static void ResetProp(const std::string& key, const std::string& value) {
 }
 #endif
 
-const std::vector<std::string> kernel_modules_requested = TWFunc::split_string(EXPAND(TW_LOAD_VENDOR_MODULES), ' ', true);
+const std::vector<std::string> kernel_modules_requested = android::base::Split(TW_LOAD_VENDOR_MODULES, " ");
 
 BOOT_MODE KernelModuleLoader::Get_Boot_Mode() {
 	std::string cmdline;

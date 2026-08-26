@@ -260,30 +260,30 @@ filegroup {
 
 // recovery_deps: A phony target that's depended on by `recovery`, which
 // builds additional modules conditionally based on Makefile variables.
-// phony {
-//     name: "recovery_deps",
-//     recovery: true,
-//     required: [
-//         "mkfs.erofs.recovery",
-//         "dump.erofs.recovery",
-//         "fsck.erofs.recovery",
-//         // On A/B devices recovery-persist reads the recovery related file from the persist storage and
-//         // copies them into /data/misc/recovery. Then, for both A/B and non-A/B devices, recovery-persist
-//         // parses the last_install file and reports the embedded update metrics. Also, the last_install file
-//         // will be deteleted after the report.
-//         "recovery-persist",
-//     ] + select(soong_config_variable("recovery", "target_userimages_use_f2fs"), {
-//         true: [
-//             "make_f2fs.recovery",
-//             "fsck.f2fs.recovery",
-//             "sload_f2fs.recovery",
-//         ],
-//         default: [],
-//     }) + select(soong_config_variable("recovery", "has_board_cacheimage_partition_size"), {
-//         false: ["recovery-refresh"],
-//         default: [],
-//     }),
-// }
+phony {
+    name: "recovery_deps",
+    recovery: true,
+    required: [
+        "mkfs.erofs.recovery",
+        "dump.erofs.recovery",
+        "fsck.erofs.recovery",
+        // On A/B devices recovery-persist reads the recovery related file from the persist storage and
+        // copies them into /data/misc/recovery. Then, for both A/B and non-A/B devices, recovery-persist
+        // parses the last_install file and reports the embedded update metrics. Also, the last_install file
+        // will be deteleted after the report.
+        "recovery-persist",
+    ] + select(soong_config_variable("recovery", "target_userimages_use_f2fs"), {
+        true: [
+            "make_f2fs.recovery",
+            "fsck.f2fs.recovery",
+            "sload_f2fs.recovery",
+        ],
+        default: [],
+    }) + select(soong_config_variable("recovery", "has_board_cacheimage_partition_size"), {
+        false: ["recovery-refresh"],
+        default: [],
+    }),
+}
 
 // cc_library_shared {
 //     name: "librecovery_ui_ext",
@@ -365,3 +365,426 @@ filegroup {
 //     ],
 //     no_full_install: true,
 // }
+
+cc_library_static {
+    name: "libmounts",
+    srcs: ["mounts.cpp"],
+
+    static_libs: ["libbase"],
+}
+
+java_genrule {
+    name: "twrp_recovery_file_contexts",
+    srcs: [":file_contexts.concat.tmp"],
+    out: ["file_contexts"],
+    cmd: "cp -f $(in) $(out)"
+}
+
+java_genrule {
+    name: "twrp_recovery_file_contexts_bin",
+    srcs: [":file_contexts_bin_gen"],
+    out: ["file_contexts.bin"],
+    cmd: "cp -f $(in) $(out)"
+}
+
+prebuilt_root {
+    name: "install_recovery_file_contexts",
+    filename: "file_contexts",
+    src: ":twrp_recovery_file_contexts",
+    recovery: true,
+    install_in_root: true
+}
+
+prebuilt_root {
+    name: "install_recovery_file_contexts_bin",
+    filename: "file_contexts.bin",
+    src: ":twrp_recovery_file_contexts_bin",
+    recovery: true,
+    install_in_root: true
+}
+
+bootstrap_go_package {
+    name: "soong-twrp_recovery_defaults",
+    pkgPath: "bootable/recovery",
+    deps: [
+        "soong",
+        "soong-android",
+        "soong-cc"
+    ],
+    srcs: [
+        "twrp_recovery_defaults.go",
+        "soong/makevars.go"
+    ],
+    pluginFor: ["soong_build"]
+}
+
+twrp_recovery_defaults {
+    name: "twrp_recovery_defaults"
+}
+
+cc_binary {
+    name: "recovery",
+
+    defaults: [
+        "recovery_defaults",
+        "twrp_defaults",
+        "twrp_recovery_defaults",
+    ],
+
+    cflags: [
+        "-DTW_USE_NEW_MINADBD",
+        "-DTW_WORKAROUND_BACKUP_BUG",
+        "-DHAVE_CAPABILITIES",
+    ],
+
+    srcs: [
+        "twrp.cpp",
+        "fixContexts.cpp",
+        "twrpTar.cpp",
+        "exclude.cpp",
+        "find_file.cpp",
+        "infomanager.cpp",
+        "data.cpp",
+        "partition.cpp",
+        "partitionmanager.cpp",
+        "progresstracking.cpp",
+        "startupArgs.cpp",
+        "twrp-functions.cpp",
+        "twrpDigestDriver.cpp",
+        "openrecoveryscript.cpp",
+        "tarWrite.c",
+        "twrpAdbBuFifo.cpp",
+        "twrpRepacker.cpp",
+        "oaes/oaes.cpp",
+        "BasePartition.cpp",
+    ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
+        false: [
+            "twrpApex.cpp"
+        ],
+        default: []
+    }),
+
+    include_dirs: [
+        "system/core/fs_mgr",
+        "system/core/libsparse",
+    ],
+    local_include_dirs: [
+        "gui/include",
+    ],
+
+    header_libs: [
+        "libvold_headers"
+    ] + select(soong_config_variable("twrpGlobalVars", "include_libresetprop"), {
+        true: [
+            "resetprop_headers",
+        ],
+        default: [],
+    }),
+
+    static_libs: [
+        "libavb_user",
+        "libhealthhalutils",
+        "libhealthshim",
+        "libinit",
+        "libminadbd_services",
+        "librecovery_utils",
+        "libsnapshot",
+        "libsnapshot_cow",
+        "libsnapshot_nobinder",
+        "libtwrpinstall",
+        "libzstd",
+        "update_metadata-protos",
+        "libtwrpgui",
+        "libtwrpperf",
+        "libmounts",
+        "libotautil",
+        "libsparse",
+
+        "libpixelflinger_twrp",
+        "libfusesideload",
+        "libgsi",
+        "libvold",
+        "libcrypto_utils"
+    ] + select(soong_config_variable("twrpGlobalVars", "include_crypto_fbe"), {
+        true: [
+            "libscrypt_static",
+            "libasync_safe",
+            "libkeymint_support"
+        ],
+        default: [],
+    }),
+
+    shared_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
+        "android.hardware.boot@1.2",
+        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
+        "android.hardware.health-V4-ndk",
+        "android.hardware.health-translate-ndk",
+        "libbinder",
+        "libbinder_ndk",
+        "libboot_control_client",
+        "libfs_mgr",
+        "libhardware",
+        "libhidlbase",
+        "liblog",
+        "liblp",
+        "liblz4",
+        "libprotobuf-cpp-lite",
+        "libutils",
+
+        "libz",
+        "libc",
+        "libcutils",
+        "libstdc++",
+        "libtar",
+        "libblkid",
+        "libtwrpminui",
+        "libtwrpadbbu",
+        "libbootloader_message",
+        "libtwrpdigest",
+        "libc++",
+        "libcrypto",
+        "libbase",
+        "libziparchive",
+        "libselinux",
+        "libdl_android",
+
+        "libext4_utils",
+        "libft2",
+    ] + select(soong_config_variable("twrpGlobalVars", "supports_hw_fde"), {
+        true: [
+            "libcryptfs_hw",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_libresetprop"), {
+        true: [
+            "libresetprop",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "has_mtp"), {
+        true: [
+            "libtwrpmtp-ffs",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_crypto"), {
+        true: [
+            "android.frameworks.stats@1.0",
+            "android.hardware.authsecret@1.0",
+            "android.security.authorization-ndk",
+            "android.hardware.oemlock@1.0",
+            "libf2fs_sparseblock",
+            "libandroidicu",
+            "lib_android_keymaster_keymint_utils",
+            "android.hardware.gatekeeper-V1-ndk",
+            "android.hardware.gatekeeper@1.0",
+            "android.hardware.weaver@1.0",
+            "android.hardware.weaver-V2-ndk",
+            "android.frameworks.stats@1.0",
+            "android.security.maintenance-ndk",
+            "android.system.keystore2-V5-ndk",
+            "libkeyutils",
+            "liblog",
+            "libsqlite",
+            "libsysutils",
+            "libkeystoreinfo",
+            "libgatekeeper_aidl",
+            "libgpt_twrp",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_se_omapi"), {
+        true: [
+            "android.hardware.secure_element-V1-ndk",
+            "android.se.omapi-V1-ndk",
+        ],
+        default: [],
+    }),
+
+    required: [
+        "recovery_deps",
+        "hwservicemanager.recovery",
+        "vndservicemanager.recovery",
+        "relink_libraries",
+        "relink_binaries",
+        "relink_vendor_hw_binaries",
+        "bc",
+        "mke2fs.conf",
+        "pigz",
+        "teamwin",
+        "twrp",
+        "fsck.fat",
+        "fatlabel",
+        "mkfs.fat",
+        "init.recovery.ldconfig.rc",
+        "awk",
+        "toybox",
+        "toolbox",
+        "mkshrc_twrp",
+        "minadbd",
+        "twrpbu",
+        "android.hardware.health@2.1-service.recovery",
+        "adbd_system_api_recovery",
+        "libsync.recovery",
+        "libandroidicu.recovery",
+        "libadbd.recovery",
+        "libadbd_services.recovery",
+        "servicemanager.recovery",
+        "orscmd",
+        "init_second_stage.recovery",
+        "reboot.recovery",
+        "mkfs.exfat.recovery",
+        "fsck.exfat.recovery",
+        "plat_hwservice_contexts",
+        "vendor_hwservice_contexts",
+        "plat_service_contexts.recovery",
+        "vendor_service_contexts.recovery",
+        "install_recovery_file_contexts",
+        "install_recovery_file_contexts_bin"
+    ] + select(soong_config_variable("twrpGlobalVars", "ab_ota_updater"), {
+        true: [
+            "libhardware",
+            "update_engine_sideload",
+            "android.hardware.boot@1.0-service.recovery",
+            "android.hardware.boot@1.1-service.recovery",
+            "android.hardware.boot@1.2-service.recovery",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_lpdump"), {
+        true: [
+            "lpdump.recovery",
+            "lpdumpd.recovery",
+            "bootctl.recovery"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_lptools"), {
+        true: [
+            "lptools"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "use_dmctl"), {
+        true: [
+            "dmctl.recovery",
+            "dmuserd.recovery"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_crypto"), {
+        true: [
+            "vold_prepare_subdirs",
+            "task_profiles.json.recovery",
+            "fscryptpolicyget.recovery",
+            "keystore_auth",
+            "keystore2.recovery",
+            "plat_keystore2_key_contexts.recovery",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "move_recovery_res_to_vendor_boot"), {
+        true: [
+            "magiskboot",
+        ],
+        default: [],
+    }) + select(soong_config_variable("ANDROID", "BOARD_USES_RECOVERY_AS_BOOT"), {
+        true: [
+            "magiskboot",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_repacktools"), {
+        true: [
+            "magiskboot",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "no_network"), {
+        false: [
+            "index.html",
+            "microhttpd",
+            "microhttpd.rc",
+            "ttyd",
+            "ttyd.rc",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_se_omapi"), {
+        true: [
+            "se_omapi.recovery",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_7za"), {
+        true: [
+            "7za",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_zstd"), {
+        true: [
+            "zstd",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "exclude_tzdata"), {
+        false: [
+            "tzdata_prebuilt.recovery"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "exclude_bash"), {
+        false: [
+            "bash_twrp",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "exclude_nano"), {
+        false: [
+            "nano_recovery",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_resetprop"), {
+        true: [
+            "resetprop",
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "has_no_real_sdcard"), {
+        false: [
+            "sgdisk"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "exclude_default_usb_init"), {
+        false: [
+            "init.recovery.usb.rc"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_logcat"), {
+        true: [
+            "logcat",
+            "event-log-tags"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "use_logd"), {
+        true: [
+            "logd",
+            "libsysutils",
+            "libnl",
+            "init.recovery.logd.rc"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "recovery_device_modules"), {
+        any @ modules: modules,
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_ntfs_3g"), {
+        true: [
+            "mount.ntfs",
+            "fsck.ntfs",
+            "mkfs.ntfs"
+        ],
+        default: [],
+    }) + select(soong_config_variable("recovery", "target_userimages_use_f2fs"), {
+        true: [
+            "sload_f2fs",
+            "fs_mgr",
+            "liblz4",
+            "libinit"
+        ],
+        default: [],
+    }) + select(soong_config_variable("twrpGlobalVars", "include_python"), {
+        true: [
+            "python3_twrp"
+        ],
+        default: [],
+    }),
+
+    recovery: true,
+}

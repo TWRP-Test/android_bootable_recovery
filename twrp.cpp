@@ -146,7 +146,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 		LOGINFO("Overriding %s with value: \"%s\"\n", prop.c_str(), val.c_str());
 	}
 #if defined(TW_OVERRIDE_SYSTEM_PROPS)
-	stringstream override_props(EXPAND(TW_OVERRIDE_SYSTEM_PROPS));
+	stringstream override_props(TW_OVERRIDE_SYSTEM_PROPS);
 	string current_prop;
 
 	std::vector<std::string> partition_list;

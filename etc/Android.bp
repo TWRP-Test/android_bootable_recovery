@@ -1,0 +1,227 @@
+prebuilt_root {
+    name: "init.recovery.usb.rc",
+    src: "init.recovery.usb.rc",
+
+    recovery: true,
+    install_in_root: true
+}
+
+prebuilt_root {
+    name: "init.recovery.ldconfig.rc",
+    src: "init.recovery.ldconfig.rc",
+
+    recovery: true,
+    install_in_root: true
+}
+
+prebuilt_root {
+    name: "init.recovery.logd.rc",
+    src: "init.recovery.logd.rc",
+
+    recovery: true,
+    install_in_root: true
+}
+
+prebuilt_root {
+    name: "init.recovery.mksh.rc",
+    src: "init.recovery.mksh.rc",
+
+    recovery: true,
+    install_in_root: true
+}
+
+// hwservicemanager
+cc_prebuilt_binary {
+    name: "hwservicemanager.recovery",
+    srcs: [":hwservicemanager"],
+
+    shared_libs: [
+        "android.hidl.token@1.0",
+        "libbase",
+        "libc++",
+        "libcrypto",
+        "libcutils",
+        "libhidl-gen-utils",
+        "libhidlbase",
+        "liblog",
+        "libselinux",
+        "libutils",
+        "libvintf"
+    ],
+    init_rc: ["init/hwservicemanager.rc"],
+
+    stem: "hwservicemanager",
+    recovery: true
+}
+
+// vndservicemanager
+cc_prebuilt_binary {
+    name: "vndservicemanager.recovery",
+    srcs: [":vndservicemanager"],
+    
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "libc++",
+        "libcutils",
+        "liblog",
+        "libselinux",
+        "libutils"
+    ],
+    init_rc: ["init/vndservicemanager.rc"],
+
+    stem: "vndservicemanager",
+    recovery: true
+}
+
+// task_profiles
+prebuilt_etc {
+    name: "task_profiles.json.recovery",
+    src: ":task_profiles.json",
+    filename: "task_profiles.json",
+    recovery: true,
+}
+
+// Android keystore2
+prebuilt_bin {
+    name: "keystore2.recovery",
+    src: ":keystore2",
+    init_rc: ["init/keystore2.rc"],
+    filename: "keystore2",
+    vintf_fragments: ["init/android.system.keystore2-service.xml"],
+    recovery: true,
+}
+
+// Healthd
+prebuilt_bin {
+    name: "android.hardware.health@2.1-service.recovery",
+    src: ":android.hardware.health@2.1-service",
+    init_rc: ["init/android.hardware.health@2.1-service.rc"],
+    filename: "android.hardware.health@2.1-service",
+    required: ["android.hardware.health@2.1-impl.recovery"],
+    recovery: true,
+}
+
+// Boot Hal start
+prebuilt_bin {
+    name: "android.hardware.boot@1.0-service.recovery",
+    src: ":android.hardware.boot@1.0-service",
+    init_rc: ["init/android.hardware.boot@1.0-service.rc"],
+    filename: "android.hardware.boot@1.0-service",
+    recovery: true,
+}
+
+prebuilt_bin {
+    name: "android.hardware.boot@1.1-service.recovery",
+    src: ":android.hardware.boot@1.1-service",
+    init_rc: ["init/android.hardware.boot@1.1-service.rc"],
+    filename: "android.hardware.boot@1.1-service",
+    recovery: true,
+}
+
+prebuilt_bin {
+    name: "android.hardware.boot@1.2-service.recovery",
+    src: ":android.hardware.boot@1.2-service",
+    init_rc: ["init/android.hardware.boot@1.2-service.rc"],
+    filename: "android.hardware.boot@1.2-service",
+    recovery: true,
+}
+// Boot Hal end
+
+// TW_INCLUDE_LPDUMP start
+prebuilt_bin {
+    name: "lpdump.recovery",
+    src: ":lpdump",
+    filename: "lpdump",
+    recovery: true,
+}
+
+cc_prebuilt_library {
+    name: "liblpdump_interface-cpp.recovery",
+    srcs: [":liblpdump_interface-cpp"],
+    stem: "liblpdump_interface-cpp",
+    shared_libs: [
+        "libbinder",
+        "libc++",
+        "libcutils",
+        "libutils",
+    ],
+    recovery: true
+}
+
+prebuilt_bin {
+    name: "lpdumpd.recovery",
+    src: ":lpdumpd",
+    filename: "lpdumpd",
+    required: [
+        "liblpdump_interface-cpp.recovery",
+        "libprotobuf-cpp-full.recovery",
+    ],
+    recovery: true,
+}
+
+prebuilt_bin {
+    name: "bootctl.recovery",
+    src: ":bootctl",
+    filename: "bootctl",
+    recovery: true,
+}
+// TW_INCLUDE_LPDUMP end
+
+// TW_USE_DMCTL start
+cc_prebuilt_binary {
+    name: "dmctl.recovery",
+
+    srcs: [":dmctl"],
+    stem: "dmctl",
+
+    static_libs: [
+        "libfs_mgr",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    recovery: true,
+}
+
+cc_prebuilt_binary {
+    name: "dmuserd.recovery",
+
+    srcs: [":dmuserd"],
+    stem: "dmuserd",
+
+    shared_libs: [
+        "libbase",
+        "libc++",
+        "liblog"
+    ],
+    recovery: true,
+}
+// TW_USE_DMCTL end
+
+// tzdata prebuilt
+prebuilt_usr_share {
+    name: "tzdata_prebuilt.recovery",
+    src: ":tzdata_prebuilt",
+    filename: "tzdata",
+    sub_dir: "zoneinfo",
+	recovery: true
+}
+
+// ttyd init_rc
+prebuilt_etc {
+    name: "ttyd.rc",
+    src: "init/ttyd.rc",
+    relative_install_path: "init",
+    recovery: true,
+}
+
+// nano init_rc
+prebuilt_etc {
+    name: "nano.rc",
+    src: "init/nano.rc",
+    relative_install_path: "init",
+    recovery: true,
+}
