@@ -70,6 +70,8 @@ recovery_cc_defaults {
                 "-DRECOVERY_API_VERSION=%s",
                 "-Wall",
                 "-Werror",
+                "-Wno-unused-parameter",
+                "-Wno-unused-function",
             ],
         },
     },
