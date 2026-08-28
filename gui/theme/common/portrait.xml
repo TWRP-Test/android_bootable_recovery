@@ -3826,7 +3826,7 @@
 				<text>Network Disabled for Device</text>
 			</text>
 
-			<borderedlogbox toprow="%row3_y%" bottomrow="%row16a_y%" borderwidth="2" leftmargin="75" rightmargin="75">
+			<borderedlogbox toprow="%row2_y%" bottomrow="%row14a_y%" borderwidth="2" leftmargin="75" rightmargin="75">
 				<placement x="%indent%" w="%content_width%"/>
 				<color foreground="%text_color%" background="%background_color%" border="%accent_color%"/>
 				<font resource="fixed" color="%text_color%" spacing="0"/>
