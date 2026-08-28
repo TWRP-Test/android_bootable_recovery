@@ -30,6 +30,15 @@ prebuilt_root {
     install_in_root: true
 }
 
+prebuilt_root {
+    name: "vndservice_contexts.recovery",
+    src: ":vndservice_contexts",
+    filename: "vndservice_contexts",
+
+    recovery: true,
+    install_in_root: true,
+}
+
 // hwservicemanager
 cc_prebuilt_binary {
     name: "hwservicemanager.recovery",

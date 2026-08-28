@@ -641,6 +641,7 @@ cc_binary {
         "vendor_hwservice_contexts",
         "plat_service_contexts.recovery",
         "vendor_service_contexts.recovery",
+        "vndservice_contexts.recovery",
         "install_recovery_file_contexts",
         "install_recovery_file_contexts_bin"
     ] + select(soong_config_variable("twrpGlobalVars", "ab_ota_updater"), {
