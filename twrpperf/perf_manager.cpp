@@ -25,6 +25,7 @@
 #include <glob.h>
 #include <linux/sched.h>
 #include <linux/sched/types.h>
+#include <sched.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
@@ -363,6 +364,161 @@ class CpuFreqBackend final : public PerfBackend {
   std::vector<PolicyState> states_;
 };
 
+enum class CpuAffinityKind {
+  kAll,
+  kWorkload,
+  kGui,
+};
+
+class CpuAffinityController final {
+ public:
+  explicit CpuAffinityController(CpuAffinityKind kind) {
+    BuildMask(kind);
+  }
+
+  bool Supported() const {
+    return supported_;
+  }
+
+  std::string PreferredMask() const {
+    std::ostringstream mask;
+    bool first = true;
+    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+      if (!CPU_ISSET(cpu, &preferred_)) continue;
+      if (!first) mask << ',';
+      mask << cpu;
+      first = false;
+    }
+    return first ? "none" : mask.str();
+  }
+
+  bool Active() const {
+    return active_;
+  }
+
+  bool Disjoint(const CpuAffinityController& other) const {
+    cpu_set_t overlap{};
+    CPU_AND(&overlap, &preferred_, &other.preferred_);
+    return CPU_COUNT(&overlap) == 0;
+  }
+
+  bool Activate(pid_t tid, const char* role) {
+    if (!supported_) return false;
+    if (active_) {
+      if (tid == tid_) return true;
+      Deactivate();
+    }
+
+    cpu_set_t original{};
+    if (sched_getaffinity(tid, sizeof(original), &original) != 0) return false;
+    if (CPU_EQUAL(&original, &preferred_)) {
+      tid_ = tid;
+      original_ = original;
+      active_ = true;
+      return true;
+    }
+    if (sched_setaffinity(tid, sizeof(preferred_), &preferred_) != 0) {
+      PLOG(WARNING) << "TwrpPerfManager: unable to set " << role << " CPU affinity";
+      return false;
+    }
+    tid_ = tid;
+    original_ = original;
+    active_ = true;
+    return true;
+  }
+
+  void Deactivate() {
+    if (!active_) return;
+    if (sched_setaffinity(tid_, sizeof(original_), &original_) != 0)
+      PLOG(WARNING) << "TwrpPerfManager: unable to restore CPU affinity";
+    active_ = false;
+    tid_ = 0;
+  }
+
+ private:
+  void BuildMask(CpuAffinityKind kind) {
+    cpu_set_t allowed{};
+    if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) return;
+
+    CPU_ZERO(&preferred_);
+    const long configured_cpus = sysconf(_SC_NPROCESSORS_CONF);
+    const int cpu_limit = configured_cpus > 0
+                              ? static_cast<int>(std::min<long>(configured_cpus, CPU_SETSIZE))
+                              : CPU_SETSIZE;
+    std::vector<uint64_t> scores(cpu_limit);
+    bool use_capacity = true;
+    for (int cpu = 0; cpu < cpu_limit; ++cpu) {
+      if (!CPU_ISSET(cpu, &allowed)) continue;
+      const std::string cpu_path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu);
+      if (!ReadUint(cpu_path + "/cpu_capacity", &scores[cpu]) || scores[cpu] == 0) {
+        use_capacity = false;
+        break;
+      }
+    }
+    if (!use_capacity) {
+      bool use_frequency = true;
+      for (int cpu = 0; cpu < cpu_limit; ++cpu) {
+        if (!CPU_ISSET(cpu, &allowed)) continue;
+        const std::string cpu_path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu);
+        if (!ReadUint(cpu_path + "/cpufreq/cpuinfo_max_freq", &scores[cpu]) || scores[cpu] == 0) {
+          use_frequency = false;
+          break;
+        }
+      }
+      if (!use_frequency) std::fill(scores.begin(), scores.end(), 0);
+    }
+    uint64_t max_score = 0;
+    uint64_t min_score = 0;
+    bool have_score = false;
+    std::vector<uint64_t> score_levels;
+    score_levels.reserve(cpu_limit);
+    for (int cpu = 0; cpu < cpu_limit; ++cpu) {
+      if (!CPU_ISSET(cpu, &allowed)) continue;
+      const uint64_t score = scores[cpu];
+      if (score != 0) {
+        have_score = true;
+        max_score = std::max(max_score, score);
+        min_score = min_score == 0 ? score : std::min(min_score, score);
+        score_levels.push_back(score);
+      }
+    }
+    std::sort(score_levels.begin(), score_levels.end());
+    score_levels.erase(std::unique(score_levels.begin(), score_levels.end()), score_levels.end());
+
+    std::vector<int> min_score_cpus;
+    if (score_levels.size() == 2) {
+      for (int cpu = 0; cpu < cpu_limit; ++cpu) {
+        if (CPU_ISSET(cpu, &allowed) && scores[cpu] == min_score) min_score_cpus.push_back(cpu);
+      }
+    }
+
+    for (int cpu = 0; cpu < cpu_limit; ++cpu) {
+      if (!CPU_ISSET(cpu, &allowed)) continue;
+      const uint64_t score = scores[cpu];
+      const auto gui_cpu_end =
+          min_score_cpus.begin() + std::min<size_t>(2, min_score_cpus.size());
+      const bool reserve_for_gui =
+          score_levels.size() == 2 &&
+          std::find(min_score_cpus.begin(), gui_cpu_end, cpu) != gui_cpu_end;
+      const bool use_cpu =
+          kind == CpuAffinityKind::kAll || !have_score || min_score == max_score ||
+          (kind == CpuAffinityKind::kWorkload &&
+           (score_levels.size() == 2 ? !reserve_for_gui
+                                     : (score == max_score || score > min_score))) ||
+          (kind == CpuAffinityKind::kGui &&
+           (score_levels.size() == 2 ? reserve_for_gui : score == min_score));
+      if (use_cpu) CPU_SET(cpu, &preferred_);
+    }
+    supported_ = CPU_COUNT(&preferred_) > 0;
+  }
+
+  cpu_set_t preferred_{};
+  cpu_set_t original_{};
+  pid_t tid_ = 0;
+  bool supported_ = false;
+  bool active_ = false;
+};
+
 }  // namespace
 
 struct TwrpPerfManager::Impl {
@@ -379,12 +535,21 @@ struct TwrpPerfManager::Impl {
         android::base::GetIntProperty<int>("twrp.perf.cpufreq_percent", 50, 1, 100);
     const int walt_sched_boost =
         android::base::GetIntProperty<int>("twrp.perf.walt_sched_boost", 1, 0, 3);
+    const bool prefer_big_cores =
+        android::base::GetBoolProperty("twrp.perf.prefer_big_cores", true);
+    const bool separate_gui_cpu =
+        android::base::GetBoolProperty("twrp.perf.separate_gui_cpu", true);
+    workload_affinity = std::make_unique<CpuAffinityController>(
+        prefer_big_cores ? CpuAffinityKind::kWorkload : CpuAffinityKind::kAll);
+    if (separate_gui_cpu && prefer_big_cores)
+      gui_affinity = std::make_unique<CpuAffinityController>(CpuAffinityKind::kGui);
     std::string requested = android::base::GetProperty("twrp.perf.backend", "auto");
     if (requested != "auto" && requested != "walt" && requested != "uclamp" &&
         requested != "cpufreq" && requested != "off" && requested != "none") {
       LOG(WARNING) << "TwrpPerfManager: unknown backend '" << requested << "', using auto";
       requested = "auto";
     }
+    affinity_enabled = requested != "off" && requested != "none";
 
     auto add_backend = [this](std::unique_ptr<PerfBackend> backend) {
       if (backend->Supported()) backends.push_back(std::move(backend));
@@ -407,7 +572,16 @@ struct TwrpPerfManager::Impl {
     next_property_check_ns = MonotonicNs() + kPropertyCheckNs;
     LOG(INFO) << "TwrpPerfManager: backend=" << BackendNameLocked() << ", enabled=" << enabled
               << ", hold_ms=" << hold_ms << ", uclamp_min=" << uclamp_min
-              << ", cpufreq_percent=" << cpufreq_percent;
+              << ", cpufreq_percent=" << cpufreq_percent
+              << ", prefer_big_cores=" << prefer_big_cores
+              << ", separate_gui_cpu=" << separate_gui_cpu
+              << ", affinity="
+              << (affinity_enabled && workload_affinity->Supported() ? "available" : "none")
+              << ", workload_mask=" << workload_affinity->PreferredMask()
+              << ", gui_affinity="
+              << (gui_affinity && gui_affinity->Supported() ? "available" : "none")
+              << ", gui_mask="
+              << (gui_affinity ? gui_affinity->PreferredMask() : "none");
   }
 
   void NotifyActivity(bool allow_activate) {
@@ -430,7 +604,43 @@ struct TwrpPerfManager::Impl {
 
     const int64_t now_ns = MonotonicNs();
     RefreshEnabledLocked(now_ns);
-    if (boosted && now_ns >= boost_deadline_ns) DeactivateLocked();
+    if (boosted && !workload_active && now_ns >= boost_deadline_ns) DeactivateLocked();
+  }
+
+  void BeginWorkload() {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!initialized || !enabled) return;
+
+    const int64_t now_ns = MonotonicNs();
+    RefreshEnabledLocked(now_ns);
+    if (!enabled) return;
+    if (!affinity_enabled) return;
+    if (!boosted && !backends.empty() && !ActivateLocked() && !workload_affinity->Supported())
+      return;
+
+    if (workload_active) {
+      boost_deadline_ns = std::max(boost_deadline_ns, now_ns + hold_ms * kNsPerMs);
+      return;
+    }
+    const pid_t tid = CurrentTid();
+    const bool workload_affinity_active =
+        workload_affinity && workload_affinity->Activate(tid, "workload");
+    if (tid != render_tid && workload_affinity_active && gui_affinity &&
+        gui_affinity->Supported() &&
+        workload_affinity->Disjoint(*gui_affinity)) {
+      if (!gui_affinity->Activate(render_tid, "GUI")) workload_affinity->Deactivate();
+    }
+    workload_active = true;
+    boost_deadline_ns = std::max(boost_deadline_ns, now_ns + hold_ms * kNsPerMs);
+  }
+
+  void EndWorkload() {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!workload_active) return;
+    if (workload_affinity) workload_affinity->Deactivate();
+    if (gui_affinity) gui_affinity->Deactivate();
+    workload_active = false;
+    if (boosted && MonotonicNs() >= boost_deadline_ns) DeactivateLocked();
   }
 
   int ClampTimeoutMs(int timeout_ms) const {
@@ -501,12 +711,16 @@ struct TwrpPerfManager::Impl {
   }
 
   void ReleaseLocked() {
+    if (workload_affinity) workload_affinity->Deactivate();
+    if (gui_affinity) gui_affinity->Deactivate();
+    workload_active = false;
     DeactivateLocked();
     backends.clear();
     backend_index = 0;
     render_tid = 0;
     initialized = false;
     enabled = false;
+    affinity_enabled = false;
     boost_deadline_ns = 0;
     next_property_check_ns = 0;
   }
@@ -520,7 +734,11 @@ struct TwrpPerfManager::Impl {
   int hold_ms = 300;
   bool initialized = false;
   bool enabled = false;
+  bool affinity_enabled = false;
   bool boosted = false;
+  std::unique_ptr<CpuAffinityController> workload_affinity;
+  std::unique_ptr<CpuAffinityController> gui_affinity;
+  bool workload_active = false;
 };
 
 TwrpPerfManager& TwrpPerfManager::Get() {
@@ -544,6 +762,14 @@ void TwrpPerfManager::NotifyInteraction() {
 
 void TwrpPerfManager::NotifyFrameActivity() {
   impl_->NotifyActivity(false);
+}
+
+void TwrpPerfManager::BeginWorkload() {
+  impl_->BeginWorkload();
+}
+
+void TwrpPerfManager::EndWorkload() {
+  impl_->EndWorkload();
 }
 
 void TwrpPerfManager::Update() {

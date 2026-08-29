@@ -30,6 +30,8 @@ class TwrpPerfManager final {
   void Initialize(pid_t render_tid = 0);
   void NotifyInteraction();
   void NotifyFrameActivity();
+  void BeginWorkload();
+  void EndWorkload();
   void Update();
   int ClampTimeoutMs(int timeout_ms) const;
   void Release();

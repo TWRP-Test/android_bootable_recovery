@@ -57,6 +57,7 @@ extern "C" {
 };
 #include "set_metadata.h"
 #include "twrpminui/minui.h"
+#include "twrpperf/perf_manager.hpp"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
@@ -519,6 +520,7 @@ int GUIAction::doAction(Action action)
 
 void GUIAction::operation_start(const string operation_name)
 {
+	twrp::TwrpPerfManager::Get().BeginWorkload();
 	LOGINFO("operation_start: '%s'\n", operation_name.c_str());
 	time(&Start);
 	DataManager::SetValue(TW_ACTION_BUSY, 1);
@@ -563,6 +565,7 @@ void GUIAction::operation_end(const int operation_status)
 #endif
 
 	LOGINFO("operation_end - status=%d\n", operation_status);
+	twrp::TwrpPerfManager::Get().EndWorkload();
 }
 
 int GUIAction::reboot(std::string arg)
@@ -1445,6 +1448,7 @@ int GUIAction::killterminal(std::string arg __unused)
 	DataManager::SetValue("tw_terminal_state", 0);
 	DataManager::SetValue("tw_background_thread_running", 0);
 	DataManager::SetValue(TW_ACTION_BUSY, 0);
+	twrp::TwrpPerfManager::Get().EndWorkload();
 	return 0;
 }
 
