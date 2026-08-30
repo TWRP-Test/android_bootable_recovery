@@ -2,19 +2,19 @@
 #include "common.h"
 #include "variables.h"
 #include <android-base/strings.h>
+#include <fstab/fstab.h>
 
 const std::vector<std::string> kernel_modules_requested = android::base::Split(TW_LOAD_VENDOR_MODULES, " ");
 
 BOOT_MODE KernelModuleLoader::Get_Boot_Mode() {
-	std::string cmdline;
-	std::string bootconfig;
-	android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
-	android::base::ReadFileToString("/proc/cmdline", &cmdline);
+	std::string force_normal_boot, twrpfastboot;
+	android::fs_mgr::GetBootconfig("androidboot.force_normal_boot", &force_normal_boot);
+	android::fs_mgr::GetKernelCmdline("twrpfastboot", &twrpfastboot);
 
-	if (cmdline.find("twrpfastboot=1") != std::string::npos && (bootconfig.find("androidboot.force_normal_boot = \"1\"") != std::string::npos ||
-		cmdline.find("androidboot.force_normal_boot=1") != std::string::npos))
+	if (twrpfastboot == "1" && force_normal_boot == "1")
 		return RECOVERY_FASTBOOT_MODE;
-	else if (android::base::GetProperty(TW_FASTBOOT_MODE_PROP, "0") == "1")
+
+	if (android::base::GetProperty(TW_FASTBOOT_MODE_PROP, "0") == "1")
 		return FASTBOOTD_MODE;
 
 	return RECOVERY_IN_BOOT_MODE;
@@ -147,7 +147,8 @@ bool KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendo
 }
 
 std::vector<string> KernelModuleLoader::Skip_Loaded_Kernel_Modules() {
-	std::vector<string> kernel_modules = kernel_modules_requested;
+  LOGINFO("[MODULES] -> %s\n", TW_LOAD_VENDOR_MODULES);
+  std::vector<string> kernel_modules = kernel_modules_requested;
 	std::vector<string> loaded_modules;
 	std::string kernel_module_file = "/proc/modules";
 	if (TWFunc::read_file(kernel_module_file, loaded_modules) < 0)
