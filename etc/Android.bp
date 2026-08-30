@@ -31,6 +31,24 @@ prebuilt_root {
 }
 
 prebuilt_root {
+    name: "vendor_hwservice_contexts.recovery",
+    src: ":vendor_hwservice_contexts",
+    filename: "vendor_hwservice_contexts",
+
+    recovery: true,
+    install_in_root: true,
+}
+
+prebuilt_root {
+    name: "plat_hwservice_contexts.recovery",
+    src: ":plat_hwservice_contexts",
+    filename: "plat_hwservice_contexts",
+
+    recovery: true,
+    install_in_root: true,
+}
+
+prebuilt_root {
     name: "vndservice_contexts.recovery",
     src: ":vndservice_contexts",
     filename: "vndservice_contexts",
