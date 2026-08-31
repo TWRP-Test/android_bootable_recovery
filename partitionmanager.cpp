@@ -2079,7 +2079,8 @@ void TWPartitionManager::Post_Decrypt(const string& Block_Device) {
 
 void TWPartitionManager::Parse_Users() {
 #ifdef TW_INCLUDE_FBE
-	char user_check_result[PROPERTY_VALUE_MAX];
+  Users_List.clear();
+  char user_check_result[PROPERTY_VALUE_MAX];
 	for (int userId = 0; userId <= 9999; userId++) {
 		string prop = "twrp.user." + to_string(userId) + ".decrypt";
 		property_get(prop.c_str(), user_check_result, "-1");
