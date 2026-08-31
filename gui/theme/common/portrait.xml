@@ -3978,6 +3978,34 @@
 
 			<listbox style="advanced_listbox">
 				<placement x="%indent%" y="%row12a_y%" w="%content_width%" h="%listbox_advanced_height%"/>
+				<listitem name="{@install_kernelsu=Install KernelSU (LKM)}">
+					<condition var1="tw_has_kernelsu_tool" var2="1"/>
+					<actions>
+						<action function="set">tw_back=advanced</action>
+						<action function="set">tw_action=cmd</action>
+						<action function="set">tw_action_param=/system/bin/install-kernelsu</action>
+						<action function="set">tw_text1={@install_kernelsu_confirm=Install KernelSU to active init_boot?}</action>
+						<action function="set">tw_text2={@root_tools_backup_note=The original image will be backed up first.}</action>
+						<action function="set">tw_action_text1={@installing_kernelsu=Installing KernelSU...}</action>
+						<action function="set">tw_complete_text1={@install_kernelsu_complete=KernelSU installation complete}</action>
+						<action function="set">tw_slider_text={@swipe_to_confirm=Swipe to Confirm}</action>
+						<action function="page">confirm_action</action>
+					</actions>
+				</listitem>
+				<listitem name="{@install_magisk=Install Magisk}">
+					<condition var1="tw_has_magisk_tool" var2="1"/>
+					<actions>
+						<action function="set">tw_back=advanced</action>
+						<action function="set">tw_action=cmd</action>
+						<action function="set">tw_action_param=/system/bin/install-magisk</action>
+						<action function="set">tw_text1={@install_magisk_confirm=Install Magisk to the active slot?}</action>
+						<action function="set">tw_text2={@root_tools_backup_note=The original image will be backed up first.}</action>
+						<action function="set">tw_action_text1={@installing_magisk=Installing Magisk...}</action>
+						<action function="set">tw_complete_text1={@install_magisk_complete=Magisk installation complete}</action>
+						<action function="set">tw_slider_text={@swipe_to_confirm=Swipe to Confirm}</action>
+						<action function="page">confirm_action</action>
+					</actions>
+				</listitem>
 				<listitem name="{@change_twrp_folder_btn=Change TWRP folder}">
 					<condition var1="tw_is_decrypted" var2="1"/>
 					<action function="page">changeTwrpFolder</action>
