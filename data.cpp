@@ -813,7 +813,12 @@ void DataManager::SetDefaultValues()
 	else
 		mConst.SetValue("tw_has_repack_tools", "0");
 
-	pthread_mutex_unlock(&m_valuesLock);
+  mConst.SetValue("tw_has_kernelsu_tool",
+                  TWFunc::Path_Exists("/system/bin/install-kernelsu") ? "1" : "0");
+  mConst.SetValue("tw_has_magisk_tool",
+                  TWFunc::Path_Exists("/system/bin/install-magisk") ? "1" : "0");
+
+  pthread_mutex_unlock(&m_valuesLock);
 }
 
 // Magic Values
