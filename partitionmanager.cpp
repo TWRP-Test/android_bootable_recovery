@@ -129,15 +129,9 @@ TWPartitionManager::TWPartitionManager(void) {
 	uevent_pfd.fd = -1;
 	stop_backup = false;
 #ifdef AB_OTA_UPDATER
-	char slot_suffix[PROPERTY_VALUE_MAX];
-	property_get("ro.boot.slot_suffix", slot_suffix, "error");
-	if (strcmp(slot_suffix, "error") == 0)
-		property_get("ro.boot.slot", slot_suffix, "error");
 	Active_Slot_Display = "";
-	if (strcmp(slot_suffix, "_a") == 0 || strcmp(slot_suffix, "a") == 0)
-		Set_Active_Slot("A");
-	else
-		Set_Active_Slot("B");
+	std::string slot = android::base::GetProperty("ro.boot.slot_suffix", "");
+	Set_Active_Slot(slot == "_a" ? "A" : slot == "_b" ? "B" : "");
 #endif
 }
 

@@ -16,6 +16,7 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <format>
 #include <string>
 #include <sys/wait.h>
 
@@ -26,6 +27,11 @@
 #include "twcommon.h"
 #include "variables.h"
 #include "gui/gui.hpp"
+
+#ifdef AB_OTA_UPDATER
+#include <BootControlClient.h>
+using android::hal::BootControlClient;
+#endif
 
 bool twrpRepacker::Prepare_Empty_Folder(const std::string& Folder) {
 	if (TWFunc::Path_Exists(Folder))
@@ -134,13 +140,6 @@ std::string twrpRepacker::Unpack_Image(const std::string& Source_Path, const std
 	return ramdisk_format;
 }
 
-static bool is_AB_for_repacker() {
-	std::string slot = android::base::GetProperty("ro.boot.slot_suffix", "");
-	if (slot.empty())
-		slot = android::base::GetProperty("ro.boot.slot", "");
-	return !slot.empty();
-}
-
 bool twrpRepacker::Repack_Image_And_Flash(const std::string& Target_Image, const struct Repack_Options_struct& Repack_Options) {
 	if (!TWFunc::Path_Exists("/system/bin/magiskboot")) {
 		LOGERR("Image repacking tool not present in this TWRP build!");
@@ -165,7 +164,7 @@ bool twrpRepacker::Repack_Image_And_Flash(const std::string& Target_Image, const
 		}
 	#else
 		// we shouldn't reach here, because of the code in twrpRepacker::Flash_Current_Twrp(); but if we do, then handle it
-		if (PartitionManager.Find_Partition_By_Path("/recovery") && is_AB_for_repacker()) {
+		if (PartitionManager.Find_Partition_By_Path("/recovery") && !DataManager::GetStrValue("tw_active_slot").empty()) {
 			dest_partition = "/recovery";
 		}
 	#endif
@@ -328,26 +327,21 @@ bool twrpRepacker::Repack_Image_And_Flash(const std::string& Target_Image, const
 
 bool twrpRepacker::Flash_Current_Twrp() {
 	// A/B with dedicated recovery partition
-	std::string slot = android::base::GetProperty("ro.boot.slot_suffix", "");
-	if (slot.empty())
-		slot = android::base::GetProperty("ro.boot.slot", "");
-	if (!slot.empty() && PartitionManager.Find_Partition_By_Path("/recovery")) {
-		std::string root,src, dest;
+	auto module = BootControlClient::WaitForService();
+	int32_t slot = module->GetCurrentSlot();
+	
+	if (PartitionManager.Find_Partition_By_Path("/recovery")) {
 		std::string dest_partition = "/recovery";
-		root = "/dev/block/bootdevice/by-name" + dest_partition;
-		if (slot == "_a" || slot == "a") {
-			src = root + "_a";
-			dest= root + "_b";
-		}
-		else {
-			src = root + "_b";
-			dest= root + "_a";
-		}
+		std::string root = "/dev/block/bootdevice/by-name/recovery";
+
+		std::string src_slot = "a", dst_slot = "b";
+		if (slot != 0) std::swap(src_slot, dst_slot);
+
 		PartitionManager.Unlock_Block_Partitions();
 
 		// only copy the relevant active slot to the inactive slot, on the basis that the recovery currently running
 		// in the active slot can simply be copied over to the inactive slot, so that both have the same recovery image
-		std::string command = "dd bs=1048576 if=" + src + " of=" + dest;
+		std::string command = std::format("dd bs=1048576 if={0}_{1} of={0}_{2}", root, src_slot, dst_slot);
 		LOGINFO("Command=%s\n", command.c_str());
 
 		if (TWFunc::Exec_Cmd(command) != 0) {
