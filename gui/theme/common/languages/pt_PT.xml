@@ -687,5 +687,14 @@
 		<string name="include_kernel_log">Incluir log do Kernel</string>
 		<string name="sha2_chk">Usar SHA2 para fazer hash</string>
 		<string name="unable_set_boot_slot">Erro ao alterar o slot do bootloader para {1}</string>
+		<string name="install_kernelsu">Instalar KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Instalar KernelSU no init_boot ativo?</string>
+		<string name="root_tools_backup_note">A imagem original será guardada primeiro.</string>
+		<string name="installing_kernelsu">A instalar KernelSU...</string>
+		<string name="install_kernelsu_complete">Instalação do KernelSU concluída</string>
+		<string name="install_magisk">Instalar Magisk</string>
+		<string name="install_magisk_confirm">Instalar Magisk no slot ativo?</string>
+		<string name="installing_magisk">A instalar Magisk...</string>
+		<string name="install_magisk_complete">Instalação do Magisk concluída</string>
 	</resources>
 </language>
