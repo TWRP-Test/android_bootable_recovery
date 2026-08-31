@@ -22,17 +22,24 @@
 #endif
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
+#include <sys/system_properties.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <chrono>
+#include <set>
+#include <vector>
 
-#include <string.h>
-#include <stdio.h>
+#include <android-base/properties.h>
 #include <cutils/properties.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <android-base/unique_fd.h>
 
@@ -237,10 +244,136 @@ static constexpr const char* UPDATE_SUPER_ZST = "super.zst";
 bool isUpdatePkg(ZipArchiveHandle Zip) {
 	ZipEntry64 find_entry;
 	if (FindEntry(Zip, UPDATE_DYNAMIC_PART_OP_LIST_NAME, &find_entry) == 0) return true;
-	if (FindEntry(Zip, UPDATE_SUPER_IMAGE_ZST, &find_entry) == 0) return true;
-	if (FindEntry(Zip, UPDATE_SUPER_ZST, &find_entry) == 0) return true;
+  for (const char* suffix : { "_a", "_b" }) {
+    std::string op_list = UPDATE_DYNAMIC_PART_OP_LIST_NAME;
+    op_list += suffix;
+    if (FindEntry(Zip, op_list, &find_entry) == 0) return true;
+  }
+  if (FindEntry(Zip, UPDATE_SUPER_IMAGE_ZST, &find_entry) == 0) return true;
+  if (FindEntry(Zip, UPDATE_SUPER_ZST, &find_entry) == 0) return true;
 	if (FindEntry(Zip, AB_OTA, &find_entry) == 0) return true;
 	return false;
+}
+
+static bool Is_Super_Device(dev_t device, const std::set<dev_t>& super_devices) {
+  return device != 0 && super_devices.find(device) != super_devices.end();
+}
+
+static bool Path_Uses_Super_Device(const std::string& path, const std::set<dev_t>& super_devices) {
+  struct stat st;
+  if (stat(path.c_str(), &st) != 0) return false;
+
+  return Is_Super_Device(st.st_dev, super_devices) ||
+         (S_ISBLK(st.st_mode) && Is_Super_Device(st.st_rdev, super_devices));
+}
+
+static bool Process_Uses_Super_Device(pid_t pid, const std::set<dev_t>& super_devices) {
+  char path[PATH_MAX];
+  snprintf(path, sizeof(path), "/proc/%d/maps", pid);
+  FILE* maps = fopen(path, "re");
+  if (maps != nullptr) {
+    char line[1024];
+    while (fgets(line, sizeof(line), maps) != nullptr) {
+      unsigned int major_id, minor_id;
+      if (sscanf(line, "%*s %*s %*s %x:%x", &major_id, &minor_id) == 2 &&
+          Is_Super_Device(makedev(major_id, minor_id), super_devices)) {
+        fclose(maps);
+        return true;
+      }
+    }
+    fclose(maps);
+  }
+
+  for (const char* entry : { "exe", "cwd", "root" }) {
+    snprintf(path, sizeof(path), "/proc/%d/%s", pid, entry);
+    if (Path_Uses_Super_Device(path, super_devices)) return true;
+  }
+
+  snprintf(path, sizeof(path), "/proc/%d/fd", pid);
+  DIR* fds = opendir(path);
+  if (fds == nullptr) return false;
+
+  bool uses_super = false;
+  struct dirent* de;
+  while ((de = readdir(fds)) != nullptr) {
+    if (!isdigit(de->d_name[0])) continue;
+    std::string fd_path = path;
+    fd_path += "/";
+    fd_path += de->d_name;
+    if (Path_Uses_Super_Device(fd_path, super_devices)) {
+      uses_super = true;
+      break;
+    }
+  }
+  closedir(fds);
+  return uses_super;
+}
+
+static std::set<dev_t> Get_Super_Devices() {
+  std::set<dev_t> super_devices;
+  std::vector<PartitionList> mount_partitions;
+  PartitionManager.Get_Partition_List("mount", &mount_partitions);
+
+  for (const auto& item : mount_partitions) {
+    TWPartition* partition = PartitionManager.Find_Partition_By_Path(item.Mount_Point);
+    if (partition == nullptr || !partition->Get_Super_Status()) continue;
+
+    struct stat st;
+    if (stat(partition->Actual_Block_Device.c_str(), &st) == 0 && S_ISBLK(st.st_mode)) {
+      super_devices.insert(st.st_rdev);
+    }
+  }
+  return super_devices;
+}
+
+static void Read_Init_Service_Property(void* cookie, const char* name, const char* value,
+                                       uint32_t /* serial */) {
+  static constexpr const char* prefix = "init.svc.";
+  if (strncmp(name, prefix, strlen(prefix)) != 0 || strcmp(value, "running") != 0) return;
+
+  auto* services = static_cast<std::vector<std::string>*>(cookie);
+  services->emplace_back(name + strlen(prefix));
+}
+
+static void Collect_Init_Service_Property(const prop_info* pi, void* cookie) {
+  __system_property_read_callback(pi, Read_Init_Service_Property, cookie);
+}
+
+static std::vector<std::string> Get_Super_Device_Services() {
+  const std::set<dev_t> super_devices = Get_Super_Devices();
+  std::vector<std::string> running_services;
+  std::vector<std::string> super_services;
+  if (super_devices.empty()) return super_services;
+
+  if (__system_property_foreach(Collect_Init_Service_Property, &running_services) != 0) {
+    LOGERR("Unable to enumerate init services before dynamic partition update\n");
+    return super_services;
+  }
+
+  for (const auto& service : running_services) {
+    const int pid = android::base::GetIntProperty<int>("init.svc_debug_pid." + service, -1);
+    if (pid > 0 && Process_Uses_Super_Device(pid, super_devices)) {
+      LOGINFO("Stopping service %s because pid %d uses a dynamic partition\n", service.c_str(),
+              pid);
+      super_services.push_back(service);
+    }
+  }
+  return super_services;
+}
+
+static void Set_Init_Service_State(const std::vector<std::string>& services, const char* action,
+                                   const char* expected_state, std::chrono::milliseconds timeout) {
+  for (const auto& service : services) {
+    if (!android::base::SetProperty(std::string("ctl.") + action, service)) {
+      LOGERR("Unable to request %s for init service %s\n", action, service.c_str());
+    }
+  }
+  for (const auto& service : services) {
+    if (!android::base::WaitForProperty("init.svc." + service, expected_state, timeout)) {
+      LOGERR("Timed out waiting for init service %s to become %s\n", service.c_str(),
+             expected_state);
+    }
+  }
 }
 
 int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
@@ -320,8 +453,20 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 			ret_val = INSTALL_CORRUPT;
 		} else {
 			ret_val = Prepare_Update_Binary(Zip);
-			if (ret_val == INSTALL_SUCCESS)
-				ret_val = Run_Update_Binary(path, wipe_cache, UPDATE_BINARY_ZIP_TYPE);
+      if (ret_val == INSTALL_SUCCESS && _isUpdatePkg && PartitionManager.Get_Super_Status()) {
+        const std::vector<std::string> services_to_restart = Get_Super_Device_Services();
+        Set_Init_Service_State(services_to_restart, "stop", "stopped", std::chrono::seconds(2));
+
+        gui_msg("unmount_dynamic_partitions=Unmounting dynamic partitions...");
+        if (!PartitionManager.Unmap_Super_Devices()) {
+          gui_err("unmount_dynamic_partitions_err=Failed unmapping dynamic partitions");
+          ret_val = INSTALL_ERROR;
+        }
+
+        Set_Init_Service_State(services_to_restart, "start", "running", std::chrono::seconds(5));
+      }
+      if (ret_val == INSTALL_SUCCESS)
+        ret_val = Run_Update_Binary(path, wipe_cache, UPDATE_BINARY_ZIP_TYPE);
 		}
 	} else {
 		std::string ab_binary_name(AB_OTA);
