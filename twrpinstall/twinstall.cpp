@@ -453,20 +453,37 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 			ret_val = INSTALL_CORRUPT;
 		} else {
 			ret_val = Prepare_Update_Binary(Zip);
-      if (ret_val == INSTALL_SUCCESS && _isUpdatePkg && PartitionManager.Get_Super_Status()) {
-        const std::vector<std::string> services_to_restart = Get_Super_Device_Services();
-        Set_Init_Service_State(services_to_restart, "stop", "stopped", std::chrono::seconds(2));
+			std::vector<std::string> services_to_restart;
+			if (ret_val == INSTALL_SUCCESS && _isUpdatePkg && PartitionManager.Get_Super_Status()) {
+				services_to_restart = Get_Super_Device_Services();
+				Set_Init_Service_State(services_to_restart, "stop", "stopped", std::chrono::seconds(2));
 
-        gui_msg("unmount_dynamic_partitions=Unmounting dynamic partitions...");
-        if (!PartitionManager.Unmap_Super_Devices()) {
-          gui_err("unmount_dynamic_partitions_err=Failed unmapping dynamic partitions");
-          ret_val = INSTALL_ERROR;
-        }
+				bool all_stopped = true;
+				for (const auto& svc : services_to_restart) {
+					if (android::base::GetProperty("init.svc." + svc, "") != "stopped") {
+						all_stopped = false;
+						break;
+					}
+				}
 
-        Set_Init_Service_State(services_to_restart, "start", "running", std::chrono::seconds(5));
-      }
-      if (ret_val == INSTALL_SUCCESS)
-        ret_val = Run_Update_Binary(path, wipe_cache, UPDATE_BINARY_ZIP_TYPE);
+				if (!all_stopped) {
+					gui_err("unmount_dynamic_partitions_err=Failed to stop services using dynamic partitions");
+					ret_val = INSTALL_ERROR;
+				} else {
+					gui_msg("unmount_dynamic_partitions=Unmounting dynamic partitions...");
+					if (!PartitionManager.Unmap_Super_Devices()) {
+						gui_err("unmount_dynamic_partitions_err=Failed unmapping dynamic partitions");
+						ret_val = INSTALL_ERROR;
+					} else {
+						gui_warn("unmount_dynamic_partitions_warn=Dynamic partitions were unmapped; reboot recovery before flashing additional zips.");
+					}
+				}
+			}
+			if (ret_val == INSTALL_SUCCESS)
+				ret_val = Run_Update_Binary(path, wipe_cache, UPDATE_BINARY_ZIP_TYPE);
+			if (!services_to_restart.empty()) {
+				Set_Init_Service_State(services_to_restart, "start", "running", std::chrono::seconds(5));
+			}
 		}
 	} else {
 		std::string ab_binary_name(AB_OTA);
