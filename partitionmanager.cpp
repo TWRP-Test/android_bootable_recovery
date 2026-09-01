@@ -3796,7 +3796,8 @@ void TWPartitionManager::Unlock_Block_Partitions() {
 					continue;
 				}
 				if (ioctl(fd, BLKROSET, &OFF) == -1) {
-					LOGERR("Unable to unlock %s: %s\n", block_device.c_str());
+					const int err = errno;
+					LOGERR("Unable to unlock %s: %s\n", block_device.c_str(), strerror(err));
 					close(fd);
 					continue;
 				}
