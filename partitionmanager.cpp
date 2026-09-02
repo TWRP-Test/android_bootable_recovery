@@ -3786,14 +3786,19 @@ void TWPartitionManager::Unlock_Block_Partitions() {
 	if (d != NULL) {
 		struct dirent* de;
 		while ((de = readdir(d)) != NULL) {
-			if (de->d_type == DT_BLK) {
+			// BLKROSET applies to physical block devices. Calling it on a
+			// device-mapper node can keep the logical partition busy during
+			// update_dynamic_partitions().
+			if (de->d_type == DT_BLK && strncmp(de->d_name, "dm-", 3) != 0) {
 				std::string block_device = block_path + de->d_name;
 				if ((fd = open(block_device.c_str(), O_RDONLY | O_CLOEXEC)) < 0) {
 					LOGERR("unable to open block device %s: %s\n", block_device.c_str(), strerror(errno));
 					continue;
 				}
 				if (ioctl(fd, BLKROSET, &OFF) == -1) {
-					LOGERR("Unable to unlock %s: %s\n", block_device.c_str());
+					const int err = errno;
+					LOGERR("Unable to unlock %s: %s\n", block_device.c_str(), strerror(err));
+					close(fd);
 					continue;
 				}
 				close(fd);
