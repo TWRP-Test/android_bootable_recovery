@@ -2,23 +2,10 @@ LOCAL_PATH := $(call my-dir)
 
 RELINK := $(LOCAL_PATH)/relink.sh
 
-#dummy file to trigger required modules
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := teamwin
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/
-
 # Manage list
 RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/bu
 
 RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/sh
-
-LOCAL_POST_INSTALL_CMD += $(hide) if [ -e "$(TARGET_RECOVERY_ROOT_OUT)/system/bin/egrep" ]; then \
-							rm $(TARGET_RECOVERY_ROOT_OUT)/system/bin/egrep; fi; ln -s $(TARGET_RECOVERY_ROOT_OUT)/system/bin/grep $(TARGET_RECOVERY_ROOT_OUT)/system/bin/egrep; \
-							if [ -e "$(TARGET_RECOVERY_ROOT_OUT)/system/bin/fgrep" ]; then \
-							rm $(TARGET_RECOVERY_ROOT_OUT)/system/bin/fgrep; fi; ln -s $(TARGET_RECOVERY_ROOT_OUT)/system/bin/grep $(TARGET_RECOVERY_ROOT_OUT)/system/bin/fgrep;
 
 ifneq ($(wildcard system/libziparchive/Android.bp),)
 	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/unzip

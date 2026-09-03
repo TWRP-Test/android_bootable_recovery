@@ -613,7 +613,6 @@ cc_binary {
         "bc",
         "mke2fs.conf",
         "pigz",
-        "teamwin",
         "twrp",
         "fsck.fat",
         "fatlabel",
