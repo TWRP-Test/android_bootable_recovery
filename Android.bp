@@ -695,8 +695,8 @@ cc_binary {
             "magiskboot",
         ],
         default: [],
-    }) + select(soong_config_variable("twrpGlobalVars", "no_network"), {
-        false: [
+    }) + select(soong_config_variable("twrpGlobalVars", "include_wifi"), {
+        true: [
             "index.html",
             "microhttpd",
             "microhttpd.rc",
