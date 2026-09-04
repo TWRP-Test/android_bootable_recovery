@@ -62,7 +62,7 @@ bool twrpRepacker::Backup_Image_For_Repack(TWPartition* Part, const std::string&
 	part_settings.adbbackup = false;
 	part_settings.generate_digest = false;
 	part_settings.generate_md5 = false;
-	part_settings.PM_Method = PM_BACKUP;
+	part_settings.PM_Method = PartitionManagerOp::PM_BACKUP;
 	part_settings.progress = NULL;
 	pid_t not_a_pid = 0;
 	if (!Part->Backup(&part_settings, &not_a_pid))
@@ -117,7 +117,7 @@ std::string twrpRepacker::Unpack_Image(const std::string& Source_Path, const std
 			if (start != std::string::npos) {
 				auto end = magisk_unpack_output.find(']', start);
 				if (end != std::string::npos) {
-					ramdisk_format = std::move(magisk_unpack_output.substr(start + 1, end - start - 1));
+					ramdisk_format = magisk_unpack_output.substr(start + 1, end - start - 1);
 				}
 		}
 	}

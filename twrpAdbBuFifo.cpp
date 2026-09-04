@@ -1,19 +1,19 @@
 /*
-        Copyright 2013 to 2017 TeamWin
-        This file is part of TWRP/TeamWin Recovery Project.
+    Copyright 2013 to 2017 TeamWin
+    This file is part of TWRP/TeamWin Recovery Project.
 
-        TWRP is free software: you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation, either version 3 of the License, or
-        (at your option) any later version.
+    TWRP is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
-        TWRP is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
+    TWRP is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-        You should have received a copy of the GNU General Public License
-        along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License
+    along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #define __STDC_FORMAT_MACROS 1
@@ -276,7 +276,7 @@ bool twrpAdbBuFifo::Restore_ADB_Backup(void) {
 					part_settings.partition_count = partition_count;
 					part_settings.adbbackup = true;
 					part_settings.adb_compression = twimghdr.compressed;
-					part_settings.PM_Method = PM_RESTORE;
+					part_settings.PM_Method = PartitionManagerOp::PM_RESTORE;
 					ProgressTracking progress(part_settings.total_restore_size);
 					part_settings.progress = &progress;
 					if (!PartitionManager.Restore_Partition(&part_settings)) {
@@ -326,7 +326,7 @@ bool twrpAdbBuFifo::Restore_ADB_Backup(void) {
 					part_settings.adbbackup = true;
 					part_settings.adb_compression = twimghdr.compressed;
 					part_settings.total_restore_size += part_settings.Part->Get_Restore_Size(&part_settings);
-					part_settings.PM_Method = PM_RESTORE;
+					part_settings.PM_Method = PartitionManagerOp::PM_RESTORE;
 					ProgressTracking progress(part_settings.total_restore_size);
 					part_settings.progress = &progress;
 					if (!PartitionManager.Restore_Partition(&part_settings)) {
