@@ -280,7 +280,6 @@ TWPartition::TWPartition() {
     Mount_Options = "";
     Format_Block_Size = 0;
     Ignore_Blkid = false;
-    Crypto_Key_Location = "";
     MTP_Storage_ID = 0;
     Can_Flash_Img = false;
     Mount_Read_Only = false;
@@ -720,35 +719,15 @@ void TWPartition::Setup_Data_Partition(bool Display_Error) {
         Decrypted_Block_Device = crypto_blkdev;
         LOGINFO("Data already decrypted, new block device: '%s'\n", crypto_blkdev.c_str());
 #ifndef TW_PREPARE_DATA_MEDIA_EARLY
-    if (datamedia)
-        Setup_Data_Media();
+        if (datamedia)
+            Setup_Data_Media();
 #endif
-    DataManager::SetValue(TW_IS_ENCRYPTED, 0);
+        DataManager::SetValue(TW_IS_ENCRYPTED, 0);
     } else if (!Mount(false)) {
-        //		if (Is_Present) {
-        //			if (Key_Directory.empty()) {
-        //				set_partition_data(Use_Original_Path ? Original_Path.c_str() : Actual_Block_Device.c_str(), Crypto_Key_Location.c_str());
-        //				if (cryptfs_check_footer() == 0) {
-        //					Is_Encrypted = true;
-        //					Is_Decrypted = false;
-        //					Can_Be_Mounted = false;
-        //					Current_File_System = "emmc";
-        //					Setup_Image();
-        //					DataManager::SetValue(TW_CRYPTO_PWTYPE, cryptfs_get_password_type());
-        //					DataManager::SetValue("tw_crypto_pwtype_0", cryptfs_get_password_type());
-        //					DataManager::SetValue(TW_CRYPTO_PASSWORD, "");
-        //					DataManager::SetValue("tw_crypto_display", "");
-        //					if (datamedia)
-        //						Setup_Data_Media();
-        //				} else {
-        //					gui_err("mount_data_footer=Could not mount /data and unable to find crypto footer.");
-        //				}
-        //			} else {
         Is_Encrypted = true;
         Is_Decrypted = false;
         if (datamedia)
             Setup_Data_Media();
-        //			}
         if (Key_Directory.empty()) {
             LOGERR("Primary block device '%s' for mount point '%s' is not present!\n",
                    Primary_Block_Device.c_str(), Mount_Point.c_str());
@@ -952,19 +931,16 @@ void TWPartition::Apply_TW_Flag(const unsigned flag, std::string_view str, const
         case TWFLAG_NOTRIM:
         case TWFLAG_VOLDMANAGED:
         case TWFLAG_RESIZE:
+        case TWFLAG_ENCRYPTABLE:
+        case TWFLAG_FORCEENCRYPT:
             // Do nothing
             break;
         case TWFLAG_DISPLAY:
             Display_Name = str;
             break;
-        case TWFLAG_ENCRYPTABLE:
-        case TWFLAG_FORCEENCRYPT:
-            Crypto_Key_Location = str;
-            break;
-        case TWFLAG_FILEENCRYPTION:
-            // This flag isn't used by TWRP but is needed in 9.0 FBE decrypt
-            // fileencryption=ice:aes-256-heh
-        {
+        // This flag isn't used by TWRP but is needed in 9.0 FBE decrypt
+        // fileencryption=ice:aes-256-heh
+        case TWFLAG_FILEENCRYPTION: {
             std::string FBE(str);
             size_t colon_loc = FBE.find(":");
             if (colon_loc == std::string::npos) {
@@ -2105,7 +2081,6 @@ bool TWPartition::Wipe_EXTFS(std::string File_System) {
         return Wipe_RMRF();
 
     int ret;
-    bool NeedPreserveFooter = true;
 
     Find_Actual_Block_Device();
     if (!Is_Present) {
@@ -2114,21 +2089,9 @@ bool TWPartition::Wipe_EXTFS(std::string File_System) {
         return false;
     }
 
-    /**
-     * On decrypted devices, IOCTL_Get_Block_Size calculates size on device mapper,
-     * so there's no need to preserve footer.
-     */
-    if ((Is_Decrypted && !Decrypted_Block_Device.empty()) ||
-        Crypto_Key_Location != "footer") {
-        NeedPreserveFooter = false;
-    }
-
     unsigned long long dev_sz = TWFunc::IOCTL_Get_Block_Size(Actual_Block_Device.c_str());
     if (!dev_sz)
         return false;
-
-    if (NeedPreserveFooter)
-        Length < 0 ? dev_sz += Length : dev_sz -= CRYPT_FOOTER_OFFSET;
 
     std::string size_str = std::to_string(dev_sz / 4096);
     std::string cmd;
@@ -2172,8 +2135,6 @@ bool TWPartition::Wipe_EXTFS(std::string File_System) {
         LOGINFO("e2fsdroid not present\n");
     }
 
-    if (NeedPreserveFooter)
-        Wipe_Crypto_Key();
     Current_File_System = File_System;
     Recreate_AndSec_Folder();
     gui_msg("done=Done.");
@@ -2183,7 +2144,6 @@ bool TWPartition::Wipe_EXTFS(std::string File_System) {
 bool TWPartition::Wipe_EXT4() {
 #ifdef USE_EXT4
     int ret;
-    bool NeedPreserveFooter = true;
 
     if (!UnMount(true))
         return false;
@@ -2195,21 +2155,9 @@ bool TWPartition::Wipe_EXT4() {
         return false;
     }
 
-    /**
-     * On decrypted devices, IOCTL_Get_Block_Size calculates size on device mapper,
-     * so there's no need to preserve footer.
-     */
-    if ((Is_Decrypted && !Decrypted_Block_Device.empty()) ||
-        Crypto_Key_Location != "footer") {
-        NeedPreserveFooter = false;
-    }
-
     unsigned long long dev_sz = TWFunc::IOCTL_Get_Block_Size(Actual_Block_Device.c_str());
     if (!dev_sz)
         return false;
-
-    if (NeedPreserveFooter)
-        Length < 0 ? dev_sz += Length : dev_sz -= CRYPT_FOOTER_OFFSET;
 
     char *secontext = nullptr;
 
@@ -2225,8 +2173,6 @@ bool TWPartition::Wipe_EXT4() {
         gui_msg(Msg(msg::kError, "unable_to_wipe=Unable to wipe {1}.")(Display_Name));
         return false;
     } else {
-        if (NeedPreserveFooter)
-            Wipe_Crypto_Key();
         std::string sedir = Mount_Point + "/lost+found";
         PartitionManager.Mount_By_Path(sedir.c_str(), true);
         rmdir(sedir.c_str());
@@ -2309,7 +2255,6 @@ bool TWPartition::Wipe_F2FS() {
         return Wipe_RMRF();
     }
 
-    bool NeedPreserveFooter = true;
     bool needs_casefold = false;
 
     Find_Actual_Block_Device();
@@ -2327,9 +2272,6 @@ bool TWPartition::Wipe_F2FS() {
     if (!dev_sz)
         return false;
 
-    if (NeedPreserveFooter)
-        Length < 0 ? dev_sz += Length : dev_sz -= CRYPT_FOOTER_OFFSET;
-
     // Project ID
     f2fs_command += " -O project_quota,extra_attr";
 
@@ -2345,19 +2287,9 @@ bool TWPartition::Wipe_F2FS() {
         f2fs_command += " && sload_f2fs -t /data " + Actual_Block_Device;
     }
 
-    /**
-     * On decrypted devices, IOCTL_Get_Block_Size calculates size on device mapper,
-     * so there's no need to preserve footer.
-     */
-    if ((Is_Decrypted && !Decrypted_Block_Device.empty()) ||
-        Crypto_Key_Location != "footer") {
-        NeedPreserveFooter = false;
-    }
     LOGINFO("make_f2fs command: %s\n", f2fs_command.c_str());
 
     if (TWFunc::Exec_Cmd(f2fs_command) == 0) {
-        if (NeedPreserveFooter)
-            Wipe_Crypto_Key();
         Recreate_AndSec_Folder();
         gui_msg("done=Done.");
         return true;
@@ -2447,50 +2379,6 @@ bool TWPartition::Wipe_Data_Without_Wiping_Media_Func(const std::string & parent
     }
     gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Mount_Point)(strerror(errno)));
     return false;
-}
-
-void TWPartition::Wipe_Crypto_Key() {
-    Find_Actual_Block_Device();
-    if (Crypto_Key_Location.empty())
-        return;
-    else if (Crypto_Key_Location == "footer") {
-        int fd = open(Actual_Block_Device.c_str(), O_RDWR);
-        if (fd < 0) {
-            gui_print_color("warning", "Unable to open '%s' to wipe crypto key\n", Actual_Block_Device.c_str());
-            return;
-        }
-
-        unsigned int block_count;
-        if ((ioctl(fd, BLKGETSIZE, &block_count)) == -1) {
-            gui_print_color("warning", "Unable to get block size for wiping crypto footer.\n");
-        } else {
-            int newlen = Length < 0 ? -Length : CRYPT_FOOTER_OFFSET;
-            off64_t offset = (static_cast<off64_t>(block_count) * 512) - newlen;
-            if (lseek64(fd, offset, SEEK_SET) == -1) {
-                gui_print_color("warning", "Unable to lseek64 for wiping crypto footer.\n");
-            } else {
-                std::unique_ptr<char[]> buffer(new(std::nothrow) char[newlen]());
-                if (!buffer) {
-                    gui_print_color("warning", "Failed to malloc for wiping crypto footer.\n");
-                } else {
-                    int ret = write(fd, buffer.get(), newlen);
-                    if (ret != newlen) {
-                        gui_print_color("warning", "Failed to wipe crypto footer.\n");
-                    } else {
-                        LOGINFO("Successfully wiped crypto footer.\n");
-                    }
-                }
-            }
-        }
-        close(fd);
-    } else {
-        if (TWFunc::IOCTL_Get_Block_Size(Crypto_Key_Location.c_str()) >= 16384LLU) {
-            std::string Command = "dd of='" + Crypto_Key_Location + "' if=/dev/zero bs=16384 count=1";
-            TWFunc::Exec_Cmd(Command);
-        } else {
-            LOGINFO("Crypto key location reports size < 16K so not wiping crypto footer.\n");
-        }
-    }
 }
 
 bool TWPartition::Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_pid) {
@@ -3306,164 +3194,6 @@ int TWPartition::Check_Lifetime_Writes() {
     }
     Mount_Read_Only = original_read_only;
     return ret;
-}
-
-int TWPartition::Decrypt_Adopted() {
-#ifdef TW_INCLUDE_CRYPTO
-    int ret = 1;
-    Is_Adopted_Storage = false;
-    std::string Adopted_Key_File = "";
-
-    if (!Removable)
-        return ret;
-
-    android::base::unique_fd fd(open(Alternate_Block_Device.c_str(), O_RDONLY));
-    if (!fd.ok()) {
-        LOGINFO("failed to open '%s'\n", Alternate_Block_Device.c_str());
-        return ret;
-    }
-    char type_guid[80];
-    char part_guid[80];
-
-    uint32_t p_num;
-    size_t last_digit = Primary_Block_Device.find_last_not_of("0123456789");
-    if ((last_digit != std::string::npos) && (last_digit != Primary_Block_Device.length() - 1))
-        p_num = atoi(Primary_Block_Device.substr(last_digit + 1).c_str()) + 1;
-    else
-        p_num = 2;
-
-    if (gpt_disk_get_partition_info(fd.get(), p_num, type_guid, part_guid) == 0) {
-        LOGINFO("type: '%s'\n", type_guid);
-        LOGINFO("part: '%s'\n", part_guid);
-        Adopted_GUID = part_guid;
-        LOGINFO("Adopted_GUID '%s'\n", Adopted_GUID.c_str());
-        if (std::string_view(type_guid) == TWGptAndroidExpand) {
-            LOGINFO("android_expand found\n");
-            Adopted_Key_File = std::format("/data/misc/vold/expand_{}.key", part_guid);
-            if (TWFunc::Path_Exists(Adopted_Key_File)) {
-                Is_Adopted_Storage = true;
-                /* Until we find a use case for this, I think it is safe
-                 * to disable USB Mass Storage whenever adopted storage
-                 * is present.
-                 */
-                if (p_num == 2) {
-                    // TODO: Properly detect mixed vs fully adopted storage. Maybe this
-                    // should be moved to partitionmanager instead, and disable after
-                    // checking all partitions. Also the presence of adopted storage does
-                    // not necessarily mean it's being used as Internal Storage
-                    LOGINFO("Detected adopted storage, disabling USB mass storage mode\n");
-                    DataManager::SetValue("tw_has_usb_storage", 0);
-                }
-            }
-        }
-    }
-
-    if (Is_Adopted_Storage) {
-        std::string Adopted_Block_Device = Alternate_Block_Device + "p" + TWFunc::to_string(p_num);
-        if (!TWFunc::Path_Exists(Adopted_Block_Device)) {
-            Adopted_Block_Device = Alternate_Block_Device + TWFunc::to_string(p_num);
-            if (!TWFunc::Path_Exists(Adopted_Block_Device)) {
-                LOGINFO("Adopted block device does not exist\n");
-                return ret;
-            }
-        }
-        LOGINFO("key file is '%s', block device '%s'\n", Adopted_Key_File.c_str(), Adopted_Block_Device.c_str());
-        char crypto_blkdev[MAXPATHLEN];
-        std::string thekey;
-        int fdkey = open(Adopted_Key_File.c_str(), O_RDONLY);
-        if (fdkey < 0) {
-            LOGINFO("failed to open key file\n");
-            return ret;
-        }
-        char buf[512];
-        ssize_t n;
-        while ((n = read(fdkey, &buf[0], sizeof(buf))) > 0) {
-            thekey.append(buf, n);
-        }
-        close(fdkey);
-        // unsigned char* key = (unsigned char*) thekey.data();
-        // cryptfs_revert_ext_volume(part_guid);
-
-        // ret = cryptfs_setup_ext_volume(part_guid, Adopted_Block_Device.c_str(), key, thekey.size(), crypto_blkdev);
-        if (ret == 0) {
-            LOGINFO("adopted storage new block device: '%s'\n", crypto_blkdev);
-            Decrypted_Block_Device = crypto_blkdev;
-            Is_Decrypted = true;
-            Is_Encrypted = true;
-            Find_Actual_Block_Device();
-            if (!Mount_Storage_Retry(false)) {
-                LOGERR("Failed to mount decrypted adopted storage device\n");
-                Is_Decrypted = false;
-                Is_Encrypted = false;
-                // cryptfs_revert_ext_volume(part_guid);
-                ret = 1;
-            } else {
-                UnMount(false);
-                Has_Android_Secure = false;
-                Symlink_Path = "";
-                Symlink_Mount_Point = "";
-                Backup_Name = Mount_Point.substr(1);
-                Backup_Path = Mount_Point;
-                TWPartition *sdext = PartitionManager.Find_Partition_By_Path("/sd-ext");
-                if (sdext && sdext->Actual_Block_Device == Adopted_Block_Device) {
-                    LOGINFO("Removing /sd-ext from partition list due to adopted storage\n");
-                    PartitionManager.Remove_Partition_By_Path("/sd-ext");
-                }
-                Setup_Data_Media();
-                Wipe_Available_in_GUI = true;
-                Wipe_During_Factory_Reset = true;
-                Can_Be_Backed_Up = true;
-                Can_Encrypt_Backup = true;
-                Use_Userdata_Encryption = true;
-                Is_Storage = true;
-                Storage_Name = "Adopted Storage";
-                Is_SubPartition = true;
-                SubPartition_Of = "/data";
-                PartitionManager.Add_MTP_Storage(MTP_Storage_ID);
-                DataManager::SetValue("tw_has_adopted_storage", 1);
-            }
-        } else {
-            LOGERR("Failed to setup adopted storage decryption\n");
-        }
-    }
-    return ret;
-#else
-    LOGINFO("Decrypt_Adopted: no crypto support\n");
-    return 1;
-#endif
-}
-
-void TWPartition::Revert_Adopted() {
-#ifdef TW_INCLUDE_CRYPTO
-    if (!Adopted_GUID.empty()) {
-        PartitionManager.Remove_MTP_Storage(Mount_Point);
-        UnMount(false);
-        // cryptfs_revert_ext_volume(Adopted_GUID.c_str());
-        Is_Adopted_Storage = false;
-        Is_Encrypted = false;
-        Is_Decrypted = false;
-        Decrypted_Block_Device = "";
-        Find_Actual_Block_Device();
-        Wipe_During_Factory_Reset = false;
-        Can_Be_Backed_Up = false;
-        Can_Encrypt_Backup = false;
-        Use_Userdata_Encryption = false;
-        Is_SubPartition = false;
-        SubPartition_Of = "";
-        Has_Data_Media = false;
-        Storage_Path = Mount_Point;
-        if (!Symlink_Mount_Point.empty()) {
-            TWPartition *Dat = PartitionManager.Find_Partition_By_Path("/data");
-            if (Dat) {
-                Dat->UnMount(false);
-                Dat->Symlink_Mount_Point = Symlink_Mount_Point;
-            }
-            Symlink_Mount_Point = "";
-        }
-    }
-#else
-    LOGINFO("Revert_Adopted: no crypto support\n");
-#endif
 }
 
 void TWPartition::Set_Backup_FileName(std::string fname) {

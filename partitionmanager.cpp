@@ -607,48 +607,45 @@ void TWPartitionManager::Decrypt_Data() {
             Set_Crypto_Type("file");
 #ifdef TW_INCLUDE_FBE_METADATA_DECRYPT
 #ifdef USE_FSCRYPT
-    std::vector<std::string> user_devices;
-    std::vector<bool> device_aliased;
-    if (android::vold::fscrypt_mount_metadata_encrypted(data->Actual_Block_Device, data->Mount_Point, false, false,
-                                                        data->Current_File_System, false, user_devices, device_aliased,
-                                                        0, TWFunc::Path_Exists(additional_fstab)
-                                                               ? additional_fstab
-                                                               : "")) {
-        std::string crypto_blkdev = android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "error");
-        data->Decrypted_Block_Device = crypto_blkdev;
-        LOGINFO("Successfully decrypted metadata encrypted data partition with new block device: '%s'\n",
-                crypto_blkdev.c_str());
+            std::vector<std::string> user_devices;
+            std::vector<bool> device_aliased;
+            if (android::vold::fscrypt_mount_metadata_encrypted(
+                    data->Actual_Block_Device, data->Mount_Point, false, false,
+                    data->Current_File_System, false, user_devices, device_aliased, 0,
+                    TWFunc::Path_Exists(additional_fstab) ? additional_fstab : "")) {
+                    std::string crypto_blkdev = android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "error");
+                    data->Decrypted_Block_Device = crypto_blkdev;
+                    LOGINFO("Successfully decrypted metadata encrypted data partition with new block device: '%s'\n",
+                            crypto_blkdev.c_str());
 #endif
-    data->Is_Decrypted = true; // Needed to make the mount function work correctly
-    int retry_count = 10;
-    while (!data->Mount(false) && --retry_count)
-        usleep(500);
-    if (data->Mount(false)) {
-        if (!data->Decrypt_FBE_DE())
-            LOGERR("Unable to decrypt FBE device\n");
-    } else {
-        LOGINFO("Failed to mount data after metadata decrypt\n");
-    }
+                    data->Is_Decrypted = true; // Needed to make the mount function work correctly
+                    int retry_count = 10;
+                    while (!data->Mount(false) && --retry_count)
+                        usleep(500);
+                    if (data->Mount(false)) {
+                        if (!data->Decrypt_FBE_DE())
+                            LOGERR("Unable to decrypt FBE device\n");
+                    } else {
+                        LOGINFO("Failed to mount data after metadata decrypt\n");
+                    }
             } else {
-        LOGINFO("Unable to decrypt metadata encryption\n");
-    }
+                LOGINFO("Unable to decrypt metadata encryption\n");
+            }
 #else
-    LOGERR("Metadata FBE decrypt support not present in this TWRP\n");
+            LOGERR("Metadata FBE decrypt support not present in this TWRP\n");
 #endif
         }
-    if (data->Is_FBE) {
-        if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) == 0) {
-            if (Decrypt_Device("!") == 0) {
-                gui_msg("decrypt_success=Successfully decrypted with default password.");
-                DataManager::SetValue(TW_IS_ENCRYPTED, 0);
-            } else {
-                gui_err("unable_to_decrypt=Unable to decrypt with default password.");
+        if (data->Is_FBE) {
+            if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) == 0) {
+                if (Decrypt_Device("!") == 0) {
+                    gui_msg("decrypt_success=Successfully decrypted with default password.");
+                    DataManager::SetValue(TW_IS_ENCRYPTED, 0);
+                } else {
+                    gui_err("unable_to_decrypt=Unable to decrypt with default password.");
+                }
             }
         }
     }
-    }
-    if (data && (!data->Is_Encrypted || data->Is_Decrypted))
-        Decrypt_Adopted();
 #endif
 }
 
@@ -728,8 +725,6 @@ void TWPartitionManager::Output_Partition(TWPartition *Part) {
         printf("   Alternate_Block_Device: %s\n", Part->Alternate_Block_Device.c_str());
     if (!Part->Decrypted_Block_Device.empty())
         printf("   Decrypted_Block_Device: %s\n", Part->Decrypted_Block_Device.c_str());
-    if (!Part->Crypto_Key_Location.empty())
-        printf("   Crypto_Key_Location: %s\n", Part->Crypto_Key_Location.c_str());
     if (Part->Length != 0)
         printf("   Length: %i\n", Part->Length);
     if (!Part->Display_Name.empty())
@@ -2112,95 +2107,48 @@ int TWPartitionManager::Decrypt_Device(std::string Password, int user_id) {
     android::base::SetProperty("twrp.mount_to_decrypt", "1");
 
     Set_Crypto_State();
-    Set_Crypto_Type("block");
 
     if (DataManager::GetIntValue(TW_IS_FBE)) {
 #ifdef TW_INCLUDE_FBE
-    if (!Mount_By_Path("/data", true)) // /data has to be mounted for FBE
-        return -1;
+        if (!Mount_By_Path("/data", true)) // /data has to be mounted for FBE
+            return -1;
 
-    bool user_need_decrypt = false;
-    for (users_struct &user: Users_List) {
-        if (atoi(user.userId.c_str()) == user_id && !user.isDecrypted) {
-            user_need_decrypt = true;
+        bool user_need_decrypt = false;
+        for (users_struct &user: Users_List) {
+            if (atoi(user.userId.c_str()) == user_id && !user.isDecrypted) {
+                user_need_decrypt = true;
+            }
         }
-    }
-    if (!user_need_decrypt) {
-        LOGINFO("User %d does not require decryption\n", user_id);
-        return 0;
-    }
-
-    int retry_count = 10;
-    while (!TWFunc::Path_Exists("/data/system/users/gatekeeper.password.key") && --retry_count)
-        usleep(2000); // A small sleep is needed after mounting /data to ensure reliable decrypt...maybe because of DE?
-    gui_msg(Msg("decrypting_user_fbe=Attempting to decrypt FBE for user {1}...")(user_id));
-    if (android::keystore::Decrypt_User(user_id, Password)) {
-        gui_msg(Msg("decrypt_user_success_fbe=User {1} Decrypted Successfully")(user_id));
-        Mark_User_Decrypted(user_id);
-        if (user_id == 0) {
-            Post_Decrypt("");
+        if (!user_need_decrypt) {
+            LOGINFO("User %d does not require decryption\n", user_id);
+            return 0;
         }
 
-        return 0;
-    } else {
-        gui_msg(Msg(msg::kError, "decrypt_user_fail_fbe=Failed to decrypt user {1}")(user_id));
-    }
+        int retry_count = 10;
+        while (!TWFunc::Path_Exists("/data/system/users/gatekeeper.password.key") && --retry_count)
+            usleep(2000); // A small sleep is needed after mounting /data to ensure reliable decrypt...maybe because of DE?
+        gui_msg(Msg("decrypting_user_fbe=Attempting to decrypt FBE for user {1}...")(user_id));
+        if (android::keystore::Decrypt_User(user_id, Password)) {
+            gui_msg(Msg("decrypt_user_success_fbe=User {1} Decrypted Successfully")(user_id));
+            Mark_User_Decrypted(user_id);
+            if (user_id == 0) {
+                Post_Decrypt("");
+            }
+
+            return 0;
+        } else {
+            gui_msg(Msg(msg::kError, "decrypt_user_fail_fbe=Failed to decrypt user {1}")(user_id));
+        }
 #else
-    LOGERR("FBE support is not present\n");
+        LOGERR("FBE support is not present\n");
 #endif
+        return -1;
+    }
     return -1;
-    }
-
-    if (android::base::GetBoolProperty("twrp.decrypt.done", false)) {
-        LOGINFO("Data has no decryption required\n");
-        return 0;
-    }
-
-    int pwret = -1;
-    pid_t pid = fork();
-    if (pid < 0) {
-        LOGERR("fork failed\n");
-        return -1;
-    } else if (pid == 0) {
-        // Child process
-        char cPassword[255];
-        strcpy(cPassword, Password.c_str());
-        //		int ret = cryptfs_check_passwd(cPassword);
-        exit(0);
-    } else {
-        // Parent
-        int status;
-        if (TWFunc::Wait_For_Child_Timeout(pid, &status, "Decrypt", 30))
-            pwret = -1;
-        else
-            pwret = WEXITSTATUS(status) ? -1 : 0;
-    }
-
-    // Unmount any partitions that were needed for decrypt
-    for (TWPartition *partition: Partitions) {
-        if (partition->Mount_To_Decrypt) {
-            partition->UnMount(false);
-        }
-    }
-    android::base::SetProperty("twrp.mount_to_decrypt", "0");
-
-    if (pwret != 0) {
-        gui_err("fail_decrypt=Failed to decrypt data.");
-        return -1;
-    }
-
-    std::string crypto_blkdev = android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "error");
-    if (crypto_blkdev == "error") {
-        LOGERR("Error retrieving decrypted data block device.\n");
-    } else {
-        Post_Decrypt(crypto_blkdev);
-    }
-    return 0;
 #else
     gui_err("no_crypto_support=No crypto support was compiled into this build.");
     return -1;
 #endif
-    return 1;
 }
 
 int TWPartitionManager::Fix_Contexts() {
@@ -2387,10 +2335,6 @@ int TWPartitionManager::Partition_SDCard() {
         gui_err("partition_sd_locate=Unable to locate device to partition.");
         return false;
     }
-
-    // Reverting clears Has_Data_Media, so the rest of the checks come after it.
-    if (SDCard->Is_Adopted_Storage)
-        SDCard->Revert_Adopted();
 
     if (!SDCard->Removable || SDCard->Has_Data_Media) {
         gui_err("partition_sd_locate=Unable to locate device to partition.");
@@ -3123,116 +3067,6 @@ void TWPartitionManager::Translate_Partition_Display_Names() {
     DataManager::SetBackupFolder();
 }
 
-bool TWPartitionManager::Decrypt_Adopted() {
-#ifdef TW_INCLUDE_CRYPTO
-    bool ret = false;
-    if (!Mount_By_Path("/data", false)) {
-        LOGERR("Cannot decrypt adopted storage because /data will not mount\n");
-        return false;
-    }
-
-    std::string path = "/data/system/storage.xml";
-    if (!TWFunc::Check_Xml_Format(path)) {
-        std::string oldpath = path;
-        if (TWFunc::abx_to_xml(oldpath, path)) {
-            LOGINFO("Android 12+: '%s' has been converted into plain text xml (%s).\n", oldpath.c_str(), path.c_str());
-        }
-    }
-
-    DataManager::SetValue("tw_settings_path", TW_STORAGE_PATH);
-    LOGINFO("Decrypt adopted storage starting\n");
-    char *xmlFile = PageManager::LoadFileToBuffer(path, nullptr);
-    xml_document<> *doc = nullptr;
-    xml_node<> *volumes = nullptr;
-    std::string Primary_Storage_UUID = "";
-    if (xmlFile) {
-        LOGINFO("successfully loaded storage.xml\n");
-        doc = new xml_document<>();
-        doc->parse < 0 > (xmlFile);
-        volumes = doc->first_node("volumes");
-        if (volumes) {
-            xml_attribute<> *psuuid = volumes->first_attribute("primaryStorageUuid");
-            if (psuuid) {
-                Primary_Storage_UUID = psuuid->value();
-            }
-        }
-    } else {
-        LOGINFO("No /data/system/storage.xml for adopted storage\n");
-        return false;
-    }
-    for (TWPartition *adopt: Partitions) {
-        if (adopt->Removable && !adopt->Is_Present && adopt->Adopted_Mount_Delay > 0) {
-            // On some devices, the external mmc driver takes some time
-            // to recognize the card, in which case the "actual block device"
-            // would not have been found yet. We wait the specified delay
-            // and then try again.
-            LOGINFO("Sleeping %d seconds for adopted storage.\n", adopt->Adopted_Mount_Delay);
-            sleep(adopt->Adopted_Mount_Delay);
-            adopt->Find_Actual_Block_Device();
-        }
-
-        if (adopt->Removable && adopt->Is_Present) {
-            if (adopt->Decrypt_Adopted() == 0) {
-                ret = true;
-                if (volumes) {
-                    xml_node<> *volume = volumes->first_node("volume");
-                    while (volume) {
-                        xml_attribute<> *guid = volume->first_attribute("partGuid");
-                        if (guid) {
-                            std::string GUID = adopt->Adopted_GUID.c_str();
-                            GUID.insert(8, "-");
-                            GUID.insert(13, "-");
-                            GUID.insert(18, "-");
-                            GUID.insert(23, "-");
-
-                            if (strcasecmp(GUID.c_str(), guid->value()) == 0) {
-                                xml_attribute<> *attr = volume->first_attribute("nickname");
-                                if (attr && attr->value() && strlen(attr->value()) > 0) {
-                                    adopt->Storage_Name = attr->value();
-                                    adopt->Display_Name = adopt->Storage_Name;
-                                    adopt->Backup_Display_Name = adopt->Storage_Name;
-                                    LOGINFO("storage name from storage.xml is '%s'\n", attr->value());
-                                }
-                                attr = volume->first_attribute("fsUuid");
-                                if (attr && !Primary_Storage_UUID.empty() && Primary_Storage_UUID == attr->value()) {
-                                    TWPartition *Dat = Find_Partition_By_Path("/data");
-                                    if (Dat) {
-                                        LOGINFO("Internal storage is found on adopted storage '%s'\n",
-                                                adopt->Display_Name.c_str());
-                                        LOGINFO("Changing '%s' to point to '%s'\n", Dat->Symlink_Mount_Point.c_str(),
-                                                adopt->Storage_Path.c_str());
-                                        adopt->Symlink_Mount_Point = Dat->Symlink_Mount_Point;
-                                        Dat->Symlink_Mount_Point = "";
-                                        // Toggle mounts to ensure that the symlink mount point (probably /sdcard) is mounted to the right location
-                                        Dat->UnMount(false);
-                                        Dat->Mount(false);
-                                        adopt->UnMount(false);
-                                        adopt->Mount(false);
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                        volume = volume->next_sibling("volume");
-                    }
-                }
-                Update_System_Details();
-                Output_Partition(adopt);
-            }
-        }
-    }
-    if (xmlFile) {
-        doc->clear();
-        delete doc;
-        free(xmlFile);
-    }
-    return ret;
-#else
-    LOGINFO("Decrypt_Adopted: no crypto support\n");
-    return false;
-#endif
-}
-
 void TWPartitionManager::Remove_Partition_By_Path(std::string Path) {
     std::string Local_Path = TWFunc::Get_Root_Path(Path);
 
@@ -3337,12 +3171,10 @@ void TWPartitionManager::Handle_Uevent(const Uevent_Block_Data &uevent_data) {
                     partition->Alternate_Block_Device = partition->Primary_Block_Device;
                     partition->Is_Present = true;
                     LOGINFO("Found a match '%s' '%s'\n", uevent_data.block_device.c_str(), device.c_str());
-                    if (!Decrypt_Adopted()) {
-                        LOGINFO("No adopted storage so finding actual block device\n");
-                        partition->Find_Actual_Block_Device();
-                    }
+                    partition->Find_Actual_Block_Device();
                     return;
-                } else if (uevent_data.action == "remove") {
+                }
+                if (uevent_data.action == "remove") {
                     partition->Is_Present = false;
                     partition->Primary_Block_Device = "";
                     partition->Actual_Block_Device = "";

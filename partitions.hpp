@@ -40,8 +40,6 @@
 
 inline constexpr int MAX_FSTAB_LINE_LENGTH = 2048;
 
-inline constexpr int CRYPT_FOOTER_OFFSET = 0x4000;
-
 #define REPACK_ORIG_DIR "/tmp/repackorig/"
 #define REPACK_NEW_DIR "/tmp/repacknew/"
 
@@ -175,10 +173,6 @@ public:
     bool Is_Read_Only(); // Check if system is read-only in TWRP
     int Check_Lifetime_Writes();
 
-    int Decrypt_Adopted();
-
-    void Revert_Adopted();
-
     void Partition_Post_Processing(bool Display_Error); // Apply partition specific settings after fstab processed
     void Set_Backup_FileName(std::string fname); // Set backup filename for partition
     std::string Get_Backup_FileName(); // Get the backup filename for the partition
@@ -195,7 +189,6 @@ public:
     std::string Actual_Block_Device; // Actual block device (one of primary, alternate, or decrypted)
     std::string Backup_Display_Name; // Name displayed in the partition list for backup selection
     bool Is_Present; // Indicates if the partition is currently present as a block device
-    std::string Crypto_Key_Location; // Location of the crypto key used for decrypting encrypted data partitions
     unsigned int MTP_Storage_ID;
     std::string Adopted_GUID;
     unsigned int Adopted_Mount_Delay;
@@ -253,7 +246,6 @@ private:
     bool Wipe_NTFS(); // Uses mkntfs to wipe
     bool Wipe_Data_Without_Wiping_Media(); // Uses rm -rf to wipe but does not wipe /data/media
     bool Wipe_Data_Without_Wiping_Media_Func(const std::string &parent); // Uses rm -rf to wipe but does not wipe /data/media
-    void Wipe_Crypto_Key(); // Wipe crypto key from either footer or block device
     bool Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_pid); // Backs up using tar for file systems
     bool Backup_Image(PartitionSettings *part_settings); // Backs up using raw read/write for emmc memory types
     bool Raw_Read_Write(PartitionSettings *part_settings);
@@ -455,7 +447,6 @@ public:
                              const char *backup_name, const char *backup_default);
 
     void Translate_Partition_Display_Names(); // Updates display names based on translations
-    bool Decrypt_Adopted(); // Attempt to identy and decrypt any adopted storage partitions
     void Remove_Partition_By_Path(std::string Path); // Removes / erases a partition entry from the partition list
     bool Prepare_All_Super_Volumes(); // Prepare all known super volumes from super partition
     bool Flash_Image(std::string &path, std::string &filename);

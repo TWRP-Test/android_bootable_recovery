@@ -137,13 +137,6 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)/libnos_datagram.so
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.keymaster@3.0.so
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libgpt_twrp.so
-    ifeq ($(TARGET_HW_DISK_ENCRYPTION),true)
-        ifeq ($(TARGET_CRYPTFS_HW_PATH),)
-            RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)/libcryptfs_hw.so
-        else
-            RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libcryptfs_hw.so
-        endif
-    endif
     # FBE files
     ifeq ($(TW_INCLUDE_CRYPTO_FBE), true)
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtwrpfscrypt.so

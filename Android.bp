@@ -555,12 +555,7 @@ cc_binary {
 
         "libext4_utils",
         "libft2",
-    ] + select(soong_config_variable("twrpGlobalVars", "supports_hw_fde"), {
-        true: [
-            "libcryptfs_hw",
-        ],
-        default: [],
-    }) + select(soong_config_variable("twrpGlobalVars", "include_libresetprop"), {
+    ] + select(soong_config_variable("twrpGlobalVars", "include_libresetprop"), {
         true: [
             "libresetprop",
         ],
