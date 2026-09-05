@@ -657,5 +657,14 @@
 		<string name="copy_kernel_log">Log del kernel copiato in {1}</string>
 		<string name="include_kernel_log">Includi Log del Kernel</string>
 		<string name="unable_set_boot_slot">Errore nel cambio slot d'avvio del bootloader in {1}</string>
+		<string name="install_kernelsu">Installa KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Installare KernelSU nell’init_boot attivo?</string>
+		<string name="root_tools_backup_note">Prima verrà eseguito il backup dell’immagine originale.</string>
+		<string name="installing_kernelsu">Installazione di KernelSU...</string>
+		<string name="install_kernelsu_complete">Installazione di KernelSU completata</string>
+		<string name="install_magisk">Installa Magisk</string>
+		<string name="install_magisk_confirm">Installare Magisk nello slot attivo?</string>
+		<string name="installing_magisk">Installazione di Magisk...</string>
+		<string name="install_magisk_complete">Installazione di Magisk completata</string>
 	</resources>
 </language>
