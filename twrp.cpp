@@ -217,7 +217,7 @@ static void ProcessRecoveryMode(const bool skip_decryption, startup_hooks* hooks
     LOGINFO("Overriding %s with value: \"0\"\n", prop.c_str());
   }
 #if defined(TW_OVERRIDE_SYSTEM_PROPS)
-  stringstream override_props(TW_OVERRIDE_SYSTEM_PROPS);
+  stringstream override_props(EXPAND(TW_OVERRIDE_SYSTEM_PROPS));
   string current_prop;
 
   std::vector<std::string> partition_list;
