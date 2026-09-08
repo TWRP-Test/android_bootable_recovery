@@ -36,6 +36,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
 #include <cctype>
 #include <algorithm>
 #include <selinux/label.h>
@@ -47,7 +48,7 @@
 
 #include "twrp-functions.hpp"
 #include "oaes/oaes.hpp"
-#include "abx-functions.hpp"
+#include "abx.hpp"
 #include "twcommon.h"
 #include "gui/gui.hpp"
 #include <fs_mgr_priv.h>
@@ -1401,39 +1402,33 @@ bool TWFunc::Check_Xml_Format(const std::string filename) {
 // return true=successful conversion (return the name of the converted file in "result");
 // return false=an error happened (leave "result" alone)
 bool TWFunc::abx_to_xml(const std::string path, std::string &result) {
-	bool res = false;
 	if (!TWFunc::Path_Exists(path))
-		return res;
+		return false;
 
-	std::ifstream infile(path);
-	if (!infile.is_open())
-		return res;
-
-	std::string fname = TWFunc::Get_Filename(path);
-	std::string tmp = "/tmp/converted_xml";
-	if (!TWFunc::Path_Exists(tmp)) {
-		if (mkdir(tmp.c_str(), 0777) != 0)
-			tmp = "/tmp";
+	std::filesystem::path dir = "/tmp/abx2xml";
+	if (!TWFunc::Path_Exists(dir)) {
+		if (mkdir(dir.c_str(), 0700) != 0)
+			dir = "/tmp";
 	}
 
-	std::string tmp_path = tmp + "/" + fname;
-	std::ofstream outfile(tmp_path);
-	if (!outfile.is_open()) {
+	std::filesystem::path tmpl = dir / "abxXXXXXX";
+	int fd = mkstemp(tmpl.string().data());
+	if (fd < 0) {
+		LOGINFO("Error. The abx conversion of %s has failed (mkstemp errno %d).\n",
+				path.c_str(), errno);
+		return false;
+	}
+	close(fd);  // abx2xml() reopens the path itself
+	std::string tmp_path(tmpl);
+
+	if (abx2xml(path, tmp_path, /*in_place=*/false) != 0 ||
+	    !TWFunc::Path_Exists(tmp_path)) {
 		LOGINFO("Error. The abx conversion of %s has failed.\n", path.c_str());
-		infile.close();
-		return res;
+		unlink(tmp_path.c_str());
+		return false;
 	}
-
-	AbxToXml r(infile, outfile);
-	if (r.run() && TWFunc::Path_Exists(tmp_path)) {
-		res = true;
-		result = tmp_path;
-	}
-
-	infile.close();
-	outfile.close();
-
-	return res;
+	result = tmp_path;
+	return true;
 }
 
 std::string GetFstabPath() {

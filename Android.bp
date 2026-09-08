@@ -459,6 +459,7 @@ cc_binary {
         "twrpRepacker.cpp",
         "oaes/oaes.cpp",
         "BasePartition.cpp",
+        "abx.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [
             "twrpApex.cpp"
@@ -727,6 +728,7 @@ cc_binary {
     }) + select(soong_config_variable("twrpGlobalVars", "exclude_nano"), {
         false: [
             "nano_recovery",
+            "nano.rc",
         ],
         default: [],
     }) + select(soong_config_variable("twrpGlobalVars", "include_resetprop"), {
