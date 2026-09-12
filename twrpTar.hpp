@@ -52,9 +52,9 @@ public:
 	int extractTarFork();
 	void setfn(string fn);
 	void setdir(string dir);
-	void setsize(unsigned long long backup_size);
+	void setsize(uint64_t backup_size);
 	void setpassword(string pass);
-	unsigned long long get_size();
+	uint64_t get_size();
 	void Set_Archive_Type(Archive_Type archive_type);
 
 public:

@@ -1204,7 +1204,7 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
     if (part_settings.file_time == 0)
         part_settings.file_time = 1;
     int img_bps = static_cast<int>(part_settings.img_bytes) / static_cast<int>(part_settings.img_time);
-    unsigned long long file_bps = part_settings.file_bytes / static_cast<int>(part_settings.file_time);
+    uint64_t file_bps = part_settings.file_bytes / static_cast<int>(part_settings.file_time);
 
     if (part_settings.file_bytes != 0)
         gui_msg(Msg("avg_backup_fs=Average backup rate for file systems: {1}")(UnitConversion::FormatBytesPerSecond(file_bps)));
@@ -1222,7 +1222,7 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
         actual_backup_size = part_settings.file_bytes + part_settings.img_bytes;
 
     int prev_img_bps = 0, use_compression = 0;
-    unsigned long long prev_file_bps = 0;
+    uint64_t prev_file_bps = 0;
     DataManager::GetValue(TW_BACKUP_AVG_IMG_RATE, prev_img_bps);
     img_bps += (prev_img_bps * 4);
     img_bps /= 5;

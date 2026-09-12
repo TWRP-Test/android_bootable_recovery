@@ -1696,7 +1696,7 @@ bool TWPartition::Wipe(std::string New_File_System) {
 
     if (wiped) {
         if (Mount_Point == "/cache" && TWFunc::get_log_dir() != DATA_LOGS_DIR)
-            DataManager::Output_Version();
+            DataManager::OutputVersion();
 
         if (Mount_Point == PartitionManager.Get_Android_Root_Path()) {
             tw_set_default_metadata(PartitionManager.Get_Android_Root_Path().c_str());
@@ -2567,10 +2567,10 @@ bool TWPartition::Raw_Read_Write(PartitionSettings *part_settings) {
 
 unsigned long long TWPartition::Get_Restore_Size(PartitionSettings *part_settings) {
     if (!part_settings->adbbackup) {
-        InfoManager restore_info(part_settings->Backup_Folder + "/" + Backup_Name + ".info");
-        if (restore_info.LoadValues() == 0) {
-            if (restore_info.GetValue("backup_size", Restore_Size) == 0) {
-                LOGINFO("Read info file, restore size is %llu\n", Restore_Size);
+        if (InfoManager restore_info(part_settings->Backup_Folder + "/" + Backup_Name + ".info"); restore_info.LoadValues() == 0) {
+            if (const std::optional<uint64_t> restore_size = restore_info["backup_size"]) {
+                Restore_Size = restore_size.value();
+                LOGINFO("Read info file, restore size is %lu\n", Restore_Size);
                 return Restore_Size;
             }
         }
@@ -2783,7 +2783,7 @@ void TWPartition::Update_Data_Size_Async() {
 
 void TWPartition::Apply_Async_Data_Size() {
     Async_Size_State &state = Get_Async_Size_State();
-    unsigned long long size;
+    uint64_t size;
     {
         std::lock_guard<std::mutex> lock(state.lock);
         if (state.pending_partition != this)

@@ -292,13 +292,13 @@ private:
     // Indicates if this partition is removable -- affects how often we check overall size, if present, etc.
     int Length;
     // Used by make_ext4fs to leave free space at the end of the partition block for things like a crypto footer
-    unsigned long long Size; // Overall size of the partition
-    unsigned long long Used; // Overall used space
-    unsigned long long Free; // Overall free space
-    unsigned long long Backup_Size;
+    uint64_t Size; // Overall size of the partition
+    uint64_t Used; // Overall used space
+    uint64_t Free; // Overall free space
+    uint64_t Backup_Size;
     // Backup size -- may be different than used space especially when /data/media is present
     bool Backup_Size_Provisional; // Backup_Size is the statfs figure, not the walked one
-    unsigned long long Restore_Size; // Restore size of the current restore operation
+    uint64_t Restore_Size; // Restore size of the current restore operation
     bool Can_Be_Encrypted;
     // This partition might be encrypted, affects error handling, can only be true if crypto support is compiled in
     bool Is_Encrypted;

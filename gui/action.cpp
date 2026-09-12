@@ -783,7 +783,7 @@ int GUIAction::setguitimezone(std::string arg __unused)
 		NewTimeZone += DSTZone;
 
 	DataManager::SetValue(TW_TIME_ZONE_VAR, NewTimeZone);
-	DataManager::update_tz_environment_variables();
+	DataManager::UpdateTimezoneEnvironment();
 	return 0;
 }
 

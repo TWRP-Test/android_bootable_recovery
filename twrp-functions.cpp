@@ -37,6 +37,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <system_error>
 #include <cctype>
 #include <algorithm>
 #include <selinux/label.h>
@@ -68,6 +69,8 @@
 #ifdef TW_INCLUDE_LIBRESETPROP
     #include <resetprop.hpp>
 #endif
+
+namespace fs = std::filesystem;
 
 struct selabel_handle *selinux_handle;
 
@@ -1000,8 +1003,8 @@ void TWFunc::Fixup_Time_On_Boot(const string& time_paths /* = "" */)
 	} else {
 		fclose(f);
 
-		LOGINFO("TWFunc::Fixup_Time: Setting time offset from file %s, offset %llu\n", ats_path.c_str(), (unsigned long long) offset);
-		DataManager::SetValue("tw_qcom_ats_offset", (unsigned long long) offset, 1);
+		LOGINFO("TWFunc::Fixup_Time: Setting time offset from file %s, offset %lu\n", ats_path.c_str(), offset);
+		DataManager::SetValue("tw_qcom_ats_offset", offset, 1);
 		fixed = true;
 	}
 
@@ -1013,16 +1016,16 @@ void TWFunc::Fixup_Time_On_Boot(const string& time_paths /* = "" */)
 		// Add 3 zeros to the output and use that in the TW_QCOM_ATS_OFFSET flag in your BoardConfig.mk
 		// For example, if the result of the calculation is 1642433544, use 1642433544000 as the offset
 		offset = (uint64_t) TW_QCOM_ATS_OFFSET;
-		DataManager::SetValue("tw_qcom_ats_offset", (unsigned long long) offset, 1);
-		LOGINFO("TWFunc::Fixup_Time: Setting time offset from TW_QCOM_ATS_OFFSET, offset %llu\n", (unsigned long long) offset);
+		DataManager::SetValue("tw_qcom_ats_offset", offset, 1);
+		LOGINFO("TWFunc::Fixup_Time: Setting time offset from TW_QCOM_ATS_OFFSET, offset %lu\n", offset);
 #else
 		// Failed to get offset from ats file, check twrp settings
-		unsigned long long value;
+		uint64_t value;
 		if (DataManager::GetValue("tw_qcom_ats_offset", value) < 0) {
 			return;
 		} else {
 			offset = (uint64_t) value;
-			LOGINFO("TWFunc::Fixup_Time: Setting time offset from twrp setting file, offset %llu\n", (unsigned long long) offset);
+			LOGINFO("TWFunc::Fixup_Time: Setting time offset from twrp setting file, offset %lu\n", offset);
 			// Do not consider the settings file as a definitive answer, keep fixed=false so next run will try ats files again
 		}
 #endif
@@ -1292,96 +1295,91 @@ void TWFunc::List_Mounts() {
 }
 
 string TWFunc::Check_For_TwrpFolder() {
-	string oldFolder = "";
-	vector<string> customTWRPFolders;
-	string mainPath = DataManager::GetCurrentStoragePath();
-	DIR* d;
-	struct dirent* de;
+	const fs::path mainPath = DataManager::GetCurrentStoragePath();
+	// TW_DEFAULT_RECOVERY_FOLDER is "/TWRP" (leading slash); .filename() yields the bare
+	// "TWRP" so we can join via operator/ below without the absolute-replace trap.
+	const string default_folder = fs::path(TW_DEFAULT_RECOVERY_FOLDER).filename().string();
 
 	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) && DataManager::GetIntValue(TW_CRYPTO_PWTYPE)) {
-		goto exit;
+		return TW_DEFAULT_RECOVERY_FOLDER;
 	}
 
+	// Scan the storage root for directories marked with a .twrpcf file.
+	// directory_iterator skips "." and ".." natively, and directory_entry::is_directory
+	// subsumes the former DT_UNKNOWN/Get_D_Type_From_Stat fallback (and stats each entry's
+	// own path, fixing the backup loop's prior mainPath-based stat).
+	error_code ec;
+	fs::directory_iterator entries(mainPath, ec);
+	if (ec) return TW_DEFAULT_RECOVERY_FOLDER;
 
-	d = opendir(mainPath.c_str());
-	if (d == NULL) {
-		goto exit;
-	}
+	string oldFolder;
+	vector<string> customTWRPFolders;
+	for (const auto& entry : entries) {
+		if (!entry.is_directory(ec)) continue;
+		if (!fs::exists(entry.path() / ".twrpcf", ec)) continue;
 
-	while ((de = readdir(d)) != NULL) {
-		string name = de->d_name;
-		string fullPath = mainPath + '/' + name;
-		unsigned char type = de->d_type;
-
-		if (name == "." || name == "..") continue;
-
-		if (type == DT_UNKNOWN) {
-			type = Get_D_Type_From_Stat(fullPath);
-		}
-
-		if (type == DT_DIR && Path_Exists(fullPath + "/.twrpcf")) {
-			if ('/' + name == TW_DEFAULT_RECOVERY_FOLDER) {
-				oldFolder = name;
-			} else {
-				customTWRPFolders.push_back(name);
-			}
+		string name = entry.path().filename().string();
+		if (name == default_folder) {
+			oldFolder = name;
+		} else {
+			customTWRPFolders.push_back(name);
 		}
 	}
 
-	closedir(d);
-
-	if (oldFolder == "" && customTWRPFolders.empty()) {
+	if (oldFolder.empty() && customTWRPFolders.empty()) {
 		LOGINFO("No recovery folder found. Using default folder.\n");
-		goto exit;
+		return TW_DEFAULT_RECOVERY_FOLDER;
 	} else if (customTWRPFolders.empty()) {
 		LOGINFO("No custom recovery folder found. Using TWRP as default.\n");
-		goto exit;
-	} else {
-		if (customTWRPFolders.size() > 1) {
-			LOGINFO("More than one custom recovery folder found. Using first one from the list.\n");
-		} else {
-			LOGINFO("One custom recovery folder found.\n");
-		}
-		string customPath =  '/' + customTWRPFolders.at(0);
-
-		if (Path_Exists(mainPath + TW_DEFAULT_RECOVERY_FOLDER)) {
-			string oldBackupFolder = mainPath + TW_DEFAULT_RECOVERY_FOLDER + "/BACKUPS/" + DataManager::GetStrValue("device_id");
-			string newBackupFolder = mainPath + customPath + "/BACKUPS/" + DataManager::GetStrValue("device_id");
-
-			if (Path_Exists(oldBackupFolder)) {
-				vector<string> backups;
-				d = opendir(oldBackupFolder.c_str());
-
-				if (d != NULL) {
-					while ((de = readdir(d)) != NULL) {
-						string name = de->d_name;
-						unsigned char type = de->d_type;
-
-						if (name == "." || name == "..") continue;
-
-						if (type == DT_UNKNOWN) {
-							type = Get_D_Type_From_Stat(mainPath + '/' + name);
-						}
-
-						if (type == DT_DIR) {
-							backups.push_back(name);
-						}
-					}
-					closedir(d);
-				}
-
-				for (auto it = backups.begin(); it != backups.end(); it++) {
-					Exec_Cmd("mv -f \"" + oldBackupFolder + '/' + *it + "\" \"" + newBackupFolder + '/' + *it + (Path_Exists(newBackupFolder + '/' + *it) ? "_new\"" : "\""));
-				}
-			}
-			Exec_Cmd("rm -rf \"" + mainPath + TW_DEFAULT_RECOVERY_FOLDER + '\"');
-		}
-
-		return customPath;
+		return TW_DEFAULT_RECOVERY_FOLDER;
 	}
 
-exit:
-	return TW_DEFAULT_RECOVERY_FOLDER;
+	if (customTWRPFolders.size() > 1) {
+		LOGINFO("More than one custom recovery folder found. Using first one from the list.\n");
+	} else {
+		LOGINFO("One custom recovery folder found.\n");
+	}
+
+	// customPath is a "/name" fragment returned to callers; gui/gui.cpp concatenates it as a
+	// string and depends on the leading slash, so the return contract keeps it. Internally we
+	// join the bare chosen name via operator/ (no leading slash → no absolute-replace trap).
+	const string& chosen = customTWRPFolders.front();
+	const string customPath = '/' + chosen;
+
+	// Migrate backups from the default folder into the chosen custom one, then remove default.
+	const fs::path defaultFolder = mainPath / default_folder;
+	if (fs::exists(defaultFolder, ec)) {
+		const string deviceId = DataManager::GetStrValue("device_id");
+		const fs::path oldBackupFolder = defaultFolder / "BACKUPS" / deviceId;
+		const fs::path newBackupFolder = mainPath / chosen / "BACKUPS" / deviceId;
+
+		if (fs::exists(oldBackupFolder, ec)) {
+			vector<string> backups;
+			fs::directory_iterator backup_entries(oldBackupFolder, ec);
+			for (const auto& backup : backup_entries) {
+				if (backup.is_directory(ec)) {
+					backups.push_back(backup.path().filename().string());
+				}
+			}
+
+			// Replicate `mv -f src dst`: when dst is an existing directory, mv merges src
+			// INTO it (→ dst/src.filename()); fs::rename would instead fail, so the is_dir
+			// case renames into dst. The _new suffix avoids clobbering a same-named backup.
+			for (const auto& name : backups) {
+				const fs::path src = oldBackupFolder / name;
+				const fs::path base = newBackupFolder / name;
+				const fs::path dst = fs::exists(base, ec) ? newBackupFolder / (name + "_new") : base;
+				if (fs::is_directory(dst, ec)) {
+					fs::rename(src, dst / name, ec);
+				} else {
+					fs::rename(src, dst, ec);
+				}
+			}
+		}
+		fs::remove_all(defaultFolder, ec);
+	}
+
+	return customPath;
 }
 
 bool TWFunc::Check_Xml_Format(const std::string filename) {

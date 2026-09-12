@@ -102,7 +102,7 @@ void twrpTar::setdir(string dir) {
 	tardir = dir;
 }
 
-void twrpTar::setsize(unsigned long long backup_size) {
+void twrpTar::setsize(uint64_t backup_size) {
 	Total_Backup_Size = backup_size;
 }
 
@@ -432,7 +432,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 		}
 	} else {
 		// Parent side
-		unsigned long long fs, size_backup = 0, files_backup = 0, file_count = 0;
+		uint64_t fs, size_backup = 0, files_backup = 0, file_count = 0;
 		int first_data = 0;
 
 		// Parent closes output side
@@ -468,16 +468,16 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 
 		if (!part_settings->adbbackup) {
 			InfoManager backup_info(backup_folder + "/" + partition_name + ".info");
-			backup_info.SetValue("backup_size", size_backup);
+			backup_info["backup_size"] = size_backup;
 			if (use_compression && use_encryption)
-				backup_info.SetValue("backup_type", COMPRESSED_ENCRYPTED);
+				backup_info["backup_type"] = COMPRESSED_ENCRYPTED;
 			else if (use_encryption)
-				backup_info.SetValue("backup_type", ENCRYPTED);
+				backup_info["backup_type"] = ENCRYPTED;
 			else if (use_compression)
-				backup_info.SetValue("backup_type", COMPRESSED);
+				backup_info["backup_type"] = COMPRESSED;
 			else
-				backup_info.SetValue("backup_type", UNCOMPRESSED);
-			backup_info.SetValue("file_count", files_backup);
+				backup_info["backup_type"] = UNCOMPRESSED;
+			backup_info["file_count"] = files_backup;
 			backup_info.SaveValues();
 		}
 #endif //ndef BUILD_TWRPTAR_MAIN
@@ -1403,7 +1403,7 @@ int twrpTar::entryExists(string entry) {
 	return ret;
 }
 
-unsigned long long twrpTar::get_size() {
+uint64_t twrpTar::get_size() {
 	if (part_settings->adbbackup || TWFunc::Path_Exists(tarfn)) {
 		LOGINFO("Single archive\n");
 		return uncompressedSize(tarfn);
@@ -1412,7 +1412,7 @@ unsigned long long twrpTar::get_size() {
 		string temp;
 		char actual_filename[PATH_MAX];
 		int archive_count = 0;
-		unsigned long long total_restore_size = 0;
+		uint64_t total_restore_size = 0;
 
 		basefn = tarfn;
 		temp = basefn + "%i%02i";

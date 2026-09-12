@@ -43,7 +43,7 @@ typedef enum
 	rb_fastboot
 } RebootCommand;
 
-enum Archive_Type {
+enum Archive_Type : int {
 	UNCOMPRESSED = 0,
 	COMPRESSED,
 	ENCRYPTED,

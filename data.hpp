@@ -16,77 +16,91 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _DATAMANAGER_HPP_HEADER
-#define _DATAMANAGER_HPP_HEADER
+#ifndef DATAMANAGER_HPP_HEADER
+#define DATAMANAGER_HPP_HEADER
 
 #include <string>
 #include <pthread.h>
+
 #include "infomanager.hpp"
 
-using namespace std;
-
-class DataManager
-{
+class DataManager {
 public:
-	static int ResetDefaults();
-	static int LoadValues(const string& filename);
-	static int LoadPersistValues(void);
-	static int Flush();
-	static void LoadTWRPFolderInfo(void);
+  static int ResetDefaults();
 
-	// Core get routines
-	static int GetValue(const string& varName, string& value);
-	static int GetValue(const string& varName, int& value);
-	static int GetValue(const string& varName, float& value);
-	static int GetValue(const string& varName, unsigned long long& value);
+  static int LoadValues(const std::string& filename);
 
-	// Helper functions
-	static string GetStrValue(const string& varName);
-	static int GetIntValue(const string& varName);
+  static int Flush();
 
-	// Core set routines
-	static int SetValue(const string& varName, const string& value, const int persist = 0);
-	static int SetValue(const string& varName, const int value, const int persist = 0);
-	static int SetValue(const string& varName, const float value, const int persist = 0);
-	static int SetValue(const string& varName, const unsigned long long& value, const int persist = 0);
-	static int SetValue(const string& varName, const uint64_t value, const int persist = 0);
-	static int SetProgress(const float Fraction);
-	static int _SetProgress(float Fraction);
-	static int ShowProgress(float Portion, const float Seconds);
+  static void LoadTWRPFolderInfo();
 
-	static void DumpValues();
-	static void update_tz_environment_variables();
-	static void Vibrate(const string& varName);
-	static void SetBackupFolder();
-	static void SetDefaultValues();
-	static void Output_Version(void); // Outputs the version to a file in the TWRP folder
-	static void ReadSettingsFile(void);
+  // Core get routines
+  static int GetValue(const std::string& key, std::string& value);
 
-	static string GetCurrentStoragePath(void);
-	static string GetSettingsStoragePath(void);
+  static int GetValue(const std::string& key, int& value);
 
-public:
-	static string mBackingFile;
+  static int GetValue(const std::string& key, float& value);
+
+  static int GetValue(const std::string& key, uint64_t& value);
+
+  // Helper functions
+  static std::string GetStrValue(const std::string& key);
+
+  static int GetIntValue(const std::string& key);
+
+  // Core set routines
+  static int SetValue(const std::string& key, const std::string& value, bool persist = false);
+
+  static int SetValue(const std::string& key, int value, bool persist = false);
+
+  static int SetValue(const std::string& key, float value, bool persist = false);
+
+  static int SetValue(const std::string& key, uint64_t value, bool persist = false);
+
+  // scoped=false (default): legacy absolute mode — claim the full bar, set the
+  // fraction, then release the scope. scoped=true: honor the active portion set
+  // by ShowProgress (the former _SetProgress, used by the updater set_progress cmd).
+  static int SetProgress(float fraction, bool scoped = false);
+
+  static int ShowProgress(float portion, float seconds);
+
+  static void UpdateTimezoneEnvironment();
+
+  static void Vibrate(const std::string& key);
+
+  static void SetBackupFolder();
+
+  static void SetDefaultValues();
+
+  // Outputs the version to a file in the TWRP folder
+  static void OutputVersion();
+
+  static void ReadSettingsFile();
+
+  static std::string GetCurrentStoragePath();
+
+  static std::string GetSettingsStoragePath();
+
+  static std::string kBackingFile;
 
 protected:
-	static int mInitialized;
-	static InfoManager mPersist;
-	static InfoManager mData;
-	static InfoManager mConst;
+  static bool initialized_;
+  static InfoManager persist_;
+  static InfoManager data_;
+  static InfoManager consts_;
 
-	static map<string, string> mConstValues;
+  static std::map<std::string, std::string> const_values_;
 
-protected:
-	static int SaveValues();
+  static int SaveValues();
 
-	static int GetMagicValue(const string& varName, string& value);
+  static int GetMagicValue(const std::string& key, std::string& value);
 
 private:
-	static void get_device_id();
-	static void HandleBrightnessConfig();
+  static void SetDeviceId();
 
-	static pthread_mutex_t m_valuesLock;
+  static void HandleBrightnessConfig();
+
+  static pthread_mutex_t values_lock_;
 };
 
-#endif // _DATAMANAGER_HPP_HEADER
-
+#endif // DATAMANAGER_HPP_HEADER

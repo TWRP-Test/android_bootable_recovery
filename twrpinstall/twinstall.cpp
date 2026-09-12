@@ -203,7 +203,7 @@ static int Run_Update_Binary(const char *path, int* wipe_cache, zip_type ztype) 
 		} else if (strcmp(command, "set_progress") == 0) {
 			char* fraction_char = strtok(NULL, " \n");
 			float fraction_float = strtof(fraction_char, NULL);
-			DataManager::_SetProgress(fraction_float);
+			DataManager::SetProgress(fraction_float, true);
 		} else if (strcmp(command, "ui_print") == 0) {
 			char* display_value = strtok(NULL, "\n");
 			if (display_value) {
@@ -280,7 +280,7 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 		}
 		LOGINFO("%zu key(s) loaded from %s\n", loaded_keys.size(), CERTIFICATE_ZIP_FILE);
 
-		ret_val = verify_file(package.get(), loaded_keys, std::bind(&DataManager::SetProgress, std::placeholders::_1));
+		ret_val = verify_file(package.get(), loaded_keys, std::bind(&DataManager::SetProgress, std::placeholders::_1, false));
 		if (ret_val != VERIFY_SUCCESS) {
 			LOGINFO("Zip signature verification failed: %i\n", ret_val);
 			gui_err("verify_zip_fail=Zip signature verification failed!");
