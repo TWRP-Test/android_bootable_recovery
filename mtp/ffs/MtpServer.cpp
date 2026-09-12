@@ -149,6 +149,7 @@ void MtpServer::removeStorage(MtpStorage* storage) {
     auto iter = std::find(mStorages.begin(), mStorages.end(), storage);
     if (iter != mStorages.end()) {
         sendStoreRemoved(storage->getStorageID());
+        mDatabase->destroyDB(storage->getStorageID());
         mStorages.erase(iter);
     }
 }
@@ -1511,4 +1512,3 @@ MtpResponseCode MtpServer::doEndEditObject() {
     removeEditObject(handle);
     return MTP_RESPONSE_OK;
 }
-
