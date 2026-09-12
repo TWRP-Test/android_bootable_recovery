@@ -1354,10 +1354,28 @@ int GUIAction::cmd(std::string arg)
 	if (simulate) {
 		simulate_progress_bar();
 	} else {
-		op_status = TWFunc::Exec_Cmd(arg);
-		if (op_status != 0)
+		FILE* fp = popen((arg + " 2>&1").c_str(), "r");
+		if (fp == NULL) {
+			LOGERR("Error opening command to run '%s' (%s).\n", arg.c_str(), strerror(errno));
 			op_status = 1;
-	}
+		} else {
+			char line[512];
+			while (fgets(line, sizeof(line), fp) != NULL)
+				gui_print("%s", line);
+
+			int status = pclose(fp);
+			if (status == -1) {
+				LOGERR("Error closing command pipe for '%s' (%s).\n", arg.c_str(), strerror(errno));
+				op_status = 1;
+			} else if (WIFEXITED(status)) {
+				op_status = WEXITSTATUS(status);
+			} else if (WIFSIGNALED(status)) {
+				op_status = 128 + WTERMSIG(status);
+			} else {
+				op_status = 1;
+			}
+		}
+  }
 
 	operation_end(op_status);
 	return 0;
