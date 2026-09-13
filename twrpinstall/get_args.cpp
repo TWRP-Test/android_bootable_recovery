@@ -1,5 +1,12 @@
 #include "twinstall/get_args.h"
 
+#include <cstring>
+
+#include <android-base/logging.h>
+#include <android-base/strings.h>
+
+#include "bootloader_message/bootloader_message.h"
+
 std::string stage;
 
 // command line args come from, in decreasing precedence:
