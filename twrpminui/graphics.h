@@ -53,4 +53,10 @@ void gr_damage(int left, int top, int right, int bottom);
 GRRect gr_get_damage();
 void gr_reset_damage();
 
+// Backends use this to describe the actual byte order of their scanout
+// buffer. It is intentionally not tied to GGLPixelFormat.
+void gr_set_pixel_format(GRPixelFormat format);
+bool gr_raw_frame_native();
+void gr_raw_frame_done();
+
 #endif

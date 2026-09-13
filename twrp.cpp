@@ -29,6 +29,9 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include "gui2/gui2.h"
+#include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/twrp_settings_store.h"
 
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -81,6 +84,46 @@ static void DecryptPage(const bool skip_decryption, const bool data_media) {
     }
   }
 }
+
+static void MonitorBattery();
+
+static void startLegacyBatteryMonitor() {
+  static std::thread battery_monitor(MonitorBattery);
+}
+
+// A small amount of the existing recovery startup path still presents legacy
+// pages (for example, decryption and the system read-only prompt).  Keep that
+// bootstrap available, then release its graphics/input resources before
+// entering GUI2.  This also makes the GUI2 -> legacy handoff use the same
+// initialization sequence as a normal legacy startup.
+static bool legacy_gui_initialized;
+
+static bool initializeLegacyGui() {
+	if (legacy_gui_initialized)
+		return true;
+
+	if (gui_init() != 0)
+		return false;
+	legacy_gui_initialized = true;
+
+	if (gui_loadResources() != 0)
+		return false;
+
+	PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
+	GUIConsole::Translate_Now();
+	return true;
+}
+
+static void shutdownLegacyGui() {
+	if (!legacy_gui_initialized)
+		return;
+
+	PageManager::ReleasePackage("TWRP");
+	ev_exit();
+	gr_exit();
+	legacy_gui_initialized = false;
+}
+
 
 static void ProcessFastbootdMode() {
   LOGINFO("starting fastboot\n");
@@ -412,36 +455,46 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  printf("Starting the UI...\n");
-  gui_init();
+<<	printf("Starting the UI...\n");
+ if (!startup.GetFastbootMode()) PartitionManager.Setup_Fstab_Partitions(true);
 
-  if (!startup.GetFastbootMode()) PartitionManager.Setup_Fstab_Partitions(true);
+<<	DataManager::ReadSettingsFile();
+	const bool legacy_gui_ready = initializeLegacyGui();
+	if (!legacy_gui_ready)
+		LOGERR("Unable to initialize the legacy GUI startup path.\n");
 
-  // Load up all the resources
-  gui_loadResources();
+	TWFunc::ClearBootloaderMessage();
 
-  DataManager::ReadSettingsFile();
-  PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
+	if (startup.GetFastbootMode()) {
+		ProcessFastbootdMode();
+		TWFunc::UpdateIntentFile(startup.GetIntent());
+		Reboot();
+		return 0;
+	} else {
+		ProcessRecoveryMode(startup.ShouldSkipDecryption());
+	}
+	shutdownLegacyGui();
 
-  // Create a thread for battery monitoring
-  std::thread(MonitorBattery).detach();
+	gui2_backend::twrp_settings_store settings_store;
+	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
+	gui2_context gui2_context_value;
+	gui2_context_value.settings = &settings_store;
+	gui2_context_value.hardware = &hardware_settings;
+	const int gui2_result = gui2_start(&gui2_context_value);
 
-  TWFunc::ClearBootloaderMessage();
+	// GUI2 owns the display and input loop.  A user-requested switch is a
+	// process-local handoff; there is deliberately no persistent GUI selector.
+	// Initialization failures also fall back to the established GUI so recovery
+	// remains usable if a device cannot initialize LVGL or its font resources.
+	if (gui2_result == GUI2_EXIT_TO_LEGACY ||
+		gui2_result == GUI2_EXIT_INITIALIZATION_FAILED) {
+		if (!initializeLegacyGui())
+			LOGERR("Unable to initialize the legacy GUI fallback.\n");
+		startLegacyBatteryMonitor();
+		gui_start();
+	}
+	TWFunc::UpdateIntentFile(startup.GetIntent());
+	Reboot();
 
-  if (startup.GetFastbootMode()) {
-    ProcessFastbootdMode();
-    TWFunc::UpdateIntentFile(startup.GetIntent());
-    Reboot();
-    return 0;
-  }
-  ProcessRecoveryMode(startup.ShouldSkipDecryption());
-
-  GUIConsole::Translate_Now();
-
-  // Launch the main GUI
-  gui_start();
-  TWFunc::UpdateIntentFile(startup.GetIntent());
-  Reboot();
-
-  return 0;
+	return 0;
 }
