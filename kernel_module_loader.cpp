@@ -146,7 +146,7 @@ bool KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendo
     if (mount(dest_module_dir.c_str(), module_dir.c_str(), nullptr, MS_BIND, nullptr) == 0) {
         Modprobe m({ module_dir }, "modules.load.twrp", false);
         const bool loaded = m.LoadListedModules(false);
-        PartitionManager.UnMount_By_Path(module_dir.c_str(), false, MNT_DETACH);
+        PartitionManager.UnMount_By_Path(module_dir, false, MNT_DETACH);
         LOGINFO("libmodprobe processed %d modules from %s\n", m.GetModuleCount(),
                 module_dir.c_str());
         return loaded;
