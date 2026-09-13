@@ -779,22 +779,34 @@ static drm_surface *drm_create_surface(int width, int height) {
 #if defined(RECOVERY_ABGR)
     format = DRM_FORMAT_RGBA8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::ABGR8888);
     printf("setting DRM_FORMAT_RGBA8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
 #elif defined(RECOVERY_BGRA)
     format = DRM_FORMAT_ARGB8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::BGRA8888);
     printf("setting DRM_FORMAT_ARGB8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
 #elif defined(RECOVERY_RGBA)
     format = DRM_FORMAT_ABGR8888;
     base_format = GGL_PIXEL_FORMAT_BGRA_8888;
-    printf("setting DRM_FORMAT_ABGR8888 and GGL_PIXEL_FORMAT_BGRA_8888, GGL_PIXEL_FORMAT may not match!\n");
+    gr_set_pixel_format(GRPixelFormat::RGBA8888);
+    printf("setting DRM_FORMAT_ABGR8888 and GGL_PIXEL_FORMAT_BGRA_8888\n");
 #elif defined(RECOVERY_RGBX)
     format = DRM_FORMAT_XBGR8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::RGBX8888);
     printf("setting DRM_FORMAT_XBGR8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
+#elif defined(RECOVERY_ARGB)
+    format = DRM_FORMAT_BGRA8888;
+    // GGL has no ARGB byte-order format. The LVGL path uses the explicit
+    // GRPixelFormat value above; keep the legacy renderer's closest format.
+    base_format = GGL_PIXEL_FORMAT_BGRA_8888;
+    gr_set_pixel_format(GRPixelFormat::ARGB8888);
+    printf("setting DRM_FORMAT_BGRA8888 and ARGB8888 output conversion\n");
 #else
     format = DRM_FORMAT_RGB565;
     base_format = GGL_PIXEL_FORMAT_RGB_565;
+    gr_set_pixel_format(GRPixelFormat::RGB565);
     printf("setting DRM_FORMAT_RGB565 and GGL_PIXEL_FORMAT_RGB_565\n");
 #endif
 

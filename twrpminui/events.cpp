@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string>
 #include <stdio.h>
 #include <string.h>
 #include <fstream>
@@ -108,6 +109,18 @@ struct position {
     struct input_absinfo xi, yi;
 };
 
+struct mt_slot {
+    int tracking_id;
+    int x, y;
+    bool x_valid, y_valid;
+    bool active;
+};
+
+struct mt_a_point {
+    int x, y;
+    bool x_valid, y_valid;
+};
+
 struct ev {
     struct pollfd *fd;
 
@@ -121,6 +134,22 @@ struct ev {
     struct position p, mt_p;
     int down;
     int absolute_mouse;
+
+    // Independent Type-B state for consumers which need all contacts. The
+    // legacy vk_modify() path continues to use mt_p unchanged.
+    bool mt_type_b;
+    int mt_current_slot;
+    mt_slot mt_slots[TWRP_MAX_TOUCH_POINTS];
+    TWRPTouchPoint mt_releases[TWRP_MAX_TOUCH_POINTS];
+    int mt_release_count;
+
+    // Type-A has no stable slots, so IDs are assigned by report order.
+    mt_a_point mt_a_current;
+    mt_a_point mt_a_frame[TWRP_MAX_TOUCH_POINTS];
+    TWRPTouchPoint mt_a_previous[TWRP_MAX_TOUCH_POINTS];
+    int mt_a_frame_count;
+    int mt_a_previous_count;
+    bool mt_a_release_pending;
 };
 
 static struct pollfd ev_fds[MAX_DEVICES];
@@ -129,6 +158,10 @@ static unsigned ev_count = 0;
 static struct timeval lastInputStat;
 static time_t lastInputMTime;
 static int has_mouse = 0;
+
+static TWRPTouchPoint pending_touch_events[TWRP_MAX_TOUCH_EVENTS];
+static int pending_touch_event_count = 0;
+static bool pending_touch_frame = false;
 
 #define BITS_PER_LONG (sizeof(long) * 8)
 #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
@@ -207,6 +240,25 @@ int vibrate(int timeout_ms)
 #endif
 #endif
 
+int haptics_available()
+{
+#ifdef TW_NO_HAPTICS
+    return 0;
+#elif defined(TW_HAPTICS_TSPDRV)
+    return access("/dev/tspdrv", W_OK) == 0;
+#elif defined(USE_QTI_AIDL_HAPTICS)
+    ndk::SpAIBinder binder(AServiceManager_checkService(kVibratorInstance.c_str()));
+    return binder.get() != nullptr;
+#elif defined(USE_QTI_HAPTICS)
+    return android::hardware::vibrator::V1_2::IVibrator::tryGetService() != nullptr;
+#elif defined(USE_SAMSUNG_HAPTICS)
+    return access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
+#else
+    return access(LEDS_HAPTICS_ACTIVATE_FILE, W_OK) == 0 ||
+           access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
+#endif
+}
+
 /* Returns empty tokens */
 static char *vk_strtok_r(char *str, const char *delim, char **save_str)
 {
@@ -261,6 +313,22 @@ static int vk_init(struct ev *e)
                                         (test_bit(ABS_MT_POSITION_X, capabilities[EV_ABS]) &&
                                          test_bit(ABS_MT_POSITION_Y, capabilities[EV_ABS]));
         e->absolute_mouse = has_absolute_xy && has_mouse_button && !has_touch_protocol;
+        e->mt_type_b = test_bit(ABS_MT_SLOT, capabilities[EV_ABS]) &&
+                       test_bit(ABS_MT_TRACKING_ID, capabilities[EV_ABS]);
+    }
+
+    e->mt_current_slot = 0;
+    e->mt_release_count = 0;
+    e->mt_a_frame_count = 0;
+    e->mt_a_previous_count = 0;
+    e->mt_a_release_pending = false;
+    for (int slot = 0; slot < TWRP_MAX_TOUCH_POINTS; ++slot) {
+        e->mt_slots[slot].tracking_id = -1;
+        e->mt_slots[slot].x = 0;
+        e->mt_slots[slot].y = 0;
+        e->mt_slots[slot].x_valid = false;
+        e->mt_slots[slot].y_valid = false;
+        e->mt_slots[slot].active = false;
     }
 
 #ifdef WHITELIST_INPUT
@@ -401,6 +469,8 @@ int ev_init(void)
     int fd;
 
     has_mouse = 0;
+    pending_touch_event_count = 0;
+    pending_touch_frame = false;
 
 	dir = opendir("/dev/input");
     if(dir != 0) {
@@ -452,6 +522,8 @@ void ev_exit(void)
 		close(ev_fds[ev_count].fd);
 	}
 	ev_count = 0;
+    pending_touch_event_count = 0;
+    pending_touch_frame = false;
 }
 
 /*static int vk_inside_display(__s32 value, struct input_absinfo *info, int screen_size)
@@ -498,6 +570,245 @@ static int vk_tp_to_screen(struct position *p, int *x, int *y)
     }
 
     return 1;
+}
+
+static bool mt_point_to_screen(const struct ev *e, int raw_x, int raw_y, int *x, int *y)
+{
+    struct position point = {};
+    point.x = raw_x;
+    point.y = raw_y;
+    point.xi = e->mt_p.xi;
+    point.yi = e->mt_p.yi;
+
+    if (vk_tp_to_screen(&point, x, y) != 0)
+        return false;
+
+#ifdef RECOVERY_TOUCHSCREEN_SWAP_XY
+    const int old_x = *x;
+    *x = *y;
+    *y = old_x;
+#endif
+#ifdef RECOVERY_TOUCHSCREEN_FLIP_X
+    *x = gr_fb_width() - *x;
+#endif
+#ifdef RECOVERY_TOUCHSCREEN_FLIP_Y
+    *y = gr_fb_height() - *y;
+#endif
+
+    return true;
+}
+
+static void mt_publish_frame(const TWRPTouchPoint *points, int count)
+{
+    if (count < 0)
+        count = 0;
+    if (count > TWRP_MAX_TOUCH_EVENTS)
+        count = TWRP_MAX_TOUCH_EVENTS;
+
+    for (int i = 0; i < count; ++i)
+        pending_touch_events[i] = points[i];
+    pending_touch_event_count = count;
+    pending_touch_frame = true;
+}
+
+static void mt_add_release(struct ev *e, int id, int raw_x, int raw_y)
+{
+    if (e->mt_release_count >= TWRP_MAX_TOUCH_POINTS)
+        return;
+
+    TWRPTouchPoint &release = e->mt_releases[e->mt_release_count];
+    release.id = id;
+    release.pressed = false;
+    if (!mt_point_to_screen(e, raw_x, raw_y, &release.x, &release.y)) {
+        release.x = 0;
+        release.y = 0;
+    }
+    ++e->mt_release_count;
+}
+
+static void mt_publish_type_b(struct ev *e)
+{
+    TWRPTouchPoint frame[TWRP_MAX_TOUCH_EVENTS];
+    int count = 0;
+
+    // Send all active contacts on every report. LVGL's recognizers use these
+    // as move events when the slot ID is already known.
+    for (int slot = 0; slot < TWRP_MAX_TOUCH_POINTS; ++slot) {
+        const mt_slot &contact = e->mt_slots[slot];
+        if (!contact.active || !contact.x_valid || !contact.y_valid)
+            continue;
+
+        if (count >= TWRP_MAX_TOUCH_EVENTS)
+            break;
+        TWRPTouchPoint &point = frame[count++];
+        point.id = slot;
+        point.pressed = true;
+        if (!mt_point_to_screen(e, contact.x, contact.y, &point.x, &point.y)) {
+            --count;
+            continue;
+        }
+    }
+
+    for (int i = 0; i < e->mt_release_count && count < TWRP_MAX_TOUCH_EVENTS; ++i)
+        frame[count++] = e->mt_releases[i];
+
+    e->mt_release_count = 0;
+    // Do not emit empty frames for unrelated SYN_REPORTs after all fingers
+    // have been lifted. A non-empty release frame was already assembled above.
+    if (count > 0)
+        mt_publish_frame(frame, count);
+}
+
+static void mt_publish_type_a(struct ev *e)
+{
+    TWRPTouchPoint frame[TWRP_MAX_TOUCH_EVENTS];
+    int count = 0;
+
+    // Type-A contacts are converted to screen coordinates and assigned IDs
+    // according to their order in the report. This is inherently less stable
+    // than Type-B, but preserves multitouch for older input protocols.
+    for (int i = 0; i < e->mt_a_frame_count; ++i) {
+        const mt_a_point &raw = e->mt_a_frame[i];
+        if (!raw.x_valid || !raw.y_valid || count >= TWRP_MAX_TOUCH_EVENTS)
+            continue;
+
+        TWRPTouchPoint &point = frame[count++];
+        point.id = i;
+        point.pressed = true;
+        if (!mt_point_to_screen(e, raw.x, raw.y, &point.x, &point.y)) {
+            --count;
+            continue;
+        }
+    }
+
+    // If a Type-A contact disappeared, synthesize releases for the trailing
+    // IDs. There is no slot/tracking ID to do better matching with.
+    for (int i = e->mt_a_frame_count; i < e->mt_a_previous_count && count < TWRP_MAX_TOUCH_EVENTS; ++i) {
+        TWRPTouchPoint release = e->mt_a_previous[i];
+        release.pressed = false;
+        frame[count++] = release;
+    }
+
+    for (int i = 0; i < e->mt_a_frame_count && i < TWRP_MAX_TOUCH_POINTS; ++i) {
+        if (i < count)
+            e->mt_a_previous[i] = frame[i];
+    }
+    e->mt_a_previous_count = e->mt_a_frame_count;
+    e->mt_a_frame_count = 0;
+    e->mt_a_current = {};
+    e->mt_a_release_pending = false;
+
+    mt_publish_frame(frame, count);
+}
+
+static void mt_process_event(struct ev *e, const struct input_event *ev)
+{
+    if (e->ignored || e->absolute_mouse)
+        return;
+
+    if (e->mt_type_b) {
+        if (ev->type == EV_ABS) {
+            switch (ev->code) {
+                case ABS_MT_SLOT:
+                    if (ev->value >= 0 && ev->value < TWRP_MAX_TOUCH_POINTS)
+                        e->mt_current_slot = ev->value;
+                    break;
+                case ABS_MT_TRACKING_ID: {
+                    if (e->mt_current_slot < 0 || e->mt_current_slot >= TWRP_MAX_TOUCH_POINTS)
+                        break;
+                    mt_slot &contact = e->mt_slots[e->mt_current_slot];
+                    if (ev->value < 0) {
+                        if (contact.active)
+                            mt_add_release(e, e->mt_current_slot, contact.x, contact.y);
+                        contact.active = false;
+                        contact.tracking_id = -1;
+                        contact.x_valid = false;
+                        contact.y_valid = false;
+                    }
+                    else {
+                        contact.tracking_id = ev->value;
+                        contact.active = true;
+                        contact.x_valid = false;
+                        contact.y_valid = false;
+                    }
+                    break;
+                }
+                case ABS_MT_POSITION_X:
+                    if (e->mt_current_slot >= 0 && e->mt_current_slot < TWRP_MAX_TOUCH_POINTS) {
+                        e->mt_slots[e->mt_current_slot].x = ev->value;
+                        e->mt_slots[e->mt_current_slot].x_valid = true;
+                    }
+                    break;
+                case ABS_MT_POSITION_Y:
+                    if (e->mt_current_slot >= 0 && e->mt_current_slot < TWRP_MAX_TOUCH_POINTS) {
+                        e->mt_slots[e->mt_current_slot].y = ev->value;
+                        e->mt_slots[e->mt_current_slot].y_valid = true;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
+            mt_publish_type_b(e);
+        }
+        return;
+    }
+
+    // Type-A compatibility path. Most current Android panels use Type-B, but
+    // older kernels report contacts separated by SYN_MT_REPORT instead.
+    if (ev->type == EV_ABS) {
+        switch (ev->code) {
+            case ABS_MT_POSITION:
+                if (ev->value == (1 << 31)) {
+                    e->mt_a_release_pending = true;
+                    e->mt_a_current = {};
+                }
+                else {
+                    e->mt_a_current.x = (ev->value & 0x7FFF0000) >> 16;
+                    e->mt_a_current.y = ev->value & 0xFFFF;
+                    e->mt_a_current.x_valid = true;
+                    e->mt_a_current.y_valid = true;
+                }
+                break;
+            case ABS_MT_POSITION_X:
+                e->mt_a_current.x = ev->value;
+                e->mt_a_current.x_valid = true;
+                break;
+            case ABS_MT_POSITION_Y:
+                e->mt_a_current.y = ev->value;
+                e->mt_a_current.y_valid = true;
+                break;
+            case ABS_MT_TOUCH_MAJOR:
+            case ABS_MT_PRESSURE:
+                if (ev->value == 0)
+                    e->mt_a_release_pending = true;
+                break;
+            case ABS_MT_TRACKING_ID:
+                if (ev->value < 0)
+                    e->mt_a_release_pending = true;
+                break;
+            default:
+                break;
+        }
+    }
+    else if (ev->type == EV_SYN && ev->code == SYN_MT_REPORT) {
+        if (e->mt_a_current.x_valid && e->mt_a_current.y_valid &&
+            e->mt_a_frame_count < TWRP_MAX_TOUCH_POINTS) {
+            e->mt_a_frame[e->mt_a_frame_count++] = e->mt_a_current;
+        }
+        e->mt_a_current = {};
+    }
+    else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
+        if (e->mt_a_current.x_valid && e->mt_a_current.y_valid &&
+            e->mt_a_frame_count < TWRP_MAX_TOUCH_POINTS) {
+            e->mt_a_frame[e->mt_a_frame_count++] = e->mt_a_current;
+        }
+        if (e->mt_a_frame_count > 0 || e->mt_a_release_pending)
+            mt_publish_type_a(e);
+        else
+            e->mt_a_current = {};
+    }
 }
 
 /* Translate a virtual key in to a real key event, if needed */
@@ -908,6 +1219,9 @@ int ev_get(struct input_event *ev, int timeout_ms)
             if(ev_fds[n].revents & POLLIN) {
                 r = read(ev_fds[n].fd, ev, sizeof(*ev));
                 if(r == sizeof(*ev)) {
+                    // Assemble the raw multitouch frame before vk_modify()
+                    // compresses it into the legacy single-pointer event.
+                    mt_process_event(&evs[n], ev);
                     if (!vk_modify(&evs[n], ev))
                         return 0;
                 }
@@ -917,6 +1231,23 @@ int ev_get(struct input_event *ev, int timeout_ms)
     }
 
     return -2;
+}
+
+int twrp_input_take_touch_events(TWRPTouchPoint* points, int max_points)
+{
+    if (!pending_touch_frame)
+        return -1;
+
+    const int count = pending_touch_event_count;
+    if (points != nullptr && max_points > 0) {
+        const int copy_count = count < max_points ? count : max_points;
+        for (int i = 0; i < copy_count; ++i)
+            points[i] = pending_touch_events[i];
+    }
+
+    pending_touch_event_count = 0;
+    pending_touch_frame = false;
+    return count;
 }
 
 int ev_wait(int timeout __unused)

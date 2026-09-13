@@ -28,6 +28,9 @@
 #include <chrono>
 #include "recovery_utils/battery_utils.h"
 #include "gui/twmsg.h"
+#include "gui2/gui2.h"
+#include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/twrp_settings_store.h"
 
 #include "cutils/properties.h"
 
@@ -76,6 +79,86 @@ extern "C" {
 TWPartitionManager PartitionManager;
 int Log_Offset;
 bool datamedia;
+
+static void monitorBatteryInBackground() {
+	static char charging = ' ';
+	static int lastVal = -1;
+	while (true) {
+#ifdef TW_USE_LEGACY_BATTERY_SERVICES
+		char cap_s[4] = {};
+#ifdef TW_CUSTOM_BATTERY_PATH
+		string capacity_file = EXPAND(TW_CUSTOM_BATTERY_PATH);
+		capacity_file += "/capacity";
+		FILE * cap = fopen(capacity_file.c_str(), "rt");
+#else
+		FILE * cap = fopen("/sys/class/power_supply/battery/capacity", "rt");
+#endif
+		if (cap) {
+			if (fgets(cap_s, sizeof(cap_s), cap)) {
+				lastVal = atoi(cap_s);
+				if (lastVal > 100) lastVal = 101;
+				if (lastVal < 0) lastVal = 0;
+			}
+			fclose(cap);
+		}
+#ifdef TW_CUSTOM_BATTERY_PATH
+		string status_file = EXPAND(TW_CUSTOM_BATTERY_PATH);
+		status_file += "/status";
+		cap = fopen(status_file.c_str(), "rt");
+#else
+		cap = fopen("/sys/class/power_supply/battery/status", "rt");
+#endif
+		if (cap) {
+			if (fgets(cap_s, 2, cap))
+				charging = cap_s[0] == 'C' ? '+' : ' ';
+			fclose(cap);
+		}
+#else
+		auto battery_info = GetBatteryInfo();
+		charging = battery_info.charging ? '+' : ' ';
+		lastVal = battery_info.capacity;
+#endif
+		DataManager::SetValue("tw_battery", std::to_string(lastVal) + "%" + charging);
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+}
+
+static void startLegacyBatteryMonitor() {
+	static std::thread battery_monitor(monitorBatteryInBackground);
+}
+
+// A small amount of the existing recovery startup path still presents legacy
+// pages (for example, decryption and the system read-only prompt).  Keep that
+// bootstrap available, then release its graphics/input resources before
+// entering GUI2.  This also makes the GUI2 -> legacy handoff use the same
+// initialization sequence as a normal legacy startup.
+static bool legacy_gui_initialized;
+
+static bool initializeLegacyGui() {
+	if (legacy_gui_initialized)
+		return true;
+
+	if (gui_init() != 0)
+		return false;
+	legacy_gui_initialized = true;
+
+	if (gui_loadResources() != 0)
+		return false;
+
+	PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
+	GUIConsole::Translate_Now();
+	return true;
+}
+
+static void shutdownLegacyGui() {
+	if (!legacy_gui_initialized)
+		return;
+
+	PageManager::ReleasePackage("TWRP");
+	ev_exit();
+	gr_exit();
+	legacy_gui_initialized = false;
+}
 
 static void Print_Prop(const char *key, const char *name, void *cookie) {
 	printf("%s=%s\n", key, name);
@@ -395,77 +478,16 @@ int main(int argc, char **argv) {
 #endif
 
 	printf("Starting the UI...\n");
-	gui_init();
 
 	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
 
 	if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))
 		TWFunc::Use_Tmpfs_Cache();
 
-	// Load up all the resources
-	gui_loadResources();
-
 	DataManager::ReadSettingsFile();
-	PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
-
-	std::string value;
-	static char charging = ' ';
-	static int lastVal = -1;
-
-	// Function to monitor battery in the background
-	auto monitorBatteryInBackground = [&]() {
-		while (true) {
-#ifdef TW_USE_LEGACY_BATTERY_SERVICES
-			char cap_s[4];
-#ifdef TW_CUSTOM_BATTERY_PATH
-			string capacity_file = EXPAND(TW_CUSTOM_BATTERY_PATH);
-			capacity_file += "/capacity";
-			FILE * cap = fopen(capacity_file.c_str(),"rt");
-#else
-			FILE * cap = fopen("/sys/class/power_supply/battery/capacity","rt");
-#endif
-			if (cap) {
-				fgets(cap_s, 4, cap);
-				fclose(cap);
-				lastVal = atoi(cap_s);
-				if (lastVal > 100)	lastVal = 101;
-				if (lastVal < 0)	lastVal = 0;
-			}
-#ifdef TW_CUSTOM_BATTERY_PATH
-			string status_file = EXPAND(TW_CUSTOM_BATTERY_PATH);
-			status_file += "/status";
-			cap = fopen(status_file.c_str(),"rt");
-#else
-			cap = fopen("/sys/class/power_supply/battery/status","rt");
-#endif
-			if (cap) {
-				fgets(cap_s, 2, cap);
-				fclose(cap);
-				if (cap_s[0] == 'C')
-					charging = '+';
-				else
-					charging = ' ';
-			}
-#else
-			auto battery_info = GetBatteryInfo();
-			if (battery_info.charging) {
-				charging = '+';
-			} else {
-				charging = ' ';
-			}
-			lastVal = battery_info.capacity;
-#endif
-			// Format the value based on the background updates
-			value = std::to_string(lastVal) + "%" + charging;
-			DataManager::SetValue("tw_battery", value);
-
-			// Sleep for a specified interval (e.g., 1 second) before checking again
-			std::this_thread::sleep_for(std::chrono::seconds(1));
-		}
-	};
-
-	// Create a thread for battery monitoring
-	static std::thread battery_monitor(monitorBatteryInBackground);
+	const bool legacy_gui_ready = initializeLegacyGui();
+	if (!legacy_gui_ready)
+		LOGERR("Unable to initialize the legacy GUI startup path.\n");
 
 	twrpAdbBuFifo *adb_bu_fifo = new twrpAdbBuFifo();
 	TWFunc::Clear_Bootloader_Message();
@@ -479,12 +501,26 @@ int main(int argc, char **argv) {
 	} else {
 		process_recovery_mode(adb_bu_fifo, startup.Should_Skip_Decryption());
 	}
+	shutdownLegacyGui();
 
-	//PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
-	GUIConsole::Translate_Now();
+	gui2_backend::twrp_settings_store settings_store;
+	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
+	gui2_context gui2_context_value;
+	gui2_context_value.settings = &settings_store;
+	gui2_context_value.hardware = &hardware_settings;
+	const int gui2_result = gui2_start(&gui2_context_value);
 
-	// Launch the main GUI
-	gui_start();
+	// GUI2 owns the display and input loop.  A user-requested switch is a
+	// process-local handoff; there is deliberately no persistent GUI selector.
+	// Initialization failures also fall back to the established GUI so recovery
+	// remains usable if a device cannot initialize LVGL or its font resources.
+	if (gui2_result == GUI2_EXIT_TO_LEGACY ||
+		gui2_result == GUI2_EXIT_INITIALIZATION_FAILED) {
+		if (!initializeLegacyGui())
+			LOGERR("Unable to initialize the legacy GUI fallback.\n");
+		startLegacyBatteryMonitor();
+		gui_start();
+	}
 	delete adb_bu_fifo;
 	TWFunc::Update_Intent_File(startup.Get_Intent());
 	reboot();

@@ -1,0 +1,43 @@
+package {
+    default_applicable_licenses: ["bootable_recovery_license"],
+}
+
+// LVGL-based second-generation recovery UI. The public entry point is
+// gui2_start() in gui2.h; the recovery binary can link this library and own
+// the decision about which UI implementation to start.
+cc_library_static {
+    name: "libgui2",
+    defaults: ["twrp_defaults"],
+    cflags: [
+        "-DLV_CONF_INCLUDE_SIMPLE",
+        "-DLV_LVGL_H_INCLUDE_SIMPLE",
+        "-Wno-error",
+        "-Wno-unused-parameter",
+        "-Wno-unused-function",
+    ],
+    local_include_dirs: ["."],
+    export_include_dirs: ["."],
+    include_dirs: [
+        "bootable/recovery",
+        "external/lvgl",
+        "bootable/recovery/gui/include",
+        "bootable/recovery/twrpperf/include",
+    ],
+    srcs: [
+        "gui2.cpp",
+        "backend/status_backend.cpp",
+        "i18n/*.cpp",
+        "gui2_display.cpp",
+        "gui2_input.cpp",
+    ],
+    static_libs: [
+        "liblvgl_twrp",
+        "libtwrpperf",
+        "librecovery_utils",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libtwrpminui",
+    ],
+}

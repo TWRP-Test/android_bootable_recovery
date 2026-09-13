@@ -48,6 +48,31 @@ static fb_var_screeninfo vi;
 static int fb_fd = -1;
 static __u32 smem_len;
 
+static GRPixelFormat fbdev_pixel_format()
+{
+    if (vi.bits_per_pixel == 16)
+        return GRPixelFormat::RGB565;
+
+    if (vi.bits_per_pixel != 32 || vi.red.length != 8 ||
+        vi.green.length != 8 || vi.blue.length != 8)
+        return GRPixelFormat::UNKNOWN;
+
+    // fb_var_screeninfo offsets describe the bit layout of the actual
+    // mmap()ed bytes. Do not infer this from red.offset alone: ARGB and
+    // BGRA, for example, overlap on one channel offset.
+    if (vi.red.offset == 0 && vi.green.offset == 8 && vi.blue.offset == 16)
+        return vi.transp.length == 8 ? GRPixelFormat::RGBA8888
+                                     : GRPixelFormat::RGBX8888;
+    if (vi.blue.offset == 0 && vi.green.offset == 8 && vi.red.offset == 16)
+        return GRPixelFormat::BGRA8888;
+    if (vi.red.offset == 24 && vi.green.offset == 16 && vi.blue.offset == 8)
+        return vi.transp.length == 8 && vi.transp.offset == 0
+                ? GRPixelFormat::ABGR8888 : GRPixelFormat::XRGB8888;
+    if (vi.blue.offset == 24 && vi.green.offset == 16 && vi.red.offset == 8)
+        return GRPixelFormat::ARGB8888;
+    return GRPixelFormat::UNKNOWN;
+}
+
 static minui_backend my_backend = {
     .init = fbdev_init,
     .flip = fbdev_flip,
@@ -228,6 +253,15 @@ static GRSurface* fbdev_init(minui_backend* backend) {
         }
     }
 
+    GRPixelFormat pixel_format = fbdev_pixel_format();
+    if (pixel_format == GRPixelFormat::UNKNOWN)
+        pixel_format = gr_pixel_format();
+    if (pixel_format == GRPixelFormat::UNKNOWN)
+        pixel_format = gr_framebuffer[0].pixel_bytes == 2
+                ? GRPixelFormat::RGB565 : GRPixelFormat::RGBX8888;
+    gr_set_pixel_format(pixel_format);
+    printf("fbdev pixel order: %d\n", static_cast<int>(pixel_format));
+
     // Drawing directly to the framebuffer takes about 5 times longer.
     // Instead, we will allocate some memory and draw to that, then
     // memcpy the data into the framebuffer later.
@@ -286,11 +320,13 @@ static GRSurface* fbdev_flip(minui_backend* backend __unused) {
 #if defined(RECOVERY_BGRA)
     // In case of BGRA, do some byte swapping
     unsigned char* ucfb_vaddr = (unsigned char*)gr_draw->data;
-    for (int idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes);
-            idx += 4) {
-        unsigned char tmp = ucfb_vaddr[idx];
-        ucfb_vaddr[idx    ] = ucfb_vaddr[idx + 2];
-        ucfb_vaddr[idx + 2] = tmp;
+    if (!gr_raw_frame_native()) {
+        for (int idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes);
+                idx += 4) {
+            unsigned char tmp = ucfb_vaddr[idx];
+            ucfb_vaddr[idx    ] = ucfb_vaddr[idx + 2];
+            ucfb_vaddr[idx + 2] = tmp;
+        }
     }
 #endif
     if (double_buffered) {

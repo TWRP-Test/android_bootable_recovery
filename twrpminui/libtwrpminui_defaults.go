@@ -3,7 +3,6 @@ package twrp
 import (
 	"android/soong/android"
 	"android/soong/cc"
-	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -18,46 +17,35 @@ func globalFlags(ctx android.BaseContext) []string {
 	}
 
 	var pixelFormat = strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT"), "\"", "", -1)
+	if pixelFormat == "" {
+		pixelFormat = strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_PIXEL_FORMAT"), "\"", "", -1)
+	}
 
 	switch pixelFormat {
 	case "RGBA_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := RGBA_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_RGBA")
 		break
 
 	case "RGBX_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := RGBX_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_RGBX")
 		break
 
 	case "BGRA_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := BGRA_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_BGRA")
 		break
 
-	case "RGB_565":
-		cflags = append(cflags, "-DRECOVERY_FORCE_RGB_565")
-		break
-	}
-
-	pixelFormat = strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_PIXEL_FORMAT"), "\"", "", -1)
-	switch pixelFormat {
 	case "ABGR_8888":
 		cflags = append(cflags, "-DRECOVERY_ABGR")
 		break
 
-	case "RGBX_8888":
-		cflags = append(cflags, "-DRECOVERY_RGBX")
+	case "ARGB_8888":
+		cflags = append(cflags, "-DRECOVERY_ARGB")
 		break
 
-	case "BGRA_8888":
-		cflags = append(cflags, "-DRECOVERY_BGRA")
+	case "RGB_565":
+		if strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT"), "\"", "", -1) != "" {
+			cflags = append(cflags, "-DRECOVERY_FORCE_RGB_565")
+		}
 		break
 	}
 

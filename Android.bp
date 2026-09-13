@@ -460,6 +460,8 @@ cc_binary {
         "BasePartition.cpp",
         "abx.cpp",
         "unit_conversion.cpp",
+        "gui2/backend/twrp_hardware_settings.cpp",
+        "gui2/backend/twrp_settings_store.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [
             "twrpApex.cpp"
@@ -499,11 +501,12 @@ cc_binary {
         "libzstd",
         "update_metadata-protos",
         "libtwrpgui",
+        "libgui2",
+        "liblvgl_twrp",
         "libtwrpperf",
         "libmounts",
         "libotautil",
         "libsparse",
-
         "libpixelflinger_twrp",
         "libfusesideload",
         "libgsi",
