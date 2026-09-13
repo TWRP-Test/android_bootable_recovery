@@ -1,19 +1,19 @@
-#include "twinstall/get_args.h"
+#include "get_args.hpp"
 
-#include <cstring>
+#include <algorithm>
+#include <iterator>
+#include <ranges>
 
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 
 #include "bootloader_message/bootloader_message.h"
 
-std::string stage;
-
 // command line args come from, in decreasing precedence:
 //   - the actual command line
 //   - the bootloader control block (one per line, after "recovery")
 //   - the contents of COMMAND_FILE (one per line)
-std::vector<std::string> args::get_args(const int *argc, char*** const argv) {
+std::vector<std::string> Args::GetArgs(const int* argc, char*** argv) {
   CHECK_GT(*argc, 0);
 
   bootloader_message boot = {};
@@ -24,35 +24,31 @@ std::vector<std::string> args::get_args(const int *argc, char*** const argv) {
     // If fails, leave a zeroed bootloader_message.
     boot = {};
   }
-  stage = std::string(boot.stage);
 
   std::string boot_command;
   if (boot.command[0] != 0) {
-    if (memchr(boot.command, '\0', sizeof(boot.command))) {
-      boot_command = std::string(boot.command);
-    } else {
-      boot_command = std::string(boot.command, sizeof(boot.command));
-    }
+    const auto cmd_end = std::ranges::find(boot.command, '\0');
+    boot_command.assign(boot.command, cmd_end);
     LOG(INFO) << "Boot command: " << boot_command;
     printf("boot command: %s\n", boot_command.c_str());
   }
 
   if (boot.status[0] != 0) {
-    std::string boot_status = std::string(boot.status, sizeof(boot.status));
-    LOG(INFO) << "Boot status: " << boot_status;
+    const auto status_end = std::ranges::find(boot.status, '\0');
+    LOG(INFO) << "Boot status: " << std::string(boot.status, status_end);
   }
 
   std::vector<std::string> args(*argv, *argv + *argc);
 
   // --- if arguments weren't supplied, look in the bootloader control block
   if (args.size() == 1) {
-    boot.recovery[sizeof(boot.recovery) - 1] = '\0';  // Ensure termination
-    std::string boot_recovery(boot.recovery);
-    std::vector<std::string> tokens = android::base::Split(boot_recovery, "\n");
-    if (!tokens.empty() && tokens[0] == "recovery") {
-      for (auto it = tokens.begin() + 1; it != tokens.end(); it++) {
+    boot.recovery[sizeof(boot.recovery) - 1] = '\0'; // Ensure termination
+    const std::string boot_recovery(boot.recovery);
+    if (std::vector<std::string> tokens = android::base::Split(boot_recovery, "\n");
+      !tokens.empty() && tokens[0] == "recovery") {
+      for (auto& token : tokens | std::views::drop(1)) {
         // Skip empty and '\0'-filled tokens.
-        if (!it->empty() && (*it)[0] != '\0') args.push_back(std::move(*it));
+        if (!token.empty() && token[0] != '\0') args.push_back(std::move(token));
       }
       LOG(INFO) << "Got " << args.size() << " arguments from boot message";
     } else if (boot.recovery[0] != 0) {
@@ -63,8 +59,8 @@ std::vector<std::string> args::get_args(const int *argc, char*** const argv) {
   // Write the arguments (excluding the filename in args[0]) back into the
   // bootloader control block. So the device will always boot into recovery to
   // finish the pending work, until finish_recovery() is called.
-  std::vector<std::string> options(args.cbegin() + 1, args.cend());
-  if (!update_bootloader_message(options, &err)) {
+  if (const std::vector options(args.cbegin() + 1, args.cend());
+    !update_bootloader_message(options, &err)) {
     LOG(ERROR) << "Failed to set BCB message: " << err;
   }
 

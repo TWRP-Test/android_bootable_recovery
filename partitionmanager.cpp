@@ -59,7 +59,7 @@
 #include "twcommon.h"
 #include "partitions.hpp"
 #include "data.hpp"
-#include "startupArgs.hpp"
+#include "startup/startup_args.hpp"
 #include "twrp_functions.hpp"
 #include "fixContexts.hpp"
 #include "exclude.hpp"
@@ -1920,11 +1920,11 @@ void TWPartitionManager::Post_Decrypt(const std::string &Block_Device) {
         // reparse for /cache/recovery/command
         static constexpr const char *COMMAND_FILE = "/data/cache/command";
         if (TWFunc::IsPathExists(COMMAND_FILE)) {
-            startupArgs startup;
+            StartupArgs startup;
             std::string content;
             TWFunc::ReadFile(COMMAND_FILE, content);
             std::vector<std::string> args = {content};
-            startup.processRecoveryArgs(args, 0);
+            startup.ProcessRecoveryArgs(args, 0);
         }
 
         DataManager::SetValue(TW_IS_DECRYPTED, 1);

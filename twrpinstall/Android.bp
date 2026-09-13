@@ -69,7 +69,6 @@ cc_library_static {
     srcs: [
         "adb_install.cpp",
         "asn1_decoder.cpp",
-        "get_args.cpp",
         "install.cpp",
         "installcommand.cpp",
         "package.cpp",

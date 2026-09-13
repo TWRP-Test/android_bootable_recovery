@@ -56,7 +56,7 @@ extern "C" {
 #endif
 #include "openrecoveryscript.hpp"
 #include "variables.h"
-#include "startupArgs.hpp"
+#include "startup/startup_args.hpp"
 #include "twrpAdbBuFifo.hpp"
 #ifdef TW_USE_NEW_MINADBD
 // #include "minadbd/minadbd.h"
@@ -413,9 +413,9 @@ int main(int argc, char **argv) {
 
 	// Load default values to set DataManager constants and handle ifdefs
 	DataManager::SetDefaultValues();
-	startupArgs startup;
-	startup.parse(&argc, &argv);
-	android::base::SetProperty(TW_FASTBOOT_MODE_PROP, startup.Get_Fastboot_Mode() ? "1" : "0");
+	StartupArgs startup;
+	startup.Parse(&argc, &argv);
+	android::base::SetProperty(TW_FASTBOOT_MODE_PROP, startup.GetFastbootMode() ? "1" : "0");
 	printf("=> Linking mtab\n");
 	symlink("/proc/mounts", "/etc/mtab");
 	std::string fstab_filename = "/etc/twrp.fstab";
@@ -423,13 +423,13 @@ int main(int argc, char **argv) {
 		fstab_filename = "/etc/recovery.fstab";
 	}
 	printf("=> Processing %s\n", fstab_filename.c_str());
-	if (!PartitionManager.Process_Fstab(fstab_filename, 1, !startup.Get_Fastboot_Mode())) {
+	if (!PartitionManager.Process_Fstab(fstab_filename, 1, !startup.GetFastbootMode())) {
 		LOGERR("Failing out of recovery due to problem with fstab.\n");
 		return -1;
 	}
 
 #ifdef TW_LOAD_VENDOR_MODULES
-	if (startup.Get_Fastboot_Mode()) {
+	if (startup.GetFastbootMode()) {
 		std::vector<std::string> prepareParts = {
 			"/system_root",
 			"/vendor",
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
 	printf("Starting the UI...\n");
 	gui_init();
 
-	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
+	if (!startup.GetFastbootMode()) PartitionManager.Setup_Fstab_Partitions(true);
 
 	// Load up all the resources
 	gui_loadResources();
@@ -516,14 +516,14 @@ int main(int argc, char **argv) {
 	twrpAdbBuFifo *adb_bu_fifo = new twrpAdbBuFifo();
 	TWFunc::ClearBootloaderMessage();
 
-	if (startup.Get_Fastboot_Mode()) {
+	if (startup.GetFastbootMode()) {
 		process_fastbootd_mode();
 		delete adb_bu_fifo;
-		TWFunc::UpdateIntentFile(startup.Get_Intent());
+		TWFunc::UpdateIntentFile(startup.GetIntent());
 		reboot();
 		return 0;
 	} else {
-		process_recovery_mode(adb_bu_fifo, startup.Should_Skip_Decryption());
+		process_recovery_mode(adb_bu_fifo, startup.ShouldSkipDecryption());
 	}
 
 	//PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
@@ -532,7 +532,7 @@ int main(int argc, char **argv) {
 	// Launch the main GUI
 	gui_start();
 	delete adb_bu_fifo;
-	TWFunc::UpdateIntentFile(startup.Get_Intent());
+	TWFunc::UpdateIntentFile(startup.GetIntent());
 	reboot();
 
 	return 0;
