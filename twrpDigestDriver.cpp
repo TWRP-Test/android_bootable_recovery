@@ -24,7 +24,7 @@
 #include "partitions.hpp"
 #include "set_metadata.h"
 #include "twrpDigestDriver.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twcommon.h"
 #include "variables.h"
 #include "gui/gui.hpp"
@@ -40,32 +40,32 @@ bool twrpDigestDriver::Check_File_Digest(const string& Filename) {
 	bool use_sha2 = false;
 
 	digestfile += ".sha2";
-	if (TWFunc::Path_Exists(digestfile)) {
+	if (TWFunc::IsPathExists(digestfile)) {
 		digest = new twrpSHA256();
 		use_sha2 = true;
 	}
 	else {
 		digestfile = Filename + ".sha256";
-		if (TWFunc::Path_Exists(digestfile)) {
+		if (TWFunc::IsPathExists(digestfile)) {
 			digest = new twrpSHA256();
 			use_sha2 = true;
 		} else {
 			digest = new twrpMD5();
 			digestfile = Filename + ".md5";
-			if (!TWFunc::Path_Exists(digestfile)) {
+			if (!TWFunc::IsPathExists(digestfile)) {
 				digestfile = Filename + ".md5sum";
 			}
 		}
 	}
 
-	if (!TWFunc::Path_Exists(digestfile)) {
+	if (!TWFunc::IsPathExists(digestfile)) {
 		delete digest;
 		gui_msg(Msg(msg::kWarning, "no_digest=Skipping Digest check: no Digest file found"));
 		return true;
 	}
 
 
-	if (TWFunc::read_file(digestfile, digest_str) != 0) {
+	if (TWFunc::ReadFile(digestfile, digest_str) != 0) {
 		gui_msg("digest_error=Digest Error!");
 		delete digest;
 		return false;
@@ -76,12 +76,12 @@ bool twrpDigestDriver::Check_File_Digest(const string& Filename) {
 		return false;
 	}
 	string digest_check = digest->return_digest_string();
-	digest_check = digest_check + "  " + TWFunc::Get_Filename(file_name);
+	digest_check = digest_check + "  " + TWFunc::GetFilename(file_name);
 	if (digest_check == digest_str) {
 		if (use_sha2)
-			LOGINFO("SHA2 Digest: %s  %s\n", digest_str.c_str(), TWFunc::Get_Filename(Filename).c_str());
+			LOGINFO("SHA2 Digest: %s  %s\n", digest_str.c_str(), TWFunc::GetFilename(Filename).c_str());
 		else
-			LOGINFO("MD5 Digest: %s  %s\n", digest_str.c_str(), TWFunc::Get_Filename(Filename).c_str());
+			LOGINFO("MD5 Digest: %s  %s\n", digest_str.c_str(), TWFunc::GetFilename(Filename).c_str());
 		gui_msg(Msg("digest_matched=Digest matched for '{1}'.")(Filename));
 		delete digest;
 		return true;
@@ -97,12 +97,12 @@ bool twrpDigestDriver::Check_Digest(string Full_Filename) {
 	int index = 0;
 
 	sync();
-	if (!TWFunc::Path_Exists(Full_Filename)) {
+	if (!TWFunc::IsPathExists(Full_Filename)) {
 		// This is a split archive, we presume
 		memset(split_filename, 0, sizeof(split_filename));
 		while (index < 1000) {
 			sprintf(split_filename, "%s%03i", Full_Filename.c_str(), index);
-			if (!TWFunc::Path_Exists(split_filename))
+			if (!TWFunc::IsPathExists(split_filename))
 				break;
 				LOGINFO("split_filename: %s\n", split_filename);
 				if (!Check_File_Digest(split_filename))
@@ -132,7 +132,7 @@ bool twrpDigestDriver::Write_Digest(string Full_Filename) {
 			delete digest;
 			return false;
 		}
-		LOGINFO("SHA2 Digest: %s  %s\n", digest_str.c_str(), TWFunc::Get_Filename(Full_Filename).c_str());
+		LOGINFO("SHA2 Digest: %s  %s\n", digest_str.c_str(), TWFunc::GetFilename(Full_Filename).c_str());
 	}
 	else  {
 		digest = new twrpMD5();
@@ -146,13 +146,13 @@ bool twrpDigestDriver::Write_Digest(string Full_Filename) {
 			delete digest;
 			return false;
 		}
-		LOGINFO("MD5 Digest: %s  %s\n", digest_str.c_str(), TWFunc::Get_Filename(Full_Filename).c_str());
+		LOGINFO("MD5 Digest: %s  %s\n", digest_str.c_str(), TWFunc::GetFilename(Full_Filename).c_str());
 	}
 
-	digest_str = digest_str + "  " + TWFunc::Get_Filename(Full_Filename) + "\n";
+	digest_str = digest_str + "  " + TWFunc::GetFilename(Full_Filename) + "\n";
 	LOGINFO("digest_filename: %s\n", digest_filename.c_str());
 
-	if (TWFunc::write_to_file(digest_filename, digest_str)) {
+	if (TWFunc::WriteToFile(digest_filename, digest_str)) {
 		tw_set_default_metadata(digest_filename.c_str());
 		gui_msg("digest_created= * Digest Created.");
 	}
@@ -168,9 +168,9 @@ bool twrpDigestDriver::Write_Digest(string Full_Filename) {
 bool twrpDigestDriver::Make_Digest(string Full_Filename) {
 	string command, result;
 
-	TWFunc::GUI_Operation_Text(TW_GENERATE_DIGEST_TEXT, gui_parse_text("{@generating_digest1}"));
+	TWFunc::GuiOperationText(TW_GENERATE_DIGEST_TEXT, gui_parse_text("{@generating_digest1}"));
 	gui_msg("generating_digest2= * Generating digest...");
-	if (TWFunc::Path_Exists(Full_Filename)) {
+	if (TWFunc::IsPathExists(Full_Filename)) {
 		if (!Write_Digest(Full_Filename))
 			return false;
 	} else {
@@ -179,7 +179,7 @@ bool twrpDigestDriver::Make_Digest(string Full_Filename) {
 		sprintf(filename, "%s%03i", Full_Filename.c_str(), index);
 		while (index < 1000) {
 			string digest_src(filename);
-			if (TWFunc::Path_Exists(filename)) {
+			if (TWFunc::IsPathExists(filename)) {
 				if (!Write_Digest(filename))
 					return false;
 				}

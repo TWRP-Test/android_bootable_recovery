@@ -46,7 +46,7 @@
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twrpDigestDriver.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "gui/pages.hpp"
 #include "twinstall.h"
@@ -75,13 +75,13 @@ static int Install_Theme(const char* path, ZipArchiveHandle Zip) {
 		return INSTALL_ERROR;
 	string theme_path = DataManager::GetSettingsStoragePath();
 	theme_path += "/TWRP/theme";
-	if (!TWFunc::Path_Exists(theme_path)) {
-		if (!TWFunc::Recursive_Mkdir(theme_path)) {
+	if (!TWFunc::IsPathExists(theme_path)) {
+		if (!TWFunc::RecursiveMkdir(theme_path)) {
 			return INSTALL_ERROR;
 		}
 	}
 	theme_path += "/ui.zip";
-	if (TWFunc::copy_file(path, theme_path, 0644) != 0) {
+	if (TWFunc::CopyFile(path, theme_path, 0644) != 0) {
 		return INSTALL_ERROR;
 	}
 	LOGINFO("Installing custom theme '%s' to '%s'\n", path, theme_path.c_str());
@@ -94,7 +94,7 @@ static int Prepare_Update_Binary(ZipArchiveHandle Zip) {
 	property_get("ro.product.cpu.abilist", arches, "error");
 	if (strcmp(arches, "error") == 0)
 		property_get("ro.product.cpu.abi", arches, "error");
-	vector<string> split = TWFunc::split_string(arches, ',', true);
+	vector<string> split = TWFunc::SplitString(arches, ',', true);
 	std::vector<string>::iterator arch;
 	std::string base_name = UPDATE_BINARY_NAME;
 	base_name += "-";
@@ -223,7 +223,7 @@ static int Run_Update_Binary(const char *path, int* wipe_cache, zip_type ztype) 
 	}
 	fclose(child_data);
 
-	int waitrc = TWFunc::Wait_For_Child(pid, &status, "Updater");
+	int waitrc = TWFunc::WaitForChild(pid, &status, "Updater");
 	if (waitrc != 0)
 		return INSTALL_ERROR;
 
@@ -297,11 +297,6 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 
 	bool _isUpdatePkg = isUpdatePkg(Zip);
 
-	if (_isUpdatePkg) {
-		if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))
-			TWFunc::Use_Tmpfs_Cache();
-	}
-
 	if (unmount_system) {
 		gui_msg("unmount_system=Unmounting System...");
 		if(!PartitionManager.UnMount_By_Path(PartitionManager.Get_Android_Root_Path(), true)) {
@@ -339,7 +334,7 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 			bool vendor_mount_state = PartitionManager.Is_Mounted_By_Path("/vendor");
 			PartitionManager.Mount_By_Path(PartitionManager.Get_Android_Root_Path(), false);
 			PartitionManager.Mount_By_Path("/vendor", false);
-			TWFunc::copy_file("/system/bin/sh", "/tmp/sh", 0755);
+			TWFunc::CopyFile("/system/bin/sh", "/tmp/sh", 0755);
 			mount("/tmp/sh", "/system/bin/sh", "auto", MS_BIND, NULL);
 			ret_val = Run_Update_Binary(path, wipe_cache, AB_OTA_ZIP_TYPE);
 			umount("/system/bin/sh");

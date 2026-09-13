@@ -44,7 +44,7 @@ extern "C" {
 #include "twcommon.h"
 #include "variables.h"
 #include "twrpadbbu/libtwrpadbbu.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"
 
@@ -114,7 +114,7 @@ void twrpTar::Signal_Kill(int signum) {
 	_exit(255);
 }
 
-void twrpTar::Set_Archive_Type(Archive_Type archive_type) {
+void twrpTar::Set_Archive_Type(ArchiveType archive_type) {
 	current_archive_type = archive_type;
 }
 
@@ -481,7 +481,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			backup_info.SaveValues();
 		}
 #endif //ndef BUILD_TWRPTAR_MAIN
-		if (TWFunc::Wait_For_Child(*tar_fork_pid, &status, "createTarFork()") != 0)
+		if (TWFunc::WaitForChild(*tar_fork_pid, &status, "createTarFork()") != 0)
 			return -1;
 	}
 	return 0;
@@ -505,7 +505,7 @@ int twrpTar::extractTarFork() {
 		{
 			close(progress_pipe[0]);
 			progress_pipe_fd = progress_pipe[1];
-			if (TWFunc::Path_Exists(tarfn) || part_settings->adbbackup) {
+			if (TWFunc::IsPathExists(tarfn) || part_settings->adbbackup) {
 				LOGINFO("Single archive\n");
 				if (extract() != 0)
 					_exit(-1);
@@ -526,13 +526,13 @@ int twrpTar::extractTarFork() {
 				basefn = tarfn;
 				temp = basefn + "%i%02i";
 				tarfn += "000";
-				if (!TWFunc::Path_Exists(tarfn)) {
+				if (!TWFunc::IsPathExists(tarfn)) {
 					LOGINFO("Unable to locate '%s' or '%s'\n", basefn.c_str(), tarfn.c_str());
 					gui_err("restore_error=Error during restore process.");
 					close(progress_pipe_fd);
 					_exit(-1);
 				}
-				if (TWFunc::Get_File_Type(tarfn) != 2) {
+				if (TWFunc::GetFileType(tarfn) != 2) {
 					LOGINFO("First tar file '%s' not encrypted\n", tarfn.c_str());
 					tars[0].basefn = basefn;
 					tars[0].thread_id = 0;
@@ -573,7 +573,7 @@ int twrpTar::extractTarFork() {
 				}*/
 				for (i = start_thread_id; i < 9; i++) {
 					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, 0);
-					if (TWFunc::Path_Exists(actual_filename)) {
+					if (TWFunc::IsPathExists(actual_filename)) {
 						thread_count++;
 						tars[i].basefn = basefn;
 						tars[i].setpassword(password);
@@ -646,7 +646,7 @@ int twrpTar::extractTarFork() {
 			close(progress_pipe[0]);
 			part_settings->progress->UpdateDisplayDetails(true);
 
-			if (TWFunc::Wait_For_Child(tar_fork_pid, &status, "extractTarFork()") != 0)
+			if (TWFunc::WaitForChild(tar_fork_pid, &status, "extractTarFork()") != 0)
 				return -1;
 		}
 	}
@@ -731,7 +731,7 @@ int twrpTar::extractTar() {
 int twrpTar::extract() {
 	if (!part_settings->adbbackup)  {
 		LOGINFO("Setting archive type\n");
-		Set_Archive_Type(TWFunc::Get_File_Type(tarfn));
+		Set_Archive_Type(TWFunc::GetFileType(tarfn));
 	}
 	else {
 		if (part_settings->adb_compression == 1) 
@@ -746,7 +746,7 @@ int twrpTar::extract() {
 		int ret = extractTar();
 		return ret;
 	} else if (current_archive_type == ENCRYPTED) {
-		int ret = TWFunc::Try_Decrypting_File(tarfn, password);
+		int ret = TWFunc::TryDecryptingFile(tarfn, password);
 		if (ret < 1) {
 			gui_msg(Msg(msg::kError, "fail_decrypt_tar=Failed to decrypt tar file '{1}'")(tarfn));
 			return -1;
@@ -864,7 +864,7 @@ void* twrpTar::extractMulti(void *cookie) {
 	string temp = threadTar->basefn + "%i%02i";
 	char actual_filename[PATH_MAX];
 	snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), threadTar->thread_id, archive_count);
-	while (TWFunc::Path_Exists(actual_filename)) {
+	while (TWFunc::IsPathExists(actual_filename)) {
 		threadTar->tarfn = actual_filename;
 		if (threadTar->extract() != 0) {
 			LOGINFO("Error extracting '%s' in thread ID %i\n", actual_filename, threadTar->thread_id);
@@ -957,7 +957,7 @@ int twrpTar::createTar() {
 			} else if (oaes_pid == 0) {
 				dup2(pipes[2], STDIN_FILENO);
 				dup2(output_fd, STDOUT_FILENO);
-				TWFunc::AES_Encrypt_Stream(password);
+				TWFunc::AesEncryptStream(password);
 				_exit(0);
 			} else {
 				// Parent
@@ -1058,7 +1058,7 @@ int twrpTar::createTar() {
 		} else if (oaes_pid == 0) {
 			dup2(oaesfd[0], STDIN_FILENO); // remap stdin
 			dup2(output_fd, STDOUT_FILENO); // remap stdout to output file
-			TWFunc::AES_Encrypt_Stream(password);
+			TWFunc::AesEncryptStream(password);
 			_exit(0);
 		} else {
 			// Parent
@@ -1140,7 +1140,7 @@ int twrpTar::openTar() {
 		} else if (oaes_pid == 0) {
 			dup2(input_fd, STDIN_FILENO);
 			dup2(pipes[1], STDOUT_FILENO);
-			TWFunc::AES_Decrypt_Stream(password);
+			TWFunc::AesDecryptStream(password);
 			_exit(0);
 		} else {
 			// Parent
@@ -1204,7 +1204,7 @@ int twrpTar::openTar() {
 			// Child
 			dup2(oaesfd[1], STDOUT_FILENO); // remap stdout
 			dup2(input_fd, STDIN_FILENO); // remap input fd to stdin
-			TWFunc::AES_Decrypt_Stream(password);
+			TWFunc::AesDecryptStream(password);
 			_exit(0);
 		} else {
 			// Parent
@@ -1337,20 +1337,20 @@ int twrpTar::closeTar() {
 	}
 	if (current_archive_type > 0) {
 		int status;
-		if (pigz_pid > 0 && TWFunc::Wait_For_Child(pigz_pid, &status, "pigz") != 0)
+		if (pigz_pid > 0 && TWFunc::WaitForChild(pigz_pid, &status, "pigz") != 0)
 			return -1;
-		if (oaes_pid > 0 && TWFunc::Wait_For_Child(oaes_pid, &status, "aes") != 0)
+		if (oaes_pid > 0 && TWFunc::WaitForChild(oaes_pid, &status, "aes") != 0)
 			return -1;
 	}
 	free_libtar_buffer();
 	if (!part_settings->adbbackup) {
 		if (use_compression && !use_encryption) {
 			string gzname = tarfn + ".gz";
-			if (TWFunc::Path_Exists(gzname)) {
+			if (TWFunc::IsPathExists(gzname)) {
 				rename(gzname.c_str(), tarfn.c_str());
 			}
 		}
-		if (TWFunc::Get_File_Size(tarfn) == 0) {
+		if (TWFunc::GetFileSize(tarfn) == 0) {
 			gui_msg(Msg(msg::kError, "backup_size=Backup file size for '{1}' is 0 bytes.")(tarfn));
 			return -1;
 		}
@@ -1390,7 +1390,7 @@ int twrpTar::entryExists(string entry) {
 	char* searchstr = (char*)entry.c_str();
 	int ret;
 
-	Set_Archive_Type(TWFunc::Get_File_Type(tarfn));
+	Set_Archive_Type(TWFunc::GetFileType(tarfn));
 
 	if (openTar() == -1)
 		ret = 0;
@@ -1404,7 +1404,7 @@ int twrpTar::entryExists(string entry) {
 }
 
 uint64_t twrpTar::get_size() {
-	if (part_settings->adbbackup || TWFunc::Path_Exists(tarfn)) {
+	if (part_settings->adbbackup || TWFunc::IsPathExists(tarfn)) {
 		LOGINFO("Single archive\n");
 		return uncompressedSize(tarfn);
 	} else {
@@ -1420,14 +1420,14 @@ uint64_t twrpTar::get_size() {
 		thread_id = 0;
 		snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), thread_id, archive_count);
 		if (!part_settings->adbbackup) {
-			if (!TWFunc::Path_Exists(actual_filename)) {
+			if (!TWFunc::IsPathExists(actual_filename)) {
 				LOGERR("Unable to locate '%s' or '%s'\n", basefn.c_str(), tarfn.c_str());
 				return 0;
 			}
 			for (int i = 0; i < 9; i++) {
 				archive_count = 0;
 				snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
-				while (TWFunc::Path_Exists(actual_filename)) {
+				while (TWFunc::IsPathExists(actual_filename)) {
 					total_restore_size += uncompressedSize(actual_filename);
 					archive_count++;
 					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
@@ -1452,15 +1452,15 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 	string Tar, Command, result;
 	vector<string> split;
 
-	Set_Archive_Type(TWFunc::Get_File_Type(tarfn));
+	Set_Archive_Type(TWFunc::GetFileType(tarfn));
 	if (current_archive_type == UNCOMPRESSED) {
-		total_size = TWFunc::Get_File_Size(filename);
+		total_size = TWFunc::GetFileSize(filename);
 	} else if (current_archive_type == COMPRESSED) {
 		// Compressed
 		Command = "pigz -l '" + filename + "'";
 		/* if we set Command = "pigz -l " + tarfn + " | sed '1d' | cut -f5 -d' '";
 		we get the uncompressed size at once. */
-		TWFunc::Exec_Cmd(Command, result, false);
+		TWFunc::ExecCmd(Command, result, false);
 		if (!result.empty()) {
 			/* Expected output:
 			compressed original  reduced name
@@ -1468,19 +1468,19 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 			^
 			split[5]
 			*/
-			split = TWFunc::split_string(result, ' ', true);
+			split = TWFunc::SplitString(result, ' ', true);
 			if (split.size() > 4)
 				total_size = atoi(split[5].c_str());
 		}
 	} else if (current_archive_type == COMPRESSED_ENCRYPTED) {
 		// File is encrypted and may be compressed
-		int ret = TWFunc::Try_Decrypting_File(filename, password);
+		int ret = TWFunc::TryDecryptingFile(filename, password);
 		if (ret < 1) {
 			gui_msg(Msg(msg::kError, "fail_decrypt_tar=Failed to decrypt tar file '{1}'")(tarfn));
-			total_size = TWFunc::Get_File_Size(filename);
+			total_size = TWFunc::GetFileSize(filename);
 		} else if (ret == 1) {
 			LOGERR("Decrypted file is not in tar format.\n");
-			total_size = TWFunc::Get_File_Size(filename);
+			total_size = TWFunc::GetFileSize(filename);
 		} else if (ret == 3) {
 			// Match the original OpenAES path: inspect the decrypted gzip stream
 			// with pigz to obtain the uncompressed size.
@@ -1502,7 +1502,7 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 					close(aes_pipe[1]);
 					close(pigz_pipe[0]);
 					close(pigz_pipe[1]);
-					TWFunc::AES_Decrypt_Stream(password);
+					TWFunc::AesDecryptStream(password);
 					_exit(0);
 				}
 
@@ -1534,16 +1534,16 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 				if (pigz_pid > 0)
 					waitpid(pigz_pid, &status, 0);
 				if (!result.empty()) {
-					split = TWFunc::split_string(result, ' ', true);
+					split = TWFunc::SplitString(result, ' ', true);
 					if (split.size() > 5)
 						total_size = strtoull(split[5].c_str(), NULL, 10);
 				}
 				}
 			}
 			if (total_size == 0)
-				total_size = TWFunc::Get_File_Size(filename);
+				total_size = TWFunc::GetFileSize(filename);
 		} else {
-			total_size = TWFunc::Get_File_Size(filename);
+			total_size = TWFunc::GetFileSize(filename);
 		}
 	}
 

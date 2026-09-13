@@ -5,7 +5,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
 	twrpTarMain.cpp \
-	../twrp-functions.cpp \
+	../twrp_functions.cpp \
 	../oaes/oaes.cpp \
 	../twrpTar.cpp \
 	../tarWrite.c \
@@ -44,7 +44,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
 	twrpTarMain.cpp \
-	../twrp-functions.cpp \
+	../twrp_functions.cpp \
 	../oaes/oaes.cpp \
 	../twrpTar.cpp \
 	../tarWrite.c \

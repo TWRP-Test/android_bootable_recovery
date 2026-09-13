@@ -30,7 +30,7 @@ extern "C" {
 #include "exclude.hpp"
 #include "progresstracking.hpp"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 
 using namespace std;
 
@@ -55,7 +55,7 @@ public:
 	void setsize(uint64_t backup_size);
 	void setpassword(string pass);
 	uint64_t get_size();
-	void Set_Archive_Type(Archive_Type archive_type);
+	void Set_Archive_Type(ArchiveType archive_type);
 
 public:
 	int use_encryption;
@@ -87,7 +87,7 @@ private:
 	unsigned long long uncompressedSize(string filename);
 	static void Signal_Kill(int signum);
 
-	enum Archive_Type current_archive_type;
+	enum ArchiveType current_archive_type;
 	unsigned long long Archive_Current_Size;
 	unsigned long long Total_Backup_Size;
 	bool include_root_dir;

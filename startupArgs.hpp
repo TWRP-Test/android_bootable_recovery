@@ -25,7 +25,7 @@
 #include "openrecoveryscript.hpp"
 #include "partitions.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "variables.h"
 #include "bootloader_message/include/bootloader_message/bootloader_message.h"
 #include "twinstall/get_args.h"

@@ -27,7 +27,7 @@
 #include "data.hpp"
 #include "pages.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpminui/minui.h"
 #include "variables.h"
 
@@ -57,16 +57,16 @@ void blanktimer::checkForTimeout() {
 	pthread_mutex_lock(&mutex);
 	timespec curTime, diff;
 	clock_gettime(CLOCK_MONOTONIC, &curTime);
-	diff = TWFunc::timespec_diff(btimer, curTime);
+	diff = TWFunc::TimespecDiff(btimer, curTime);
 	if (sleepTimer > 2 && diff.tv_sec > (sleepTimer - 2) && state == kOn) {
 		orig_brightness = getBrightness();
 		state = kDim;
-		TWFunc::Set_Brightness("5");
+		TWFunc::SetBrightness("5");
 	}
 	if (sleepTimer && diff.tv_sec > sleepTimer && state < kOff) {
 		state = kOff;
-		TWFunc::Set_Brightness("0");
-		TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+		TWFunc::SetBrightness("0");
+		TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
 		PageManager::ChangeOverlay("lock");
 	}
 #ifndef TW_NO_SCREEN_BLANK
@@ -100,14 +100,14 @@ void blanktimer::resetTimerAndUnblank(void) {
 			gr_fb_blank(false);
 #endif
 			// TODO: this is asymmetric with postscreenblank.sh - shouldn't it be under the next case label?
-			TWFunc::check_and_run_script("/system/bin/postscreenunblank.sh", "unblank");
+			TWFunc::CheckAndRunScript("/system/bin/postscreenunblank.sh", "unblank");
 			// No break here, we want to keep going
 		case kOff:
 			gui_forceRender();
 			// No break here, we want to keep going
 		case kDim:
 			if (!orig_brightness.empty())
-				TWFunc::Set_Brightness(orig_brightness);
+				TWFunc::SetBrightness(orig_brightness);
 			state = kOn;
 		case kOn:
 			break;
@@ -128,8 +128,8 @@ void blanktimer::blank(void) {
 	if (state == kOn) {
 		orig_brightness = getBrightness();
 		state = kOff;
-		TWFunc::Set_Brightness("0");
-		TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+		TWFunc::SetBrightness("0");
+		TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
 	}
 #ifndef TW_NO_SCREEN_BLANK
 	if (state == kOff) {

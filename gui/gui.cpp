@@ -48,7 +48,7 @@
 #include "partitions.hpp"
 #include "rapidxml.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpminui/minui.h"
 #include "twrpminui/truetype.hpp"
 #include "twrpperf/perf_manager.hpp"
@@ -651,7 +651,7 @@ static InputCycleStats loopTimer(int input_timeout_ms)
 			++stats.events;
 		timespec curTime;
 		clock_gettime(CLOCK_MONOTONIC, &curTime);
-		timespec diff = TWFunc::timespec_diff(lastCall, curTime);
+		timespec diff = TWFunc::TimespecDiff(lastCall, curTime);
 		const long long elapsedNs = diff.tv_sec * nsPerSecond + diff.tv_nsec;
 
 		if (elapsedNs >= frameIntervalNs) {
@@ -664,7 +664,7 @@ static InputCycleStats loopTimer(int input_timeout_ms)
 					stats.catch_up = true;
 
 					clock_gettime(CLOCK_MONOTONIC, &curTime);
-					timespec catchUp = TWFunc::timespec_diff(catchUpStart, curTime);
+					timespec catchUp = TWFunc::TimespecDiff(catchUpStart, curTime);
 					if (catchUp.tv_sec || catchUp.tv_nsec >= maxCatchUpNs)
 						break;
 				}
@@ -784,11 +784,11 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 				clock_gettime(CLOCK_MONOTONIC, &start);
 				PageManager::Render(true);
 				clock_gettime(CLOCK_MONOTONIC, &end);
-				render_t = TWFunc::timespec_diff_ms(start, end);
+				render_t = TWFunc::TimespecDiffMs(start, end);
 
 				flip();
 				clock_gettime(CLOCK_MONOTONIC, &start);
-				flip_t = TWFunc::timespec_diff_ms(end, start);
+				flip_t = TWFunc::TimespecDiffMs(end, start);
 
 				LOGINFO("Render(): %u ms, flip(): %u ms, total: %u ms\n", render_t, flip_t, render_t+flip_t);
 			}
@@ -923,7 +923,7 @@ std::string gui_lookup(const std::string& resource_name, const std::string& defa
 int gui_init()
 {
 	gr_init();
-	TWFunc::Set_Brightness(DataManager::GetStrValue("tw_brightness"));
+	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
 
 #ifdef TW_SCREEN_BLANK_ON_BOOT
         printf("TW_SCREEN_BLANK_ON_BOOT := true\n");
@@ -985,7 +985,7 @@ int gui_loadResources(void)
 			}
 		}
 
-		theme_path += TWFunc::Check_For_TwrpFolder() + "/theme/ui.zip";
+		theme_path += TWFunc::CheckForTwrpFolder() + "/theme/ui.zip";
 		if (check || PageManager::LoadPackage("TWRP", theme_path, "main"))
 		{
 			if (PageManager::LoadPackage("TWRP", TWRES "ui.xml", "main"))
@@ -1015,9 +1015,9 @@ int gui_loadCustomResources(void)
 	}
 
 	std::string theme_path = DataManager::GetCurrentStoragePath();
-	theme_path += TWFunc::Check_For_TwrpFolder() + "/theme/ui.zip";
+	theme_path += TWFunc::CheckForTwrpFolder() + "/theme/ui.zip";
 	// Check for a custom theme
-	if (TWFunc::Path_Exists(theme_path)) {
+	if (TWFunc::IsPathExists(theme_path)) {
 		// There is a custom theme, try to load it
 		if (PageManager::ReloadPackage("TWRP", theme_path)) {
 			// Custom theme failed to load, try to load stock theme

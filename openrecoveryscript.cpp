@@ -38,7 +38,7 @@
 #include <sys/wait.h>
 #include <zlib.h>
 
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "partitions.hpp"
 #include "twcommon.h"
 #include "openrecoveryscript.hpp"
@@ -61,7 +61,7 @@ OpenRecoveryScript::VoidFunction OpenRecoveryScript::call_after_cli_command;
 #define SCRIPT_COMMAND_SIZE 512
 
 int OpenRecoveryScript::check_for_script_file(void) {
-	std::string logDir = TWFunc::get_log_dir();
+	std::string logDir = TWFunc::GetLogDir();
 	std::string orsFile;
 	if (logDir == DATA_LOGS_DIR)
 		orsFile = "/data/cache";
@@ -73,10 +73,10 @@ int OpenRecoveryScript::check_for_script_file(void) {
 		gui_msg(Msg(msg::kError, "unable_to_mount=Unable to mount {1}")(logDir.c_str()));
 		return 0;
 	}
-	if (TWFunc::Path_Exists(orsFile)) {
+	if (TWFunc::IsPathExists(orsFile)) {
 		LOGINFO("Script file found: '%s'\n", orsFile.c_str());
 		// Copy script file to /tmp
-		TWFunc::copy_file(orsFile, SCRIPT_FILE_TMP, 0755);
+		TWFunc::CopyFile(orsFile, SCRIPT_FILE_TMP, 0755);
 		// Delete the file from cache
 		unlink(orsFile.c_str());
 		return 1;
@@ -85,12 +85,12 @@ int OpenRecoveryScript::check_for_script_file(void) {
 }
 
 int OpenRecoveryScript::copy_script_file(string filename) {
-	if (TWFunc::Path_Exists(filename)) {
+	if (TWFunc::IsPathExists(filename)) {
 		LOGINFO("Script file found: '%s'\n", filename.c_str());
 		if (filename == SCRIPT_FILE_TMP)
 			return 1; // file is already in the right place
 		// Copy script file to /tmp
-		TWFunc::copy_file(filename, SCRIPT_FILE_TMP, 0755);
+		TWFunc::CopyFile(filename, SCRIPT_FILE_TMP, 0755);
 		// Delete the old file
 		unlink(filename.c_str());
 		return 1;
@@ -235,7 +235,7 @@ int OpenRecoveryScript::run_script_file(void) {
 							DataManager::SetValue("tw_storage_path", Storage_List.at(i).Mount_Point);
 							DataManager::GetValue(TW_BACKUPS_FOLDER_VAR, folder_var);
 							sprintf(backup_folder, "%s/%s", folder_var.c_str(), folder_path);
-							if (TWFunc::Path_Exists(backup_folder)) {
+							if (TWFunc::IsPathExists(backup_folder)) {
 								strcpy(folder_path, backup_folder);
 								break;
 							}
@@ -247,7 +247,7 @@ int OpenRecoveryScript::run_script_file(void) {
 					else
 						strcat(folder_path, "/.");
 				}
-				if (!TWFunc::Path_Exists(folder_path)) {
+				if (!TWFunc::IsPathExists(folder_path)) {
 					gui_msg(Msg(msg::kError, "locate_backup_err=Unable to locate backup '{1}'")(folder_path));
 					ret_val = 1;
 					continue;
@@ -348,27 +348,27 @@ int OpenRecoveryScript::run_script_file(void) {
 				// Make directory (recursive)
 				DataManager::SetValue("tw_action_text2", gui_parse_text("{@making_dir1}"));
 				gui_msg(Msg("making_dir2=Making directory: '{1}'")(value));
-				if (!TWFunc::Recursive_Mkdir(value)) {
-					// error message already displayed by Recursive_Mkdir
+				if (!TWFunc::RecursiveMkdir(value)) {
+					// error message already displayed by RecursiveMkdir
 					ret_val = 1;
 				}
 			} else if (strcmp(command, "reboot") == 0) {
 				if (strlen(value) && strcmp(value, "recovery") == 0)
-					TWFunc::tw_reboot(rb_recovery);
+					TWFunc::TwReboot(RECOVERY);
 				else if (strlen(value) && strcmp(value, "poweroff") == 0)
-					TWFunc::tw_reboot(rb_poweroff);
+					TWFunc::TwReboot(POWER_OFF);
 				else if (strlen(value) && strcmp(value, "bootloader") == 0)
-					TWFunc::tw_reboot(rb_bootloader);
+					TWFunc::TwReboot(BOOTLOADER);
 				else if (strlen(value) && strcmp(value, "download") == 0)
-					TWFunc::tw_reboot(rb_download);
+					TWFunc::TwReboot(DOWNLOAD);
 				else if (strlen(value) && strcmp(value, "edl") == 0)
-					TWFunc::tw_reboot(rb_edl);
+					TWFunc::TwReboot(EDL);
 				else
-					TWFunc::tw_reboot(rb_system);
+					TWFunc::TwReboot(SYSTEM);
 			} else if (strcmp(command, "cmd") == 0) {
 				DataManager::SetValue("tw_action_text2", gui_parse_text("{@running_command}"));
 				if (cindex != 0) {
-					TWFunc::Exec_Cmd(value);
+					TWFunc::ExecCmd(value);
 				} else {
 					LOGERR("No value given for cmd\n");
 				}
@@ -420,7 +420,7 @@ int OpenRecoveryScript::run_script_file(void) {
 				// twrp cmd cannot decrypt a password with space, should decrypt on gui
 				if (*value) {
 					string tmp = value;
-					std::vector<string> args = TWFunc::Split_String(tmp, " ");
+					std::vector<string> args = TWFunc::SplitString(tmp, " ");
 
 					string pass = args[0];
 					string userid = "0";
@@ -435,7 +435,7 @@ int OpenRecoveryScript::run_script_file(void) {
 					ret_val = 1;  // failure
 				}
 			} else if (strcmp(command, "listmounts") == 0) {
-				TWFunc::List_Mounts();
+				TWFunc::ListMounts();
 			} else {
 				LOGERR("Unrecognized script command: '%s'\n", command);
 				ret_val = 1;
@@ -477,21 +477,21 @@ int OpenRecoveryScript::Install_Command(string Zip) {
 	if (Zip.substr(0, 1) == "@") {
 		// This is a special file that contains a map of blocks on the data partition
 		Full_Path = Zip.substr(1);
-		if (!PartitionManager.Mount_By_Path(Full_Path, true) || !TWFunc::Path_Exists(Full_Path)) {
+		if (!PartitionManager.Mount_By_Path(Full_Path, true) || !TWFunc::IsPathExists(Full_Path)) {
 			LOGINFO("Unable to install via mapped zip '%s'\n", Full_Path.c_str());
 			gui_msg(Msg(msg::kError, "zip_err=Error installing zip file '{1}'")(Zip));
 			return 1;
 		}
 		LOGINFO("Installing mapped zip file '%s'\n", Full_Path.c_str());
 		gui_msg(Msg("installing_zip=Installing zip file '{1}'")(Zip));
-	} else if (!TWFunc::Path_Exists(Zip)) {
+	} else if (!TWFunc::IsPathExists(Zip)) {
 		PartitionManager.Mount_All_Storage();
 		PartitionManager.Get_Partition_List("storage", &Storage_List);
 		int listSize = Storage_List.size();
 		for (int i = 0; i < listSize; i++) {
 			if (PartitionManager.Is_Mounted_By_Path(Storage_List.at(i).Mount_Point)) {
 				Full_Path = Storage_List.at(i).Mount_Point + "/" + Zip;
-				if (TWFunc::Path_Exists(Full_Path)) {
+				if (TWFunc::IsPathExists(Full_Path)) {
 					Zip = Full_Path;
 					break;
 				}
@@ -504,7 +504,7 @@ int OpenRecoveryScript::Install_Command(string Zip) {
 				}
 			}
 		}
-		if (!TWFunc::Path_Exists(Zip)) {
+		if (!TWFunc::IsPathExists(Zip)) {
 			// zip file doesn't exist
 			gui_print("Unable to locate zip file '%s'.\n", Zip.c_str());
 			ret_val = 1;
@@ -523,8 +523,8 @@ int OpenRecoveryScript::Install_Command(string Zip) {
 }
 
 string OpenRecoveryScript::Locate_Zip_File(string Zip, string Storage_Root) {
-	string Path = TWFunc::Get_Path(Zip);
-	string File = TWFunc::Get_Filename(Zip);
+	string Path = TWFunc::GetPath(Zip);
+	string File = fs::path(Zip).filename().string();
 	string pathCpy = Path;
 	string wholePath;
 	size_t pos = Path.find("/", 1);
@@ -534,11 +534,11 @@ string OpenRecoveryScript::Locate_Zip_File(string Zip, string Storage_Root) {
 		pathCpy = Path.substr(pos, Path.size() - pos);
 		wholePath = pathCpy + File;
 		LOGINFO("Looking for zip at '%s'\n", wholePath.c_str());
-		if (TWFunc::Path_Exists(wholePath))
+		if (TWFunc::IsPathExists(wholePath))
 			return wholePath;
 		wholePath = Storage_Root + wholePath;
 		LOGINFO("Looking for zip at '%s'\n", wholePath.c_str());
-		if (TWFunc::Path_Exists(wholePath))
+		if (TWFunc::IsPathExists(wholePath))
 			return wholePath;
 
 		pos = Path.find("/", pos + 1);
@@ -628,7 +628,7 @@ int OpenRecoveryScript::Run_OpenRecoveryScript_Action() {
 	// that we converted to ORS commands during boot in recovery.cpp.
 	// Run those first.
 	int reboot = 0;
-	if (TWFunc::Path_Exists(SCRIPT_FILE_TMP)) {
+	if (TWFunc::IsPathExists(SCRIPT_FILE_TMP)) {
 		gui_msg("running_recovery_commands=Running Recovery Commands");
 		if (OpenRecoveryScript::run_script_file() == 0) {
 			reboot = 1;
@@ -645,9 +645,9 @@ int OpenRecoveryScript::Run_OpenRecoveryScript_Action() {
 	}
 	if (reboot) {
 		// Disable stock recovery reflashing
-		TWFunc::Disable_Stock_Recovery_Replace();
+		TWFunc::DisableStockRecoveryReplace();
 		usleep(2000000); // Sleep for 2 seconds before rebooting
-		TWFunc::tw_reboot(rb_system);
+		TWFunc::TwReboot(SYSTEM);
 		usleep(5000000); // Sleep for 5 seconds to allow reboot to occur
 	} else {
 		DataManager::SetValue("tw_page_done", 1);
@@ -659,7 +659,7 @@ int OpenRecoveryScript::Run_OpenRecoveryScript_Action() {
 void OpenRecoveryScript::Run_CLI_Command(const char* command) {
 	string tmp = command;
 	std::vector<string> parts =
-		TWFunc::Split_String(tmp, " ");  // pats[0] is cmd, parts[1...] is args
+		TWFunc::SplitString(tmp, " ");  // pats[0] is cmd, parts[1...] is args
 	string cmd_str = parts[0];
 
 	if (cmd_str == "runscript") {
@@ -695,8 +695,8 @@ void OpenRecoveryScript::Run_CLI_Command(const char* command) {
 			gui_msg("decrypt_cmd=Attempting to decrypt data partition or user data via command line.");
 			if (PartitionManager.Decrypt_Device(pass, atoi(userid.c_str())) == 0) {
 				// set_page_done = 1;  // done by singleaction_page anyway
-				std::string orsFile = TWFunc::get_log_dir() + "/openrecoveryscript";
-				if (TWFunc::Path_Exists(orsFile)) {
+				std::string orsFile = TWFunc::GetLogDir() + "/openrecoveryscript";
+				if (TWFunc::IsPathExists(orsFile)) {
 					Run_OpenRecoveryScript_Action();
 				}
 			}

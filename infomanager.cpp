@@ -34,7 +34,7 @@
 #include "partitions.hpp"
 #include "set_metadata.h"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "variables.h"
 
 InfoManager::InfoManager() {
@@ -82,7 +82,7 @@ static void twPersistUnMount() {
 int InfoManager::LoadValues() {
   twPersistMount();
   auto unmount = android::base::make_scope_guard([&] { twPersistUnMount(); });
-  if (!TWFunc::Path_Exists(std::string(TW_PERSIST_DIR))) mkdir(TW_PERSIST_DIR, 0777);
+  if (!TWFunc::IsPathExists(std::string(TW_PERSIST_DIR))) mkdir(TW_PERSIST_DIR, 0777);
 
   std::string content;
   if (!android::base::ReadFileToString(file_, &content)) {

@@ -29,7 +29,7 @@
 #include "objects.hpp"
 #include "rapidxml.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpadbbu/libtwrpadbbu.hpp"
 #include "twrpminui/minui.h"
 
@@ -250,8 +250,8 @@ int GUIFileSelector::GetFileList(const std::string folder)
 	// leave the path variable pointing somewhere nobody asked for. Only make
 	// it while the storage is up, or it lands on the ramdisk under a mount
 	// point with nothing mounted on it.
-	if (mPathCreate && !TWFunc::Path_Exists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
-		TWFunc::Recursive_Mkdir(folder);
+	if (mPathCreate && !TWFunc::IsPathExists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
+		TWFunc::RecursiveMkdir(folder);
 
 	d = opendir(folder.c_str());
 	if (d == NULL) {
@@ -293,7 +293,7 @@ int GUIFileSelector::GetFileList(const std::string folder)
 		data.lastStatChange = st.st_ctime;
 
 		if (data.fileType == DT_UNKNOWN) {
-			data.fileType = TWFunc::Get_D_Type_From_Stat(path);
+			data.fileType = TWFunc::GetDTypeFromStat(path);
 		}
 		if (data.fileType == DT_DIR) {
 			if (mShowNavFolders || (data.fileName != "." && data.fileName != ".."))

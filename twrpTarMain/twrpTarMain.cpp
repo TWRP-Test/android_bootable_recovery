@@ -17,7 +17,7 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "../twrp-functions.hpp"
+#include "../twrp_functions.hpp"
 #include "../twrpTar.hpp"
 #include "../exclude.hpp"
 #include "../progresstracking.hpp"

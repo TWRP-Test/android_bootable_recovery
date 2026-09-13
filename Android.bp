@@ -450,7 +450,7 @@ cc_binary {
         "partitionmanager.cpp",
         "progresstracking.cpp",
         "startupArgs.cpp",
-        "twrp-functions.cpp",
+        "twrp_functions.cpp",
         "twrpDigestDriver.cpp",
         "openrecoveryscript.cpp",
         "tarWrite.c",

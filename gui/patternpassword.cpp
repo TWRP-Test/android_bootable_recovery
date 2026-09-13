@@ -30,7 +30,7 @@
 #include "objects.hpp"
 #include "rapidxml.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpminui/minui.h"
 
 GUIPatternPassword::GUIPatternPassword(rapidxml::xml_node<>* node)
@@ -429,7 +429,7 @@ int GUIPatternPassword::NotifyVarChange(const std::string& varName, const std::s
 
 static unsigned int getSDKVersion(void) {
 	unsigned int sdkver = 23;
-	std::string sdkverstr = TWFunc::System_Property_Get("ro.build.version.sdk");
+	std::string sdkverstr = TWFunc::GetPropertyFromSystem("ro.build.version.sdk");
 	if (!sdkverstr.empty()) {
 		sdkver = (unsigned int)strtoull(sdkverstr.c_str(), NULL, 10);
 		sdkver = (sdkver != 0) ? sdkver : 23;

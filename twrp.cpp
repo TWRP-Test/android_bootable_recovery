@@ -45,7 +45,7 @@ extern "C" {
 #include "gui/pages.hpp"
 #include "gui/objects.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "data.hpp"
 
 #include "partitions.hpp"
@@ -114,8 +114,8 @@ static void process_fastbootd_mode() {
 
 		gui_msg(Msg("fastboot_console_msg=Entered Fastbootd mode..."));
 		// Check for and run startup script if script exists
-		TWFunc::check_and_run_script("/system/bin/runatboot.sh", "boot");
-		TWFunc::check_and_run_script("/system/bin/postfastboot.sh", "fastboot");
+		TWFunc::CheckAndRunScript("/system/bin/runatboot.sh", "boot");
+		TWFunc::CheckAndRunScript("/system/bin/postfastboot.sh", "fastboot");
 		if (gui_startPage("fastboot", 1, 1) != 0) {
 			LOGERR("Failed to start fastbootd page.\n");
 		}
@@ -142,7 +142,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	std::vector<std::string> build_date_props = {"ro.build.date.utc", "ro.bootimage.build.date.utc", "ro.vendor.build.date.utc", "ro.system.build.date.utc", "ro.system_ext.build.date.utc", "ro.product.build.date.utc", "ro.odm.build.date.utc"};
 	std::string val = "0";
 	for (auto prop : build_date_props) {
-		TWFunc::Property_Override(prop, val);
+		TWFunc::OverrideProperty(prop, val);
 		LOGINFO("Overriding %s with value: \"%s\"\n", prop.c_str(), val.c_str());
 	}
 #if defined(TW_OVERRIDE_SYSTEM_PROPS)
@@ -152,12 +152,12 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	std::vector<std::string> partition_list;
 	partition_list.push_back (PartitionManager.Get_Android_Root_Path().c_str());
 #ifdef TW_OVERRIDE_PROPS_ADDITIONAL_PARTITIONS
-	std::vector<std::string> additional_partition_list = TWFunc::Split_String(TW_OVERRIDE_PROPS_ADDITIONAL_PARTITIONS, " ");
+	std::vector<std::string> additional_partition_list = TWFunc::SplitString(TW_OVERRIDE_PROPS_ADDITIONAL_PARTITIONS, " ");
 	partition_list.insert(partition_list.end(), additional_partition_list.begin(), additional_partition_list.end());
 #endif
 	std::vector<std::string> build_prop_list = {"build.prop"};
 #ifdef TW_SYSTEM_BUILD_PROP_ADDITIONAL_PATHS
-	std::vector<std::string> additional_build_prop_list = TWFunc::Split_String(TW_SYSTEM_BUILD_PROP_ADDITIONAL_PATHS, ";");
+	std::vector<std::string> additional_build_prop_list = TWFunc::SplitString(TW_SYSTEM_BUILD_PROP_ADDITIONAL_PATHS, ";");
 	build_prop_list.insert(build_prop_list.end(), additional_build_prop_list.begin(), additional_build_prop_list.end());
 #endif
 	while (getline(override_props, current_prop, ';')) {
@@ -173,7 +173,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 
 		for (auto&& partition_mount_point:partition_list) {
 			for (auto&& prop_file:build_prop_list) {
-				string sys_val = TWFunc::Partition_Property_Get(other_prop, PartitionManager, partition_mount_point.c_str(), prop_file);
+				string sys_val = TWFunc::GetPropertyFromPartition(other_prop, PartitionManager, partition_mount_point.c_str(), prop_file);
 				if (!sys_val.empty()) {
 					if (partition_mount_point == "/system_root") {
 						LOGINFO("Overriding %s with value: \"%s\" from property %s in /system/%s\n", current_prop.c_str(), sys_val.c_str(), other_prop.c_str(),
@@ -182,7 +182,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 						LOGINFO("Overriding %s with value: \"%s\" from property %s in /%s/%s\n", current_prop.c_str(), sys_val.c_str(), other_prop.c_str(),
 							partition_mount_point.c_str(), prop_file.c_str());
 					}
-					int error = TWFunc::Property_Override(current_prop, sys_val);
+					int error = TWFunc::OverrideProperty(current_prop, sys_val);
 					if (error) {
 						LOGERR("Failed overriding property %s, error_code: %d\n", current_prop.c_str(), error);
 					}
@@ -207,8 +207,8 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 #endif // defined(TW_INCLUDE_LIBRESETPROP)
 
 	// Check for and run startup script if script exists
-	TWFunc::check_and_run_script("/system/bin/runatboot.sh", "boot");
-	TWFunc::check_and_run_script("/system/bin/postrecoveryboot.sh", "recovery");
+	TWFunc::CheckAndRunScript("/system/bin/runatboot.sh", "boot");
+	TWFunc::CheckAndRunScript("/system/bin/postrecoveryboot.sh", "recovery");
 
 #ifdef TW_INCLUDE_CRYPTO
 	android::keystore::syncKeystoreDb();
@@ -216,20 +216,23 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 	Decrypt_Page(skip_decryption, datamedia);
 
 	// Check for and load custom theme if present
-	TWFunc::check_selinux_support();
+	TWFunc::CheckSelinuxSupport();
 	gui_loadCustomResources();
 	PartitionManager.Output_Partition_Logging();
 
 	// Fixup the RTC clock on devices which require it
 	if (crash_counter == 0)
-		TWFunc::Fixup_Time_On_Boot();
+		TWFunc::FixupTimeOnBoot();
 
 	DataManager::LoadTWRPFolderInfo();
 	//DataManager::ReadSettingsFile();
 
 	// Run any outstanding OpenRecoveryScript
-	std::string orsFile = TWFunc::get_log_dir() + "recovery/openrecoveryscript";
-	if ((DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0 || skip_decryption) && (TWFunc::Path_Exists(SCRIPT_FILE_TMP) || TWFunc::Path_Exists(orsFile))) {
+	std::string cacheDir = TWFunc::GetLogDir();
+	if (cacheDir == DATA_LOGS_DIR)
+		cacheDir = "/data/cache";
+	std::string orsFile = cacheDir + "/recovery/openrecoveryscript";
+	if ((DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0 || skip_decryption) && (TWFunc::IsPathExists(SCRIPT_FILE_TMP) || TWFunc::IsPathExists(orsFile))) {
 		OpenRecoveryScript::Run_OpenRecoveryScript();
 	}
 
@@ -264,7 +267,7 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 #ifdef TW_INCLUDE_CRYPTO
 			std::string recoveryLogDir(DATA_LOGS_DIR);
 			recoveryLogDir += "/recovery";
-			if (TWFunc::get_log_dir() != CACHE_LOGS_DIR && !TWFunc::Path_Exists(recoveryLogDir)) {
+			if (!TWFunc::IsPathExists(recoveryLogDir)) {
 				bool created = PartitionManager.Recreate_Logs_Dir();
 				if (!created)
 					LOGERR("Unable to create log directory for TWRP\n");
@@ -293,33 +296,79 @@ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decrypti
 		}
 	}
 
-	TWFunc::Update_Log_File();
+	TWFunc::UpdateLogFile();
 
 	adb_bu_fifo->threadAdbBuFifo();
 
 	// Disable flashing of stock recovery
-	TWFunc::Disable_Stock_Recovery_Replace();
+	TWFunc::DisableStockRecoveryReplace();
 }
 
 static void reboot() {
 	gui_msg(Msg("rebooting=Rebooting..."));
-	TWFunc::Update_Log_File();
+	TWFunc::UpdateLogFile();
 	string Reboot_Arg;
 	DataManager::GetValue("tw_reboot_arg", Reboot_Arg);
 	if (Reboot_Arg == "recovery")
-		TWFunc::tw_reboot(rb_recovery);
+		TWFunc::TwReboot(RECOVERY);
 	else if (Reboot_Arg == "poweroff")
-		TWFunc::tw_reboot(rb_poweroff);
+		TWFunc::TwReboot(POWER_OFF);
 	else if (Reboot_Arg == "bootloader")
-		TWFunc::tw_reboot(rb_bootloader);
+		TWFunc::TwReboot(BOOTLOADER);
 	else if (Reboot_Arg == "download")
-		TWFunc::tw_reboot(rb_download);
+		TWFunc::TwReboot(DOWNLOAD);
 	else if (Reboot_Arg == "edl")
-		TWFunc::tw_reboot(rb_edl);
+		TWFunc::TwReboot(EDL);
 	else if (Reboot_Arg == "fastboot")
 		TWFunc::tw_reboot(rb_fastboot);
 	else
-		TWFunc::tw_reboot(rb_system);
+		TWFunc::TwReboot(SYSTEM);
+}
+
+static constexpr int kBatteryHiddenSentinelLow = 0;
+static constexpr int kBatteryHiddenSentinelHigh = 101;
+static constexpr auto kBatteryPollInterval = std::chrono::milliseconds(250);
+
+#ifdef TW_USE_LEGACY_BATTERY_SERVICES
+static void ReadLegacyBattery(int& out_val, char& out_charging) {
+	char buf[8] = {};
+#ifdef TW_CUSTOM_BATTERY_PATH
+	std::string cap_path = EXPAND(TW_CUSTOM_BATTERY_PATH);
+	cap_path += "/capacity";
+	std::string st_path = EXPAND(TW_CUSTOM_BATTERY_PATH);
+	st_path += "/status";
+#else
+	const char* cap_path = "/sys/class/power_supply/battery/capacity";
+	const char* st_path = "/sys/class/power_supply/battery/status";
+#endif
+	if (FILE* f = fopen(cap_path, "r")) {
+		if (fgets(buf, sizeof(buf), f)) {
+			int v = atoi(buf);
+			out_val = v > 100 ? kBatteryHiddenSentinelHigh : v < 0 ? kBatteryHiddenSentinelLow : v;
+		}
+		fclose(f);
+	}
+	if (FILE* f = fopen(st_path, "r")) {
+		out_charging = fgets(buf, sizeof(buf), f) && buf[0] == 'C' ? '+' : ' ';
+		fclose(f);
+	}
+}
+#endif
+
+static void MonitorBattery() {
+	int last_val = -1;
+	char charging = ' ';
+	for (;;) {
+#ifdef TW_USE_LEGACY_BATTERY_SERVICES
+		ReadLegacyBattery(last_val, charging);
+#else
+		auto bi = GetBatteryInfo();
+		charging = bi.charging ? '+' : ' ';
+		last_val = bi.capacity;
+#endif
+		DataManager::SetValue("tw_battery", std::to_string(last_val) + "%" + charging);
+		std::this_thread::sleep_for(kBatteryPollInterval);
+	}
 }
 
 int main(int argc, char **argv) {
@@ -353,14 +402,14 @@ int main(int argc, char **argv) {
 #endif
 
 	property_set("ro.twrp.boot", "1");
-    property_set("ro.twrp.version", TWFunc::Get_TWRP_Version_Str().c_str());
+    property_set("ro.twrp.version", TWFunc::GetTwrpVersion().c_str());
 
 #ifdef TARGET_OTA_ASSERT_DEVICE
 	property_set("ro.twrp.target.devices", TARGET_OTA_ASSERT_DEVICE);
 #endif
 
 	time_t StartupTime = time(NULL);
-    printf("Starting TWRP %s-%s on %s (pid %d)\n", TWFunc::Get_TWRP_Version_Str().c_str(), TW_GIT_REVISION, ctime(&StartupTime), getpid());
+    printf("Starting TWRP %s-%s on %s (pid %d)\n", TWFunc::GetTwrpVersion().c_str(), TW_GIT_REVISION, ctime(&StartupTime), getpid());
 
 	// Load default values to set DataManager constants and handle ifdefs
 	DataManager::SetDefaultValues();
@@ -370,7 +419,7 @@ int main(int argc, char **argv) {
 	printf("=> Linking mtab\n");
 	symlink("/proc/mounts", "/etc/mtab");
 	std::string fstab_filename = "/etc/twrp.fstab";
-	if (!TWFunc::Path_Exists(fstab_filename)) {
+	if (!TWFunc::IsPathExists(fstab_filename)) {
 		fstab_filename = "/etc/recovery.fstab";
 	}
 	printf("=> Processing %s\n", fstab_filename.c_str());
@@ -398,9 +447,6 @@ int main(int argc, char **argv) {
 	gui_init();
 
 	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
-
-	if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))
-		TWFunc::Use_Tmpfs_Cache();
 
 	// Load up all the resources
 	gui_loadResources();
@@ -468,12 +514,12 @@ int main(int argc, char **argv) {
 	static std::thread battery_monitor(monitorBatteryInBackground);
 
 	twrpAdbBuFifo *adb_bu_fifo = new twrpAdbBuFifo();
-	TWFunc::Clear_Bootloader_Message();
+	TWFunc::ClearBootloaderMessage();
 
 	if (startup.Get_Fastboot_Mode()) {
 		process_fastbootd_mode();
 		delete adb_bu_fifo;
-		TWFunc::Update_Intent_File(startup.Get_Intent());
+		TWFunc::UpdateIntentFile(startup.Get_Intent());
 		reboot();
 		return 0;
 	} else {
@@ -486,7 +532,7 @@ int main(int argc, char **argv) {
 	// Launch the main GUI
 	gui_start();
 	delete adb_bu_fifo;
-	TWFunc::Update_Intent_File(startup.Get_Intent());
+	TWFunc::UpdateIntentFile(startup.Get_Intent());
 	reboot();
 
 	return 0;

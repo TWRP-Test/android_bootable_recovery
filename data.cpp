@@ -48,7 +48,7 @@
 #include "set_metadata.h"
 #include "twcommon.h"
 #include "twrpminui/minui.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "unit_conversion.hpp"
 
 #define FILE_VERSION 0x00010010 // Do not set to 0
@@ -371,7 +371,7 @@ void DataManager::UpdateTimezoneEnvironment() {
 void DataManager::SetBackupFolder() {
   const auto storage = GetCurrentStoragePath();
   const TWPartition* partition = PartitionManager.Find_Partition_By_Path(storage);
-  auto backup_path = fs::path(storage) / fs::path(TWFunc::Check_For_TwrpFolder()).relative_path() /
+  auto backup_path = fs::path(storage) / fs::path(TWFunc::CheckForTwrpFolder()).relative_path() /
                      "BACKUPS";
 
   std::string dev_id;
@@ -392,7 +392,7 @@ void DataManager::SetBackupFolder() {
     if (zip_path.size() < storage_path.size()) {
       SetValue(TW_ZIP_LOCATION_VAR, storage_path);
     } else {
-      zip_root = TWFunc::Get_Root_Path(zip_path);
+      zip_root = TWFunc::GetRootPath(zip_path);
       if (zip_root != storage_path) {
         LOGINFO("DataManager::SetBackupFolder zip path was %s changing to %s, %s\n",
                 zip_path.c_str(), storage_path.c_str(), zip_root.c_str());
@@ -451,7 +451,7 @@ void DataManager::SetDefaultValues() {
   consts_["true"] = true;
   consts_["false"] = false;
 
-  consts_[TW_VERSION_VAR] = TWFunc::Get_TWRP_Version_Str();
+  consts_[TW_VERSION_VAR] = TWFunc::GetTwrpVersion();
 
 #ifndef TW_NO_HAPTICS
   persist_["tw_button_vibrate"] = 80;
@@ -538,7 +538,7 @@ void DataManager::SetDefaultValues() {
 #else
   const std::string cpu_temp_file = "/sys/class/thermal/thermal_zone0/temp";
 #endif
-  if (TWFunc::Path_Exists(cpu_temp_file)) {
+  if (fs::exists(cpu_temp_file)) {
     consts_["tw_no_cpu_temp"] = false;
   } else {
     LOGINFO("CPU temperature file '%s' not found, disabling CPU temp.\n", cpu_temp_file.c_str());
@@ -573,7 +573,7 @@ void DataManager::SetDefaultValues() {
   if (lun_file_path.find('%') != std::string::npos) {
     lun_file_path = android::base::StringPrintf(CUSTOM_LUN_FILE, 0);
   }
-  if (!TWFunc::Path_Exists(lun_file_path)) {
+  if (!TWFunc::IsPathExists(lun_file_path)) {
     LOGINFO("Lun file '%s' does not exist, USB storage mode disabled\n", lun_file_path.c_str());
     consts_[TW_HAS_USB_STORAGE] = false;
   } else {
@@ -769,8 +769,8 @@ void DataManager::SetDefaultValues() {
 
   data_["tw_enable_adb_backup"] = false;
 
-  consts_["tw_logcat_exists"] = TWFunc::Path_Exists("/system/bin/logcat");
-  consts_["tw_has_repack_tools"] = TWFunc::Path_Exists("/system/bin/magiskboot");
+  consts_["tw_logcat_exists"] = TWFunc::IsPathExists("/system/bin/logcat");
+  consts_["tw_has_repack_tools"] = TWFunc::IsPathExists("/system/bin/magiskboot");
 
   pthread_mutex_unlock(&values_lock_);
 }
@@ -780,7 +780,7 @@ void DataManager::HandleBrightnessConfig() {
 #ifdef TW_BRIGHTNESS_PATH
   brightness_path = TW_BRIGHTNESS_PATH;
   LOGINFO("TW_BRIGHTNESS_PATH := %s\n", TW_BRIGHTNESS_PATH);
-  if (!TWFunc::Path_Exists(TW_BRIGHTNESS_PATH)) {
+  if (!TWFunc::IsPathExists(TW_BRIGHTNESS_PATH)) {
     LOGINFO("Specified brightness file '%s' not found.\n", TW_BRIGHTNESS_PATH);
     brightness_path.clear();
   }
@@ -811,7 +811,7 @@ void DataManager::HandleBrightnessConfig() {
   const fs::path bpath(brightness_path);
   const std::string max_brightness_path =
       bpath.parent_path() / std::format("max_{}", bpath.filename());
-  if (TWFunc::Path_Exists(max_brightness_path)) {
+  if (TWFunc::IsPathExists(max_brightness_path)) {
     if (android::base::ReadFileToString(max_brightness_path, &max_brightness)) {
       LOGINFO("Got max brightness %s from '%s'\n", max_brightness.c_str(),
               max_brightness_path.c_str());
@@ -829,7 +829,7 @@ void DataManager::HandleBrightnessConfig() {
 
 #ifdef TW_SECONDARY_BRIGHTNESS_PATH
   std::string second_brightness_path = EXPAND(TW_SECONDARY_BRIGHTNESS_PATH);
-  if (!second_brightness_path.empty() && TWFunc::Path_Exists(second_brightness_path)) {
+  if (!second_brightness_path.empty() && TWFunc::IsPathExists(second_brightness_path)) {
     LOGINFO("Will use a second brightness file at '%s'\n", second_brightness_path.c_str());
     consts_["tw_secondary_brightness_file"] = second_brightness_path;
   } else {
@@ -842,9 +842,9 @@ void DataManager::HandleBrightnessConfig() {
   const int defPctInt = static_cast<double>(TW_DEFAULT_BRIGHTNESS) / max_brightness * 100;
   persist_["tw_brightness_pct"] = defPctInt;
   persist_["tw_brightness"] = TW_DEFAULT_BRIGHTNESS;
-  TWFunc::Set_Brightness(std::to_string(TW_DEFAULT_BRIGHTNESS));
+  TWFunc::SetBrightness(std::to_string(TW_DEFAULT_BRIGHTNESS));
 #else
-  TWFunc::Set_Brightness(std::to_string(max_brightness / 5));
+  TWFunc::SetBrightness(std::to_string(max_brightness / 5));
 #endif
 }
 
@@ -900,7 +900,7 @@ int DataManager::GetMagicValue(const std::string& key, std::string& value) {
 }
 
 void DataManager::OutputVersion() {
-  const fs::path log_dir = TWFunc::get_log_dir();
+  const fs::path log_dir = TWFunc::GetLogDir();
   if (log_dir.empty()) {
     LOGINFO("Unable to find cache directory\n");
     return;
@@ -917,9 +917,9 @@ void DataManager::OutputVersion() {
 
     if (!fs::exists(recovery_log_dir, ec)) {
       LOGINFO("Recreating %s folder.\n", recovery_log_dir.c_str());
-      // Create_Dir_Recursive rather than fs::create_directories: it applies
+      // CreateDirRecursive rather than fs::create_directories: it applies
       // mode/uid/gid to every newly created directory.
-      if (!TWFunc::Create_Dir_Recursive(recovery_log_dir,
+      if (!TWFunc::CreateDirRecursive(recovery_log_dir,
                                         S_IRWXU | S_IRWXG | S_IWGRP | S_IXGRP, 0, 0)) {
         LOGERR("DataManager::OutputVersion -- Unable to make %s: %s\n", recovery_log_dir.c_str(),
                strerror(errno));
@@ -930,13 +930,13 @@ void DataManager::OutputVersion() {
 
   const fs::path version_path = recovery_log_dir / ".version";
   fs::remove(version_path, ec);  // removing a missing file is a no-op, so no exists() guard needed
-  if (const std::string version = TWFunc::Get_TWRP_Version_Str();
+  if (const std::string version = TWFunc::GetTwrpVersion();
     !android::base::WriteStringToFile(version, version_path)) {
     LOGINFO("Unable to write version to: %s. Data may be unmounted. Error: %s\n",
             version_path.c_str(), strerror(errno));
     return;
   }
-  // overwrite_existing + the error_code overload restore TWFunc::copy_file semantics:
+  // overwrite_existing + the error_code overload restore TWFunc::CopyFile semantics:
   // without overwrite_existing, fs::copy_file throws "File exists" once the dest from a
   // previous boot is present, crashing recovery; the error_code overload stays
   // non-throwing (the original ignored a failed copy).
@@ -974,7 +974,7 @@ void DataManager::ReadSettingsFile() {
   OutputVersion();
   PartitionManager.Mount_All_Storage();
   UpdateTimezoneEnvironment();
-  TWFunc::Set_Brightness(GetStrValue("tw_brightness"));
+  TWFunc::SetBrightness(GetStrValue("tw_brightness"));
 }
 
 std::string DataManager::GetCurrentStoragePath() {
@@ -994,6 +994,6 @@ void DataManager::Vibrate(const std::string& key) {
 }
 
 void DataManager::LoadTWRPFolderInfo() {
-  SetValue(TW_RECOVERY_FOLDER_VAR, TWFunc::Check_For_TwrpFolder());
+  SetValue(TW_RECOVERY_FOLDER_VAR, TWFunc::CheckForTwrpFolder());
   kBackingFile = fs::path(TW_PERSIST_DIR) / TW_SETTINGS_FILE;
 }

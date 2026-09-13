@@ -28,7 +28,7 @@
 #include "data.hpp"
 #include "variables.h"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "gui/objects.hpp"
 #include "gui/pages.hpp"
@@ -95,7 +95,7 @@ bool twrpAdbBuFifo::Backup_ADB_Command(std::string Options) {
 	std::string rmopt = "--";
 
 	std::replace(Options.begin(), Options.end(), ':', ' ');
-	args = TWFunc::Split_String(Options, " ");
+	args = TWFunc::SplitString(Options, " ");
 
 	DataManager::SetValue(TW_USE_COMPRESSION_VAR, 0);
 	DataManager::SetValue(TW_SKIP_DIGEST_GENERATE_VAR, 0);
@@ -217,7 +217,7 @@ bool twrpAdbBuFifo::Restore_ADB_Backup(void) {
 
 				DataManager::GetValue(TW_SKIP_DIGEST_CHECK_VAR, check_digest);
 				if (check_digest > 0) {
-					TWFunc::GUI_Operation_Text(TW_VERIFY_DIGEST_TEXT, gui_parse_text("{@verifying_digest}"));
+					TWFunc::GuiOperationText(TW_VERIFY_DIGEST_TEXT, gui_parse_text("{@verifying_digest}"));
 					gui_msg("verifying_digest=Verifying Digest");
 					struct AdbBackupFileTrailer md5check;
 					LOGINFO("Verifying md5sums\n");

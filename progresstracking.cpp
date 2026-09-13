@@ -25,7 +25,7 @@
 #include "gui/gui.hpp"
 #include "data.hpp"
 #endif
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include <time.h>
 #include <format>
 #include "unit_conversion.hpp"
@@ -80,7 +80,7 @@ void ProgressTracking::UpdateDisplayDetails(const bool force) {
 		timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
-		int32_t diff = TWFunc::timespec_diff_ms(last_update, now);
+		int32_t diff = TWFunc::TimespecDiffMs(last_update, now);
 		if (diff < update_interval_ms)
 			return;
 	}

@@ -23,7 +23,7 @@
 #include <errno.h>
 #include <cctype>
 #include "fixContexts.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twcommon.h"
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -100,7 +100,7 @@ int fixContexts::fixDataMediaContexts(string Mount_Point) {
 		return 0;
 	}
 
-	if (TWFunc::Path_Exists(Mount_Point + "/media/0")) {
+	if (TWFunc::IsPathExists(Mount_Point + "/media/0")) {
 		string dir = Mount_Point + "/media";
 		if (!(d = opendir(dir.c_str()))) {
 			LOGINFO("opendir failed (%s)\n", strerror(errno));
@@ -133,7 +133,7 @@ int fixContexts::fixDataMediaContexts(string Mount_Point) {
 			}
 		} while ((de = readdir(d)));
 		closedir(d);
-	} else if (TWFunc::Path_Exists(Mount_Point + "/media")) {
+	} else if (TWFunc::IsPathExists(Mount_Point + "/media")) {
 		restorecon(Mount_Point + "/media", &sb);
 		fixContextsRecursively(Mount_Point + "/media", 0);
 	} else {

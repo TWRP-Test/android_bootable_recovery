@@ -26,7 +26,7 @@ extern "C" {
 #include <string>
 #include <vector>
 #include "exclude.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "twcommon.h"
 
@@ -55,7 +55,7 @@ void TWExclude::clear_relative_dir(string dir) {
 }
 
 void TWExclude::add_absolute_dir(const string& dir) {
-	absolutedir.push_back(TWFunc::Remove_Trailing_Slashes(dir));
+	absolutedir.push_back(TWFunc::RemoveTrailingSlashes(dir));
 }
 
 uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
@@ -123,7 +123,7 @@ uint64_t TWExclude::Get_Exclusions_Folder_Size() {
 	uint64_t dusize = 0;
 	for (size_t i = 0; i < absolutedir.size(); i++) {
 		string exclude_dir = absolutedir[i];
-		if (TWFunc::Path_Exists(exclude_dir)) dusize += _Get_Folder_Size(exclude_dir);
+		if (TWFunc::IsPathExists(exclude_dir)) dusize += _Get_Folder_Size(exclude_dir);
 	}
 	return dusize;
 }
@@ -137,7 +137,7 @@ bool TWExclude::check_absolute_skip_dirs(const string& path) {
 }
 
 bool TWExclude::check_skip_dirs(const string& path) {
-	string normalized = TWFunc::Remove_Trailing_Slashes(path);
+	string normalized = TWFunc::RemoveTrailingSlashes(path);
 	size_t slashIdx = normalized.find_last_of('/');
 	if (slashIdx != std::string::npos && slashIdx+1 < normalized.size()) {
 		if (check_relative_skip_dirs(normalized.substr(slashIdx+1)))

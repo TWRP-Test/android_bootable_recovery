@@ -18,7 +18,7 @@
 
 #include "partitions.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "variables.h"
 
 BootMode KernelModuleLoader::Get_Boot_Mode() {
@@ -107,7 +107,7 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
             return;
 
         const std::string mount_point = partition->Get_Mount_Point();
-        TWFunc::killForUseTargetProcess(mount_point);
+        TWFunc::KillForUseTargetProcess(mount_point);
         if (!partition->UnMount(false, fallback_flags)) {
             LOGERR("Unable to unmount '%s' after killing processes\n", mount_point.c_str());
         }
@@ -132,7 +132,7 @@ bool KernelModuleLoader::Load_Vendor_Modules() {
 bool KernelModuleLoader::Try_And_Load_Modules(std::string module_dir, bool vendor_is_mounted) {
     LOGINFO("Checking directory: %s\n", module_dir.c_str());
     const std::string dest_module_dir = std::format("/tmp{}", module_dir);
-    TWFunc::Recursive_Mkdir(dest_module_dir);
+    TWFunc::RecursiveMkdir(dest_module_dir);
     if (!Copy_Modules_To_Tmpfs(module_dir)) {
         LOGINFO("Unable to copy modules from %s\n", module_dir.c_str());
         return false;

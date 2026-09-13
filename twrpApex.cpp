@@ -1,5 +1,5 @@
 #include "twrpApex.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "common.h"
 
 namespace fs = std::filesystem;
@@ -102,7 +102,7 @@ bool twrpApex::mountApexOnLoopbackDevices(std::vector<std::string> apexFiles) {
 		int num = ioctl(fd, LOOP_CTL_GET_FREE);
 		std::string loop_device = LOOP_BLOCK_DEVICE_DIR;
 		loop_device = loop_device + "loop" + std::to_string(num);
-		if (!TWFunc::Path_Exists(loop_device)) {
+		if (!TWFunc::IsPathExists(loop_device)) {
 			int ret = mknod(loop_device.c_str(), S_IFBLK | S_IRUSR | S_IWUSR , makedev(7, device_no));
 			if (ret != 0) {
 				LOGERR("Unable to create loop device: %s\n", loop_device.c_str());
