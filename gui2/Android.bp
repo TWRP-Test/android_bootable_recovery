@@ -2,6 +2,16 @@ package {
     default_applicable_licenses: ["bootable_recovery_license"],
 }
 
+// Keep GUI2-only vector artwork in this module. The generated header embeds
+// the SVG in libgui2, independent of the legacy GUI theme resources.
+genrule {
+    name: "gui2_svg_assets_header",
+    srcs: ["image/ic_*.svg"],
+    out: ["gui2_svg_assets.h"],
+    tool_files: ["generate_svg_header.py"],
+    cmd: "python3 $(location generate_svg_header.py) $(in) > $(out)",
+}
+
 // LVGL-based recovery UI library.
 cc_library_static {
     name: "libgui2",
@@ -21,9 +31,11 @@ cc_library_static {
         "bootable/recovery/gui/include",
         "bootable/recovery/twrpperf/include",
     ],
+    generated_headers: ["gui2_svg_assets_header"],
     srcs: [
         "components/slider.cpp",
         "gui2.cpp",
+        "gui2_svg_cache.cpp",
         "backend/rgb_to_i420.cpp",
         "backend/webm_vp8.cpp",
         "backend/status_backend.cpp",
