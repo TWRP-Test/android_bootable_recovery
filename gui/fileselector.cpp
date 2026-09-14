@@ -298,6 +298,9 @@ int GUIFileSelector::GetFileList(const std::string folder)
 		if (data.fileType == DT_DIR) {
 			if (mShowNavFolders || (data.fileName != "." && data.fileName != ".."))
 				mFolderList.push_back(data);
+		} else if (data.fileType == DT_LNK && S_ISDIR(st.st_mode)) {
+			if (mShowNavFolders || (data.fileName != "." && data.fileName != ".."))
+				mFolderList.push_back(data);
 		} else if (data.fileType == DT_REG || data.fileType == DT_LNK || data.fileType == DT_BLK) {
 #ifdef __ANDROID_API_M__
 			std::vector<std::string> mExtnResults = android::base::Split(mExtn, ";");
