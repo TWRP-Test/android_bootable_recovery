@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 int gui_init();
+int gui_init_reuse_display();
 int gui_loadResources();
 int gui_loadCustomResources();
 int gui_start();

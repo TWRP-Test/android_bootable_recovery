@@ -18,6 +18,7 @@
 #define _MINUI_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "gui/placement.h"
 
 struct GRSurface {
@@ -51,6 +52,8 @@ void gr_exit(void);
 
 int gr_fb_width(void);
 int gr_fb_height(void);
+int gr_copy_frame(void* destination, size_t capacity, int* width, int* height, int* row_bytes,
+                  GRPixelFormat* format);
 GRPixelFormat gr_pixel_format(void);
 gr_pixel* gr_fb_data(void);
 void gr_flip(void);
@@ -87,6 +90,8 @@ int gr_blit_raw(const void* data, int width, int height, int row_bytes, int dx, 
 int gr_fb_pixel_bytes(void);
 unsigned int gr_get_width(gr_surface surface);
 unsigned int gr_get_height(gr_surface surface);
+unsigned int gr_get_row_bytes(gr_surface surface);
+const unsigned char* gr_get_data(gr_surface surface);
 int gr_get_surface(gr_surface* surface);
 int gr_free_surface(gr_surface surface);
 

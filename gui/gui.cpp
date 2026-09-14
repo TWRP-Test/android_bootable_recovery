@@ -949,6 +949,29 @@ int gui_init()
 	return 0;
 }
 
+int gui_init_reuse_display()
+{
+	if (gr_fb_pixel_bytes() <= 0)
+		return -1;
+
+	TWFunc::Set_Brightness(DataManager::GetStrValue("tw_brightness"));
+
+	if (PageManager::LoadPackage("splash", TWRES "splash.xml", "splash")) {
+		LOGERR("Failed to load splash screen XML.\n");
+	} else {
+		PageManager::SelectPackage("splash");
+		PageManager::Render();
+		flip();
+		PageManager::ReleasePackage("splash");
+	}
+
+#ifdef TW_DELAY_TOUCH_INIT_MS
+	usleep(TW_DELAY_TOUCH_INIT_MS);
+#endif
+	ev_init();
+	return 0;
+}
+
 int gui_loadResources(void)
 {
 	int check = 0;

@@ -667,6 +667,18 @@ unsigned int gr_get_height(gr_surface surface) {
     return ((GGLSurface*) surface)->height;
 }
 
+unsigned int gr_get_row_bytes(gr_surface surface) {
+    if (surface == NULL)
+        return 0;
+    return static_cast<unsigned int>(((GGLSurface*)surface)->stride * gr_draw->pixel_bytes);
+}
+
+const unsigned char* gr_get_data(gr_surface surface) {
+    if (surface == NULL)
+        return NULL;
+    return ((GGLSurface*)surface)->data;
+}
+
 void gr_flip() {
     gr_draw = gr_backend->flip(gr_backend);
     gr_raw_frame_done();
@@ -787,6 +799,26 @@ int gr_fb_height(void)
     return (gr_rotation == 0 || gr_rotation == 180) ?
             gr_draw->height - 2 * overscan_offset_y :
             gr_draw->width  - 2 * overscan_offset_x;
+}
+
+int gr_copy_frame(void* destination, size_t capacity, int* width, int* height,
+                  int* row_bytes, GRPixelFormat* format)
+{
+    if (!gr_draw || !width || !height || !row_bytes || !format)
+        return -1;
+
+    *width = gr_draw->width;
+    *height = gr_draw->height;
+    *row_bytes = gr_draw->row_bytes;
+    *format = gr_pixel_format();
+
+    const size_t frame_size = static_cast<size_t>(gr_draw->height) *
+                              static_cast<size_t>(gr_draw->row_bytes);
+    if (!destination || capacity < frame_size)
+        return -2;
+
+    memcpy(destination, gr_draw->data, frame_size);
+    return 0;
 }
 
 int gr_fb_pixel_bytes(void)
