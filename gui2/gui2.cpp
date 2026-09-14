@@ -15,6 +15,8 @@
 #include "gui2.h"
 #include "gui2_display.h"
 #include "gui2_input.h"
+#include "gui2_svg_assets.h"
+#include "gui2_svg_cache.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "src/libs/tiny_ttf/lv_tiny_ttf.h"
@@ -31,100 +33,6 @@ static gui2_backend::hardware_settings* hardware;
 static gui2_backend::screen_backend* screen;
 static std::unique_ptr<gui2_backend::status_backend> status_provider;
 static lv_timer_t* status_timer;
-
-static const lv_font_t* ui_text_font(void) {
-  return runtime_text_font;
-}
-
-static float ui_scale_for(int width, int height) {
-  constexpr float reference_short_side = 1200.0f;
-  return std::clamp(std::min(width, height) / reference_short_side, 0.72f, 2.0f);
-}
-
-static int scaled_px(float value, float scale) {
-  return std::max(1, static_cast<int>(std::lround(value * scale)));
-}
-
-static void init_ui_font(void) {
-#if LV_USE_TINY_TTF && LV_TINY_TTF_FILE_SUPPORT
-  // WQY is a TTC; TinyTTF uses its first face.
-  const float scale = ui_scale_for(gr_fb_width(), gr_fb_height());
-  const int text_size = scaled_px(50, scale);
-  const int status_size = scaled_px(30, scale);
-  const int brand_size = scaled_px(90, scale);
-  runtime_text_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", text_size);
-  runtime_status_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", status_size);
-  runtime_brand_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", brand_size);
-#endif
-}
-
-static uint64_t monotonic_ms(void) {
-  timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return static_cast<uint64_t>(ts.tv_sec) * 1000ULL + ts.tv_nsec / 1000000ULL;
-}
-
-static uint32_t lv_tick_ms(void) {
-  return static_cast<uint32_t>(monotonic_ms());
-}
-
-static lv_indev_t* pointer_indev;
-static lv_obj_t* main_content;
-static lv_obj_t* status_hint;
-static lv_obj_t* page_layer;
-static lv_obj_t* heading;
-static lv_obj_t* status_time_label;
-static lv_obj_t* battery_value_label;
-static lv_obj_t* battery_icon;
-static lv_obj_t* battery_charge_icon;
-static lv_obj_t* recording_indicator;
-static lv_obj_t* legacy_dialog;
-static lv_obj_t* quick_menu;
-static lv_obj_t* quick_dismiss;
-static lv_obj_t* quick_record_button;
-static lv_obj_t* quick_record_label;
-static lv_obj_t* quick_feedback;
-static lv_obj_t* screenshot_flash;
-static int quick_gesture_start_y;
-static bool quick_gesture_tracking;
-static int quick_gesture_start_progress;
-static int quick_menu_progress;
-static int quick_menu_height;
-static int quick_menu_closed_y;
-static int quick_menu_open_y;
-static bool quick_menu_animation_target_open;
-static bool pending_screenshot;
-static bool pending_screen_off;
-static uint64_t screenshot_flash_until_ms;
-static bool home_page_active;
-static lv_obj_t* click_target;
-static bool click_cancelled;
-static bool switch_to_legacy;
-
-using app_language = gui2_i18n::language_id;
-using language_pack = gui2_i18n::language_pack;
-
-enum class page_kind {
-  HOME,
-  ACTION,
-  LANGUAGE,
-  TIMEZONE,
-  BRIGHTNESS,
-  HAPTICS,
-  RECORDING,
-};
-
-static app_language current_language = app_language::ZH_CN;
-static app_language pending_language = app_language::ZH_CN;
-static page_kind current_page = page_kind::HOME;
-
-static const language_pack& strings(void) {
-  return gui2_i18n::get_language_pack(current_language);
-}
-
-static const char* language_name(app_language language) {
-  return gui2_i18n::get_language_pack(language).native_name;
-}
 
 struct ui_metrics {
   int width;
@@ -154,11 +62,141 @@ struct ui_metrics {
 static ui_metrics ui;
 
 static int ui_px(float value) {
-  return scaled_px(value, ui.scale);
+  return std::max(1, static_cast<int>(std::lround(value * ui.scale)));
 }
 
-static int ui_px_clamped(float value, float minimum, float maximum) {
-  return std::clamp(ui_px(value), ui_px(minimum), ui_px(maximum));
+static int navigation_safe_area(void) {
+  return ui.nav_height + ui.outer_margin;
+}
+
+static const lv_font_t* ui_text_font(void) {
+  return runtime_text_font;
+}
+
+static float ui_scale_for(int width, int height) {
+  constexpr float reference_short_side = 1200.0f;
+  return std::clamp(std::min(width, height) / reference_short_side, 0.72f, 2.0f);
+}
+
+static void init_ui_font(void) {
+#if LV_USE_TINY_TTF && LV_TINY_TTF_FILE_SUPPORT
+  // WQY is a TTC; TinyTTF uses its first face.
+  ui.scale = ui_scale_for(gr_fb_width(), gr_fb_height());
+  const int text_size = ui_px(50);
+  const int status_size = ui_px(42);
+  const int brand_size = ui_px(104);
+  runtime_text_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", text_size);
+  runtime_status_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", status_size);
+  runtime_brand_font = lv_tiny_ttf_create_file("/twres/fonts/wqy-microhei.ttf", brand_size);
+#endif
+}
+
+static uint64_t monotonic_ms(void) {
+  timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return static_cast<uint64_t>(ts.tv_sec) * 1000ULL + ts.tv_nsec / 1000000ULL;
+}
+
+static uint32_t lv_tick_ms(void) {
+  return static_cast<uint32_t>(monotonic_ms());
+}
+
+static lv_indev_t* pointer_indev;
+static lv_obj_t* main_content;
+static lv_obj_t* status_hint;
+static lv_obj_t* page_layer;
+static lv_obj_t* heading;
+static lv_obj_t* status_time_label;
+static lv_obj_t* battery_value_label;
+static lv_obj_t* battery_icon;
+static lv_obj_t* recording_indicator;
+static lv_obj_t* nav_home_icon;
+static lv_obj_t* nav_console_icon;
+static lv_obj_t* nav_power_icon;
+static lv_obj_t* mouse_cursor;
+static lv_obj_t* legacy_dialog;
+static lv_obj_t* quick_menu;
+static lv_obj_t* quick_dismiss;
+static lv_obj_t* quick_record_button;
+static lv_obj_t* quick_record_label;
+static lv_obj_t* quick_feedback;
+static lv_obj_t* screenshot_flash;
+static int quick_gesture_start_y;
+static bool quick_gesture_tracking;
+static bool quick_gesture_moved;
+static int quick_gesture_last_y;
+static uint64_t quick_gesture_last_ms;
+static int quick_gesture_velocity_y;
+static bool quick_gesture_from_dismiss;
+static int quick_gesture_start_progress;
+static int quick_menu_progress;
+static int quick_menu_height;
+static int quick_menu_closed_y;
+static int quick_menu_open_y;
+static bool quick_menu_animation_target_open;
+static bool pending_screenshot;
+static bool pending_screen_off;
+static uint64_t screenshot_flash_until_ms;
+static float wheel_scroll_velocity;
+static float wheel_scroll_remainder;
+static uint64_t wheel_scroll_last_ms;
+static bool home_page_active;
+static bool home_navigation_active;
+static lv_obj_t* click_target;
+static bool click_cancelled;
+static bool switch_to_legacy;
+
+using app_language = gui2_i18n::language_id;
+using language_pack = gui2_i18n::language_pack;
+
+enum class page_kind {
+  HOME,
+  ACTION,
+  LANGUAGE,
+  TIMEZONE,
+  BRIGHTNESS,
+  HAPTICS,
+  RECORDING,
+};
+
+static app_language current_language = app_language::ZH_CN;
+static app_language pending_language = app_language::ZH_CN;
+static page_kind current_page = page_kind::HOME;
+
+static const language_pack& strings(void) {
+  return gui2_i18n::get_language_pack(current_language);
+}
+
+static const char* language_name(app_language language) {
+  return gui2_i18n::get_language_pack(language).native_name;
+}
+
+static const lv_image_dsc_t* battery_icon_for(int percentage, bool charging) {
+  const int clamped_percentage = std::clamp(percentage, 0, 100);
+  if (clamped_percentage == 0) return charging ? &kGui2IconBattery0Charging : &kGui2IconBattery0;
+  const int level = std::clamp(((clamped_percentage + 5) / 10) * 10, 10, 100);
+  switch (level) {
+    case 10:
+      return charging ? &kGui2IconBattery10Charging : &kGui2IconBattery10;
+    case 20:
+      return charging ? &kGui2IconBattery20Charging : &kGui2IconBattery20;
+    case 30:
+      return charging ? &kGui2IconBattery30Charging : &kGui2IconBattery30;
+    case 40:
+      return charging ? &kGui2IconBattery40Charging : &kGui2IconBattery40;
+    case 50:
+      return charging ? &kGui2IconBattery50Charging : &kGui2IconBattery50;
+    case 60:
+      return charging ? &kGui2IconBattery60Charging : &kGui2IconBattery60;
+    case 70:
+      return charging ? &kGui2IconBattery70Charging : &kGui2IconBattery70;
+    case 80:
+      return charging ? &kGui2IconBattery80Charging : &kGui2IconBattery80;
+    case 90:
+      return charging ? &kGui2IconBattery90Charging : &kGui2IconBattery90;
+    default:
+      return charging ? &kGui2IconBattery100Charging : &kGui2IconBattery100;
+  }
 }
 
 static void scale_icon_font(lv_obj_t* object) {
@@ -168,6 +206,24 @@ static void scale_icon_font(lv_obj_t* object) {
   lv_obj_set_style_transform_pivot_y(object, lv_obj_get_height(object) / 2, LV_PART_MAIN);
   lv_obj_set_style_transform_scale(
       object, static_cast<int32_t>(std::lround(ui.scale * LV_SCALE_NONE)), LV_PART_MAIN);
+}
+
+static lv_obj_t* create_svg_image(lv_obj_t* parent, const lv_image_dsc_t* source, int width,
+                                  int height) {
+  if (parent == nullptr || source == nullptr) return nullptr;
+  lv_obj_t* image = lv_image_create(parent);
+  if (image == nullptr) return nullptr;
+  lv_image_set_src(image, gui2_svg_get_raster(source, width, height));
+  lv_obj_set_size(image, std::max(1, width), std::max(1, height));
+  lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CONTAIN);
+  lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE);
+  return image;
+}
+
+static int action_icon_art_size(int color_block_size) {
+  // The source SVGs use almost the full viewBox. Leave a deliberate inset so
+  // the white artwork does not visually touch the colored rounded square.
+  return std::max(1, color_block_size * 82 / 100);
 }
 
 enum class action_id {
@@ -182,18 +238,18 @@ enum class action_id {
 
 struct action_definition {
   action_id id;
-  const char* symbol;
+  const lv_image_dsc_t* icon;
   uint32_t color;
 };
 
 static const action_definition actions[] = {
-  { action_id::INSTALL, LV_SYMBOL_DOWNLOAD, 0x347FF1 },
-  { action_id::WIPE, LV_SYMBOL_CUT, 0xF0443E },
-  { action_id::BACKUP, LV_SYMBOL_SAVE, 0xFFAA20 },
-  { action_id::RESTORE, LV_SYMBOL_UPLOAD, 0x18C935 },
-  { action_id::MOUNT, LV_SYMBOL_DRIVE, 0x6754E8 },
-  { action_id::ADVANCED, LV_SYMBOL_BARS, 0x9AA7B0 },
-  { action_id::SETTINGS, LV_SYMBOL_SETTINGS, 0x405A6C },
+  { action_id::INSTALL, &kGui2IconInstall, 0x347FF1 },
+  { action_id::WIPE, &kGui2IconWipe, 0xF0443E },
+  { action_id::BACKUP, &kGui2IconBackup, 0xFFAA20 },
+  { action_id::RESTORE, &kGui2IconRestore, 0x18C935 },
+  { action_id::MOUNT, &kGui2IconMount, 0x6754E8 },
+  { action_id::ADVANCED, &kGui2IconAdvanced, 0x9AA7B0 },
+  { action_id::SETTINGS, &kGui2IconSettings, 0x405A6C },
 };
 
 static lv_obj_t* language_option_cards[3];
@@ -217,7 +273,10 @@ static int card_inner_padding(void);
 static void close_quick_menu(void);
 static void show_screenshot_flash(void);
 static void refresh_recording_ui(void);
+static void layout_status_labels(void);
+static void refresh_navigation_icons(void);
 static void status_gesture_event_cb(lv_event_t* event);
+static void quick_panel_gesture_event_cb(lv_event_t* event);
 static void create_quick_menu(void);
 
 static constexpr const char* timezone_values[24] = {
@@ -300,10 +359,13 @@ struct hardware_slider_binding {
 };
 
 static hardware_slider_binding brightness_binding;
+static hardware_slider_binding quick_brightness_binding;
 static hardware_slider_binding haptic_bindings[3];
 static hardware_slider_binding recording_binding;
+static bool quick_brightness_dirty;
 
 static void refresh_status_bar(lv_timer_t* timer);
+static void hardware_slider_state_event_cb(lv_event_t* event);
 
 static const char* language_code(app_language language) {
   switch (language) {
@@ -333,6 +395,33 @@ static void set_surface_style(lv_obj_t* object, lv_color_t color, lv_opa_t opa =
 static void disable_scrolling(lv_obj_t* object) {
   lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(object, LV_SCROLLBAR_MODE_OFF);
+}
+
+static void create_navigation_fade(void) {
+  if (page_layer == nullptr) return;
+
+  const int fade_overhang = std::max(ui_px(24), ui.outer_margin / 2);
+  const int fade_height = ui.nav_height + fade_overhang;
+  const int fade_top = std::max(0, ui.height - ui.status_height - fade_height);
+  lv_obj_t* fade = lv_obj_create(page_layer);
+  lv_obj_set_pos(fade, 0, fade_top);
+  lv_obj_set_size(fade, ui.width, fade_height);
+  // Keep the object drawable so LVGL evaluates the gradient.  The first
+  // gradient stop is transparent, so this does not add a solid rectangle.
+  set_surface_style(fade, lv_color_hex(0x000000), LV_OPA_COVER);
+  lv_obj_set_style_radius(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_border_width(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_shadow_width(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_outline_width(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_bg_main_opa(fade, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_color(fade, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_opa(fade, static_cast<lv_opa_t>(190), LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_dir(fade, LV_GRAD_DIR_VER, LV_PART_MAIN);
+  lv_obj_set_style_bg_main_stop(fade, 0, LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_stop(fade, 255, LV_PART_MAIN);
+  lv_obj_clear_flag(fade, LV_OBJ_FLAG_CLICKABLE);
+  disable_scrolling(fade);
 }
 
 static void press_cancel_guard_cb(lv_event_t* event) {
@@ -383,6 +472,11 @@ static bool accept_click(lv_event_t* event) {
   return result;
 }
 
+static void clear_click_guard(void) {
+  click_target = nullptr;
+  click_cancelled = false;
+}
+
 static void action_card_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
 
@@ -420,6 +514,17 @@ static constexpr settings_target haptics_target = settings_target::HAPTICS;
 static constexpr settings_target recording_target = settings_target::RECORDING;
 static constexpr settings_target legacy_target = settings_target::LEGACY;
 
+static void navigate_back(void) {
+  close_quick_menu();
+  if (current_page == page_kind::LANGUAGE || current_page == page_kind::TIMEZONE ||
+      current_page == page_kind::BRIGHTNESS || current_page == page_kind::HAPTICS ||
+      current_page == page_kind::RECORDING) {
+    show_action_page(actions[static_cast<int>(action_id::SETTINGS)]);
+  } else if (!home_page_active) {
+    show_home_page();
+  }
+}
+
 static void navigation_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
 
@@ -433,12 +538,8 @@ static void navigation_event_cb(lv_event_t* event) {
   if (*action == navigation_action::BACK || *action == navigation_action::HOME) {
     if (*action == navigation_action::HOME) {
       show_home_page();
-    } else if (current_page == page_kind::LANGUAGE || current_page == page_kind::TIMEZONE ||
-               current_page == page_kind::BRIGHTNESS || current_page == page_kind::HAPTICS ||
-               current_page == page_kind::RECORDING) {
-      show_action_page(actions[static_cast<int>(action_id::SETTINGS)]);
-    } else if (!home_page_active) {
-      show_home_page();
+    } else {
+      navigate_back();
     }
   }
 }
@@ -698,14 +799,15 @@ static void quick_action_event_cb(lv_event_t* event) {
   refresh_recording_ui();
 }
 
-static lv_obj_t* create_quick_action_button(lv_obj_t* parent, const char* symbol, const char* text,
-                                            int x, int width, const quick_action* action) {
+static lv_obj_t* create_quick_action_button(lv_obj_t* parent, const lv_image_dsc_t* icon_source,
+                                            const char* text, int x, int y, int width,
+                                            const quick_action* action) {
   const int height = std::clamp(ui.height / 14, ui_px(124), ui_px(148));
   lv_obj_t* button = lv_obj_create(parent);
   lv_obj_set_size(button, width, height);
-  lv_obj_set_pos(button, x, card_inner_padding() + ui.text_font->line_height + ui_px(20));
+  lv_obj_set_pos(button, x, y);
   set_surface_style(button, ui.background);
-  lv_obj_set_style_radius(button, ui_px(22), LV_PART_MAIN);
+  lv_obj_set_style_radius(button, height / 4, LV_PART_MAIN);
   lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), ui.background, 18),
                             LV_STATE_PRESSED);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
@@ -714,12 +816,12 @@ static lv_obj_t* create_quick_action_button(lv_obj_t* parent, const char* symbol
   add_press_cancel_guard(button);
   lv_obj_add_event_cb(button, quick_action_event_cb, LV_EVENT_CLICKED,
                       const_cast<quick_action*>(action));
+  lv_obj_add_event_cb(button, quick_panel_gesture_event_cb, LV_EVENT_PRESSED, nullptr);
+  lv_obj_add_event_cb(button, quick_panel_gesture_event_cb, LV_EVENT_PRESSING, nullptr);
+  lv_obj_add_event_cb(button, quick_panel_gesture_event_cb, LV_EVENT_RELEASED, nullptr);
+  lv_obj_add_event_cb(button, quick_panel_gesture_event_cb, LV_EVENT_PRESS_LOST, nullptr);
 
-  lv_obj_t* icon = lv_label_create(button);
-  lv_label_set_text(icon, symbol);
-  lv_obj_set_style_text_color(icon, ui.primary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(icon, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(icon);
+  lv_obj_t* icon = create_svg_image(button, icon_source, ui_px(48), ui_px(48));
 
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, text);
@@ -737,6 +839,43 @@ static lv_obj_t* create_quick_action_button(lv_obj_t* parent, const char* symbol
   lv_obj_align(icon, LV_ALIGN_TOP_LEFT, (width - lv_obj_get_width(icon)) / 2, group_top);
   lv_obj_align(label, LV_ALIGN_TOP_LEFT, ui_px(6), group_top + lv_obj_get_height(icon) + group_gap);
   return button;
+}
+
+static void quick_brightness_event_cb(lv_event_t* event) {
+  auto* binding = static_cast<hardware_slider_binding*>(lv_event_get_user_data(event));
+  if (binding == nullptr || binding->visual.object == nullptr || hardware == nullptr) return;
+
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_VALUE_CHANGED) {
+    const int value = gui2_components::get_value(&binding->visual);
+    if (!hardware->set_brightness_percent(value)) {
+      set_quick_feedback(strings().hardware_error);
+      return;
+    }
+    quick_brightness_dirty = true;
+    if (binding->value_label != nullptr) lv_label_set_text_fmt(binding->value_label, "%d%%", value);
+    gui2_components::refresh_slider(&binding->visual);
+  } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+    gui2_components::refresh_slider(&binding->visual);
+    if (!quick_brightness_dirty || settings == nullptr) return;
+    if (!settings->flush()) {
+      set_quick_feedback(strings().hardware_error);
+      return;
+    }
+    quick_brightness_dirty = false;
+  }
+}
+
+static void sync_quick_brightness(void) {
+  if (hardware == nullptr || !hardware->has_brightness() ||
+      quick_brightness_binding.visual.object == nullptr)
+    return;
+
+  const int value = hardware->brightness_percent();
+  gui2_components::set_value(&quick_brightness_binding.visual, value);
+  if (quick_brightness_binding.value_label != nullptr)
+    lv_label_set_text_fmt(quick_brightness_binding.value_label, "%d%%", value);
+  gui2_components::refresh_slider(&quick_brightness_binding.visual);
 }
 
 static void refresh_recording_ui(void) {
@@ -760,6 +899,7 @@ static void refresh_recording_ui(void) {
                                            recording ? lv_color_hex(0xF0443E) : ui.background, 18),
                               LV_STATE_PRESSED);
   }
+  layout_status_labels();
 }
 
 static void quick_set_progress(int progress) {
@@ -786,21 +926,81 @@ static void quick_menu_anim_ready(lv_anim_t*) {
   }
 }
 
+static bool quick_menu_input_active(void) {
+  return quick_dismiss != nullptr &&
+         (!lv_obj_has_flag(quick_dismiss, LV_OBJ_FLAG_HIDDEN) || quick_gesture_tracking);
+}
+
+static void reset_wheel_scroll(void) {
+  wheel_scroll_velocity = 0.0f;
+  wheel_scroll_remainder = 0.0f;
+  wheel_scroll_last_ms = 0;
+}
+
+static void queue_wheel_scroll(int amount) {
+  if (amount == 0 || main_content == nullptr || quick_menu_input_active()) return;
+
+  // Treat the wheel as an impulse. A single wheel notch travels roughly one
+  // row, then decelerates naturally instead of teleporting the list.
+  const float impulse = static_cast<float>(ui_px(2100));
+  wheel_scroll_velocity =
+      std::clamp(wheel_scroll_velocity + amount * impulse, -static_cast<float>(ui_px(4200)),
+                 static_cast<float>(ui_px(4200)));
+  if (wheel_scroll_last_ms == 0) wheel_scroll_last_ms = monotonic_ms();
+}
+
+static void advance_wheel_scroll(uint64_t now_ms) {
+  if (main_content == nullptr || quick_menu_input_active() || pointer_indev == nullptr ||
+      lv_indev_get_state(pointer_indev) == LV_INDEV_STATE_PRESSED) {
+    reset_wheel_scroll();
+    return;
+  }
+  if (wheel_scroll_velocity == 0.0f) {
+    wheel_scroll_last_ms = now_ms;
+    return;
+  }
+
+  if (wheel_scroll_last_ms == 0) wheel_scroll_last_ms = now_ms;
+  const uint64_t elapsed_ms = std::min<uint64_t>(now_ms - wheel_scroll_last_ms, 50);
+  wheel_scroll_last_ms = now_ms;
+  if (elapsed_ms == 0) return;
+
+  const float elapsed_s = static_cast<float>(elapsed_ms) / 1000.0f;
+  const float distance = wheel_scroll_velocity * elapsed_s + wheel_scroll_remainder;
+  const int pixels = static_cast<int>(std::lround(distance));
+  wheel_scroll_remainder = distance - pixels;
+  if (pixels != 0) lv_obj_scroll_by_bounded(main_content, 0, pixels, LV_ANIM_OFF);
+
+  // Exponential friction is stable across different frame rates. This is a
+  // little quicker than the old GUI's long tail while retaining its soft
+  // per-frame movement instead of snapping a full wheel step at once.
+  wheel_scroll_velocity *= std::exp(-8.0f * elapsed_s);
+  if (std::abs(wheel_scroll_velocity) < static_cast<float>(ui_px(8))) reset_wheel_scroll();
+}
+
 static void animate_quick_menu(bool open) {
   if (quick_menu == nullptr || quick_dismiss == nullptr) return;
   quick_menu_animation_target_open = open;
   lv_anim_del(quick_menu, quick_menu_anim_exec);
   if (open) {
     refresh_recording_ui();
+    sync_quick_brightness();
     lv_obj_clear_flag(quick_dismiss, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(quick_menu, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  const int distance = std::abs((open ? 1000 : 0) - quick_menu_progress);
+  if (distance == 0) {
+    if (!open) quick_menu_anim_ready(nullptr);
+    return;
   }
 
   lv_anim_t animation;
   lv_anim_init(&animation);
   lv_anim_set_var(&animation, quick_menu);
   lv_anim_set_values(&animation, quick_menu_progress, open ? 1000 : 0);
-  lv_anim_set_duration(&animation, 180);
+  lv_anim_set_duration(&animation, std::clamp(120 + distance / 10, 120, 220));
+  lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
   lv_anim_set_exec_cb(&animation, quick_menu_anim_exec);
   lv_anim_set_ready_cb(&animation, quick_menu_anim_ready);
   lv_anim_start(&animation);
@@ -813,15 +1013,77 @@ static void close_quick_menu(void) {
   if (quick_menu != nullptr) lv_obj_add_flag(quick_menu, LV_OBJ_FLAG_HIDDEN);
   if (quick_dismiss != nullptr) lv_obj_add_flag(quick_dismiss, LV_OBJ_FLAG_HIDDEN);
   quick_gesture_tracking = false;
+  quick_gesture_moved = false;
+  quick_gesture_from_dismiss = false;
+  quick_gesture_velocity_y = 0;
 }
 
 static void open_quick_menu(void) {
   animate_quick_menu(true);
 }
 
+static void begin_quick_drag(lv_event_t* event, bool from_dismiss) {
+  lv_indev_t* indev = lv_event_get_indev(event);
+  if (indev == nullptr) indev = pointer_indev;
+  if (indev == nullptr) return;
+
+  lv_point_t point;
+  lv_indev_get_point(indev, &point);
+  lv_anim_del(quick_menu, quick_menu_anim_exec);
+  lv_obj_clear_flag(quick_dismiss, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(quick_menu, LV_OBJ_FLAG_HIDDEN);
+  quick_gesture_start_y = point.y;
+  quick_gesture_last_y = point.y;
+  quick_gesture_last_ms = monotonic_ms();
+  quick_gesture_velocity_y = 0;
+  quick_gesture_start_progress = quick_menu_progress;
+  quick_gesture_moved = false;
+  quick_gesture_from_dismiss = from_dismiss;
+  quick_gesture_tracking = true;
+}
+
+static void update_quick_drag(lv_event_t* event) {
+  if (!quick_gesture_tracking) return;
+  lv_indev_t* indev = lv_event_get_indev(event);
+  if (indev == nullptr) indev = pointer_indev;
+  if (indev == nullptr) return;
+
+  lv_point_t point;
+  lv_indev_get_point(indev, &point);
+  const uint64_t now_ms = monotonic_ms();
+  const int delta = point.y - quick_gesture_start_y;
+  if (std::abs(delta) >= ui_px(12)) quick_gesture_moved = true;
+
+  const uint64_t elapsed_ms = now_ms - quick_gesture_last_ms;
+  if (elapsed_ms > 0)
+    quick_gesture_velocity_y =
+        static_cast<int>((point.y - quick_gesture_last_y) * 1000 / elapsed_ms);
+  quick_gesture_last_y = point.y;
+  quick_gesture_last_ms = now_ms;
+
+  const int travel = std::max(1, quick_menu_open_y - quick_menu_closed_y);
+  quick_set_progress(quick_gesture_start_progress + delta * 1000 / travel);
+}
+
 static void finish_quick_drag(void) {
   quick_gesture_tracking = false;
-  animate_quick_menu(quick_menu_progress >= 450);
+  const int touch_slop = ui_px(12);
+  const int fling_velocity = ui_px(500);
+  bool open = quick_menu_progress >= 500;
+
+  if (quick_gesture_from_dismiss) {
+    // Outside taps are intentionally ignored. Only an upward gesture closes the menu.
+    const bool upward = quick_gesture_start_y - quick_gesture_last_y >= touch_slop;
+    const bool upward_fling = quick_gesture_velocity_y <= -fling_velocity;
+    open = !(quick_gesture_moved && (upward || upward_fling));
+  } else if (quick_gesture_velocity_y >= fling_velocity) {
+    open = true;
+  } else if (quick_gesture_velocity_y <= -fling_velocity) {
+    open = false;
+  }
+
+  quick_gesture_from_dismiss = false;
+  animate_quick_menu(open);
 }
 
 static void status_gesture_event_cb(lv_event_t* event) {
@@ -832,19 +1094,9 @@ static void status_gesture_event_cb(lv_event_t* event) {
   if (indev == nullptr) return;
   lv_indev_get_point(indev, &point);
   if (code == LV_EVENT_PRESSED) {
-    quick_gesture_start_y = point.y;
-    quick_gesture_start_progress = quick_menu_progress;
-    quick_gesture_tracking = true;
-  } else if (code == LV_EVENT_PRESSING && quick_gesture_tracking) {
-    const int distance = point.y - quick_gesture_start_y;
-    if (distance > 0) {
-      quick_set_progress(quick_gesture_start_progress +
-                         distance * 1000 / std::max(1, quick_menu_height));
-      if (quick_menu_progress > 0) {
-        lv_obj_clear_flag(quick_dismiss, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(quick_menu, LV_OBJ_FLAG_HIDDEN);
-      }
-    }
+    begin_quick_drag(event, false);
+  } else if (code == LV_EVENT_PRESSING) {
+    update_quick_drag(event);
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
     if (quick_gesture_tracking) finish_quick_drag();
   }
@@ -858,17 +1110,14 @@ static void quick_dismiss_event_cb(lv_event_t* event) {
   if (indev == nullptr) return;
   lv_indev_get_point(indev, &point);
   if (code == LV_EVENT_PRESSED) {
-    quick_gesture_start_y = point.y;
-    quick_gesture_start_progress = quick_menu_progress;
-    quick_gesture_tracking = true;
-  } else if (code == LV_EVENT_PRESSING && quick_gesture_tracking) {
-    const int distance = quick_gesture_start_y - point.y;
-    if (distance > 0) {
-      quick_set_progress(quick_gesture_start_progress -
-                         distance * 1000 / std::max(1, quick_menu_height));
-    }
+    begin_quick_drag(event, true);
+  } else if (code == LV_EVENT_PRESSING) {
+    update_quick_drag(event);
   } else if (code == LV_EVENT_CLICKED) {
-    if (accept_click(event)) close_quick_menu();
+    const bool moved = quick_gesture_moved;
+    // Consume the click guard state, but never close or vibrate for an outside tap.
+    clear_click_guard();
+    if (!moved) quick_gesture_tracking = false;
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
     if (quick_gesture_tracking) finish_quick_drag();
   }
@@ -883,14 +1132,9 @@ static void quick_panel_gesture_event_cb(lv_event_t* event) {
   lv_point_t point;
   lv_indev_get_point(indev, &point);
   if (code == LV_EVENT_PRESSED) {
-    quick_gesture_start_y = point.y;
-    quick_gesture_start_progress = quick_menu_progress;
-    quick_gesture_tracking = true;
-  } else if (code == LV_EVENT_PRESSING && quick_gesture_tracking) {
-    const int distance = quick_gesture_start_y - point.y;
-    if (distance > 0)
-      quick_set_progress(quick_gesture_start_progress -
-                         distance * 1000 / std::max(1, quick_menu_height));
+    begin_quick_drag(event, false);
+  } else if (code == LV_EVENT_PRESSING) {
+    update_quick_drag(event);
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
     if (quick_gesture_tracking) finish_quick_drag();
   }
@@ -908,11 +1152,7 @@ static void create_quick_menu(void) {
   lv_obj_add_event_cb(quick_dismiss, quick_dismiss_event_cb, LV_EVENT_ALL, nullptr);
 
   quick_menu = lv_obj_create(lv_layer_top());
-  quick_menu_height = std::clamp(ui.height / 5, ui_px(360), ui_px(460));
-  lv_obj_set_size(quick_menu, ui.content_width, quick_menu_height);
-  quick_menu_open_y = ui.status_height + ui_px(10);
-  quick_menu_closed_y = ui.status_height - quick_menu_height;
-  lv_obj_set_pos(quick_menu, ui.outer_margin, quick_menu_closed_y);
+  lv_obj_set_size(quick_menu, ui.content_width, 1);
   set_surface_style(quick_menu, ui.card_color);
   lv_obj_set_style_radius(quick_menu, ui_px(28), LV_PART_MAIN);
   lv_obj_set_style_pad_all(quick_menu, 0, LV_PART_MAIN);
@@ -935,29 +1175,102 @@ static void create_quick_menu(void) {
 
   const int inner_padding = card_inner_padding();
   const int gap = ui.card_gap;
-  const int button_width = (ui.content_width - inner_padding * 2 - gap * 2) / 3;
-  create_quick_action_button(quick_menu, LV_SYMBOL_IMAGE, strings().screenshot, inner_padding,
-                             button_width, &screenshot_action);
-  lv_obj_t* screen_button = create_quick_action_button(
-      quick_menu, LV_SYMBOL_POWER, strings().screen_off, inner_padding + button_width + gap,
-      button_width, &screen_off_action);
-  if (screen == nullptr || !screen->has_screen_off())
-    lv_obj_add_flag(screen_button, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_update_layout(title);
+  int content_top = inner_padding + lv_obj_get_height(title) + gap;
 
-  quick_record_button = create_quick_action_button(
-      quick_menu, LV_SYMBOL_VIDEO, strings().start_recording,
-      inner_padding + (button_width + gap) * 2, button_width, &recording_action);
-  quick_record_label = lv_obj_get_child(quick_record_button, 1);
+  quick_brightness_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, true, false };
+  quick_brightness_dirty = false;
+  if (hardware != nullptr && hardware->has_brightness()) {
+    const int header_height = std::max(1, ui.status_font->line_height);
+    const int slider_height = std::clamp(std::min(ui.width, ui.height) / 24, ui_px(28), ui_px(48));
+    const int slider_gap = std::clamp(ui.card_gap / 2, ui_px(8), ui_px(12));
+
+    lv_obj_t* brightness_label = lv_label_create(quick_menu);
+    lv_label_set_text(brightness_label, strings().brightness_label);
+    lv_obj_set_pos(brightness_label, inner_padding, content_top);
+    lv_obj_set_style_text_color(brightness_label, ui.primary_text, LV_PART_MAIN);
+    lv_obj_set_style_text_font(brightness_label, ui.status_font, LV_PART_MAIN);
+
+    quick_brightness_binding.value_label = lv_label_create(quick_menu);
+    lv_obj_set_width(quick_brightness_binding.value_label, ui.content_width - inner_padding * 2);
+    lv_obj_set_style_text_align(quick_brightness_binding.value_label, LV_TEXT_ALIGN_RIGHT,
+                                LV_PART_MAIN);
+    lv_obj_set_pos(quick_brightness_binding.value_label, inner_padding, content_top);
+    lv_obj_set_style_text_color(quick_brightness_binding.value_label, ui.secondary_text,
+                                LV_PART_MAIN);
+    lv_obj_set_style_text_font(quick_brightness_binding.value_label, ui.status_font, LV_PART_MAIN);
+
+    const lv_color_t slider_background = lv_color_mix(lv_color_hex(0xFFFFFF), ui.card_color, 38);
+    lv_obj_t* slider = gui2_components::create_slider(
+        quick_menu, inner_padding, content_top + header_height + slider_gap,
+        ui.content_width - inner_padding * 2, slider_height, 10, 100,
+        hardware->brightness_percent(), slider_background, lv_color_hex(0x347FF1),
+        lv_color_hex(0xFFFFFF), &quick_brightness_binding.visual);
+    if (slider != nullptr) {
+      lv_obj_add_event_cb(slider, quick_brightness_event_cb, LV_EVENT_VALUE_CHANGED,
+                          &quick_brightness_binding);
+      lv_obj_add_event_cb(slider, quick_brightness_event_cb, LV_EVENT_RELEASED,
+                          &quick_brightness_binding);
+      lv_obj_add_event_cb(slider, quick_brightness_event_cb, LV_EVENT_PRESS_LOST,
+                          &quick_brightness_binding);
+      lv_obj_add_event_cb(slider, hardware_slider_state_event_cb, LV_EVENT_PRESSED,
+                          &quick_brightness_binding);
+      lv_obj_add_event_cb(slider, hardware_slider_state_event_cb, LV_EVENT_PRESSING,
+                          &quick_brightness_binding);
+    }
+    content_top += header_height + slider_gap + slider_height + gap;
+    sync_quick_brightness();
+  }
+
+  struct quick_action_entry {
+    const lv_image_dsc_t* icon;
+    const char* text;
+    const quick_action* action;
+  };
+  quick_action_entry entries[3];
+  int action_count = 0;
+  entries[action_count++] = { &kGui2IconScrShot, strings().screenshot, &screenshot_action };
+  if (screen != nullptr && screen->has_screen_off())
+    entries[action_count++] = { &kGui2IconPower, strings().screen_off, &screen_off_action };
+  entries[action_count++] = { &kGui2IconScrRecord, strings().start_recording, &recording_action };
+
+  const int action_height = std::clamp(ui.height / 14, ui_px(124), ui_px(148));
+  const int columns = std::min(3, action_count);
+  const int available_width = ui.content_width - inner_padding * 2;
+  const int button_width = (available_width - gap * (columns - 1)) / columns;
+  const int row_width = button_width * action_count + gap * (action_count - 1);
+  const int row_left = inner_padding + std::max(0, (available_width - row_width) / 2);
+  for (int i = 0; i < action_count; ++i) {
+    const int x = row_left + i * (button_width + gap);
+    lv_obj_t* button = create_quick_action_button(quick_menu, entries[i].icon, entries[i].text, x,
+                                                  content_top, button_width, entries[i].action);
+    if (*entries[i].action == quick_action::RECORDING) {
+      quick_record_button = button;
+      quick_record_label = button == nullptr ? nullptr : lv_obj_get_child(button, 1);
+    }
+  }
+  content_top += action_height;
+
   quick_feedback = lv_label_create(quick_menu);
+  const int feedback_height = std::max(ui_px(36), ui.status_font->line_height * 2);
+  const int feedback_gap = std::clamp(ui.card_gap / 2, ui_px(8), ui_px(12));
+  quick_menu_height = content_top + feedback_gap + feedback_height + inner_padding;
+  lv_obj_set_size(quick_menu, ui.content_width, quick_menu_height);
+  lv_obj_set_style_radius(quick_menu, std::clamp(quick_menu_height / 4, ui_px(24), ui_px(40)),
+                          LV_PART_MAIN);
   lv_obj_set_width(quick_feedback, ui.content_width - inner_padding * 2);
-  lv_obj_set_height(quick_feedback, std::max(ui_px(36), ui.status_font->line_height * 2));
-  lv_obj_align(quick_feedback, LV_ALIGN_BOTTOM_LEFT, inner_padding, -inner_padding);
+  lv_obj_set_height(quick_feedback, feedback_height);
+  lv_obj_set_pos(quick_feedback, inner_padding, content_top + feedback_gap);
   lv_label_set_long_mode(quick_feedback, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(quick_feedback, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
   lv_obj_set_style_text_color(quick_feedback, ui.secondary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(quick_feedback, ui.status_font, LV_PART_MAIN);
   lv_obj_add_flag(quick_feedback, LV_OBJ_FLAG_HIDDEN);
   disable_scrolling(quick_feedback);
+
+  quick_menu_open_y = ui.status_height + std::max(ui_px(8), ui.card_gap / 2);
+  quick_menu_closed_y = -quick_menu_height;
+  lv_obj_set_pos(quick_menu, ui.outer_margin, quick_menu_closed_y);
 
   screenshot_flash = lv_obj_create(lv_layer_top());
   lv_obj_set_size(screenshot_flash, ui.width, ui.height);
@@ -970,6 +1283,17 @@ static void create_quick_menu(void) {
 
   quick_set_progress(0);
   close_quick_menu();
+}
+
+static void create_mouse_cursor(void) {
+  if (pointer_indev == nullptr || !ev_has_mouse()) return;
+
+  mouse_cursor = lv_image_create(lv_layer_sys());
+  if (mouse_cursor == nullptr) return;
+  lv_obj_set_size(mouse_cursor, ui_px(48), ui_px(48));
+  lv_image_set_src(mouse_cursor, gui2_svg_get_raster(&kGui2IconCursor, ui_px(48), ui_px(48)));
+  lv_image_set_inner_align(mouse_cursor, LV_IMAGE_ALIGN_CONTAIN);
+  lv_indev_set_cursor(pointer_indev, mouse_cursor);
 }
 
 static void show_screenshot_flash(void) {
@@ -1043,12 +1367,9 @@ static lv_obj_t* create_action_card(lv_obj_t* parent, const action_definition& d
   lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
   disable_scrolling(icon);
 
-  lv_obj_t* icon_label = lv_label_create(icon);
-  lv_label_set_text(icon_label, definition.symbol);
-  lv_obj_set_style_text_color(icon_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(icon_label);
-  lv_obj_center(icon_label);
+  const int icon_art_size = action_icon_art_size(icon_size);
+  lv_obj_t* icon_image = create_svg_image(icon, definition.icon, icon_art_size, icon_art_size);
+  lv_obj_center(icon_image);
 
   lv_obj_t* title = lv_label_create(card);
   lv_label_set_text(title, strings().actions[static_cast<int>(definition.id)].title);
@@ -1060,44 +1381,46 @@ static lv_obj_t* create_action_card(lv_obj_t* parent, const action_definition& d
   lv_obj_set_style_text_color(title, text_color, LV_PART_MAIN);
   lv_obj_set_style_text_font(title, card_font, LV_PART_MAIN);
 
-  lv_obj_t* arrow = lv_label_create(card);
-  lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
+  lv_obj_t* arrow = create_svg_image(card, &kGui2IconArrowRight, ui_px(48), ui_px(48));
   lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -card_side_padding, 0);
-  lv_obj_set_style_text_color(arrow, secondary_color, LV_PART_MAIN);
-  lv_obj_set_style_text_font(arrow, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(arrow);
 
   return card;
 }
 
-static lv_obj_t* create_nav_button(lv_obj_t* parent, const char* symbol, int size, bool circular,
-                                   lv_color_t nav_color, lv_color_t text_color,
-                                   const navigation_action& action, int width = -1,
-                                   int height = -1) {
+static lv_obj_t* create_nav_button(lv_obj_t* parent, const lv_image_dsc_t* icon_source, int size,
+                                   bool circular, lv_color_t nav_color, lv_color_t text_color,
+                                   const navigation_action& action, int width = -1, int height = -1,
+                                   bool embedded = false) {
   lv_obj_t* button = lv_obj_create(parent);
   const int button_width = width > 0 ? width : size;
   const int button_height = height > 0 ? height : size;
   lv_obj_set_size(button, button_width, button_height);
   disable_scrolling(button);
   lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
-  const int radius_size = std::min(button_width, button_height);
-  lv_obj_set_style_radius(button, circular ? radius_size / 2 : radius_size / 3, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, nav_color, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), nav_color, 18),
-                            LV_STATE_PRESSED);
-  lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+  if (embedded) {
+    lv_obj_set_style_radius(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else {
+    const int radius_size = std::min(button_width, button_height);
+    lv_obj_set_style_radius(button, circular ? radius_size / 2 : radius_size / 3, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, nav_color, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), nav_color, 18),
+                              LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(button, ui_px(4), LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+  }
+  if (embedded) lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
   add_press_cancel_guard(button);
   lv_obj_add_event_cb(button, navigation_event_cb, LV_EVENT_CLICKED,
                       const_cast<navigation_action*>(&action));
 
-  lv_obj_t* label = lv_label_create(button);
-  lv_label_set_text(label, symbol);
-  lv_obj_set_style_text_color(label, text_color, LV_PART_MAIN);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(label);
-  lv_obj_center(label);
+  const int icon_size = std::clamp(button_height * 58 / 100, ui_px(52), ui_px(84));
+  lv_obj_t* image = create_svg_image(button, icon_source, icon_size, icon_size);
+  lv_obj_center(image);
   return button;
 }
 
@@ -1146,15 +1469,15 @@ static void create_scroll_area(int bottom_reserved = 0) {
 
   main_content = lv_obj_create(page_layer);
   lv_obj_set_pos(main_content, 0, scroll_top);
-  lv_obj_set_size(
-      main_content, ui.width,
-      std::max(1, ui.height - ui.status_height - ui.nav_height - scroll_top - bottom_reserved));
+  lv_obj_set_size(main_content, ui.width, std::max(1, ui.height - ui.status_height - scroll_top));
   set_surface_style(main_content, ui.background);
   lv_obj_add_flag(main_content, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(main_content, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(main_content, LV_SCROLLBAR_MODE_OFF);
   lv_obj_add_flag(main_content, LV_OBJ_FLAG_SCROLL_ELASTIC);
   lv_obj_set_style_pad_all(main_content, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(main_content, bottom_reserved, LV_PART_MAIN);
+  create_navigation_fade();
 }
 
 static void create_page_scaffold(page_kind page, bool is_home, const char* title,
@@ -1162,9 +1485,26 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   close_quick_menu();
   reset_page_layer();
   home_page_active = is_home;
+  home_navigation_active = true;
   current_page = page;
   create_page_heading(title, summary);
   create_scroll_area(bottom_reserved);
+}
+
+static void refresh_navigation_icons(void) {
+  if (nav_home_icon != nullptr)
+    lv_image_set_src(
+        nav_home_icon,
+        gui2_svg_get_raster(home_navigation_active ? &kGui2IconHomeFilled : &kGui2IconHomeOutlined,
+                            lv_obj_get_width(nav_home_icon), lv_obj_get_height(nav_home_icon)));
+  if (nav_console_icon != nullptr)
+    lv_image_set_src(nav_console_icon, gui2_svg_get_raster(&kGui2IconConsoleOutline,
+                                                           lv_obj_get_width(nav_console_icon),
+                                                           lv_obj_get_height(nav_console_icon)));
+  if (nav_power_icon != nullptr)
+    lv_image_set_src(nav_power_icon,
+                     gui2_svg_get_raster(&kGui2IconPower, lv_obj_get_width(nav_power_icon),
+                                         lv_obj_get_height(nav_power_icon)));
 }
 
 static void settings_option_event_cb(lv_event_t* event) {
@@ -1242,12 +1582,8 @@ static lv_obj_t* create_setting_option(lv_obj_t* parent, const char* title, cons
   lv_obj_set_height(option, option_height);
   lv_obj_align(text_block, LV_ALIGN_LEFT_MID, text_left, 0);
 
-  lv_obj_t* arrow = lv_label_create(option);
-  lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
+  lv_obj_t* arrow = create_svg_image(option, &kGui2IconArrowRight, ui_px(32), ui_px(32));
   lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -card_inner_padding(), 0);
-  lv_obj_set_style_text_color(arrow, ui.secondary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(arrow, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(arrow);
 
   return option;
 }
@@ -1467,7 +1803,7 @@ static lv_obj_t* create_hardware_body(void) {
   lv_obj_set_style_pad_left(body, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_right(body, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_top(body, ui_px(8), LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(body, ui.outer_margin, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(body, navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
@@ -1571,7 +1907,7 @@ static void show_timezone_page(void) {
   set_surface_style(body, ui.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   disable_scrolling(body);
-  lv_obj_set_style_pad_bottom(body, ui.outer_margin, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(body, navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
@@ -1654,7 +1990,7 @@ static void show_home_page(void) {
   lv_obj_set_height(cards, LV_SIZE_CONTENT);
   set_surface_style(cards, ui.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(cards, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(cards, ui.outer_margin, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(cards, navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(cards, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_style_pad_column(cards, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(cards, LV_LAYOUT_FLEX);
@@ -1679,7 +2015,7 @@ static void show_action_page(const action_definition& definition) {
   set_surface_style(body, ui.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   disable_scrolling(body);
-  lv_obj_set_style_pad_bottom(body, ui.outer_margin, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(body, navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
@@ -1705,12 +2041,10 @@ static void show_action_page(const action_definition& definition) {
   set_surface_style(icon, lv_color_hex(definition.color));
   disable_scrolling(icon);
 
-  lv_obj_t* icon_label = lv_label_create(icon);
-  lv_label_set_text(icon_label, definition.symbol);
-  lv_obj_set_style_text_color(icon_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(icon_label);
-  lv_obj_center(icon_label);
+  const int info_icon_art_size = action_icon_art_size(info_icon_size);
+  lv_obj_t* icon_image =
+      create_svg_image(icon, definition.icon, info_icon_art_size, info_icon_art_size);
+  lv_obj_center(icon_image);
 
   const int text_left = info_side_padding + info_icon_size + ui.cards_top_gap;
   const int text_gap = ui_px(12);
@@ -1818,7 +2152,7 @@ static void show_language_page(void) {
   set_surface_style(body, ui.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   disable_scrolling(body);
-  lv_obj_set_style_pad_bottom(body, ui.outer_margin, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(body, navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, ui.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
@@ -1829,12 +2163,15 @@ static void show_language_page(void) {
   create_apply_button(apply_language_event_cb, strings().apply);
 }
 
-static const char* battery_level_symbol(int percentage) {
-  if (percentage >= 85) return LV_SYMBOL_BATTERY_FULL;
-  if (percentage >= 60) return LV_SYMBOL_BATTERY_3;
-  if (percentage >= 30) return LV_SYMBOL_BATTERY_2;
-  if (percentage > 0) return LV_SYMBOL_BATTERY_1;
-  return LV_SYMBOL_BATTERY_EMPTY;
+static void layout_status_labels(void) {
+  if (status_time_label == nullptr || runtime_status_font == nullptr) return;
+
+  const int status_content_height = ui.status_height - ui.status_top_padding;
+  const int status_y =
+      ui.status_top_padding + (status_content_height - runtime_status_font->line_height) / 2;
+  lv_obj_align(status_time_label, LV_ALIGN_TOP_LEFT, ui.outer_margin, status_y);
+  if (recording_indicator != nullptr)
+    lv_obj_align_to(recording_indicator, status_time_label, LV_ALIGN_OUT_RIGHT_MID, ui_px(12), 0);
 }
 
 static void refresh_status_bar(lv_timer_t* timer) {
@@ -1846,12 +2183,10 @@ static void refresh_status_bar(lv_timer_t* timer) {
     lv_label_set_text(status_time_label, snapshot.time_text.c_str());
   refresh_recording_ui();
 
-  if (battery_value_label == nullptr || battery_icon == nullptr || battery_charge_icon == nullptr)
-    return;
+  if (battery_value_label == nullptr || battery_icon == nullptr) return;
   if (!snapshot.battery_valid) {
     lv_obj_add_flag(battery_value_label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(battery_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(battery_charge_icon, LV_OBJ_FLAG_HIDDEN);
     return;
   }
 
@@ -1859,27 +2194,16 @@ static void refresh_status_bar(lv_timer_t* timer) {
   std::snprintf(battery_text, sizeof(battery_text), "%d%%",
                 std::clamp(snapshot.battery_percentage, 0, 100));
   lv_label_set_text(battery_value_label, battery_text);
-  lv_label_set_text(battery_icon, battery_level_symbol(snapshot.battery_percentage));
-  if (snapshot.charging) {
-    lv_label_set_text(battery_charge_icon, LV_SYMBOL_CHARGE);
-    lv_obj_clear_flag(battery_charge_icon, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(battery_charge_icon, LV_OBJ_FLAG_HIDDEN);
-  }
+  lv_image_set_src(
+      battery_icon,
+      gui2_svg_get_raster(battery_icon_for(snapshot.battery_percentage, snapshot.charging),
+                          lv_obj_get_width(battery_icon), lv_obj_get_height(battery_icon)));
 
   const int status_content_height = ui.status_height - ui.status_top_padding;
   const int status_y =
       ui.status_top_padding + (status_content_height - runtime_status_font->line_height) / 2;
-  if (snapshot.charging) {
-    lv_obj_align(battery_charge_icon, LV_ALIGN_TOP_RIGHT, -ui.outer_margin,
-                 ui.status_top_padding +
-                     (status_content_height - lv_obj_get_height(battery_charge_icon)) / 2);
-    lv_obj_align_to(battery_value_label, battery_charge_icon, LV_ALIGN_OUT_LEFT_MID, -ui_px(4), 0);
-    lv_obj_align_to(battery_icon, battery_value_label, LV_ALIGN_OUT_LEFT_MID, -ui_px(6), 0);
-  } else {
-    lv_obj_align(battery_value_label, LV_ALIGN_TOP_RIGHT, -ui.outer_margin, status_y);
-    lv_obj_align_to(battery_icon, battery_value_label, LV_ALIGN_OUT_LEFT_MID, -ui_px(6), 0);
-  }
+  lv_obj_align(battery_value_label, LV_ALIGN_TOP_RIGHT, -ui.outer_margin, status_y);
+  lv_obj_align_to(battery_icon, battery_value_label, LV_ALIGN_OUT_LEFT_MID, -ui_px(12), 0);
   lv_obj_clear_flag(battery_value_label, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(battery_icon, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1898,21 +2222,17 @@ static void create_gui2_shell(lv_obj_t* screen) {
   const lv_font_t* text_font = ui_text_font();
 
   const float scale = ui_scale_for(width, height);
-  const auto px = [scale](float value) { return scaled_px(value, scale); };
-  const auto clamp_px = [scale](float value, float minimum, float maximum) {
-    return std::clamp(scaled_px(value, scale), scaled_px(minimum, scale),
-                      scaled_px(maximum, scale));
-  };
-  const int status_content_height = clamp_px(96, 56, 96);
-  const int status_top_padding = clamp_px(24, 12, 24);
+  ui.scale = scale;
+  const int status_content_height = std::clamp(ui_px(96), ui_px(56), ui_px(96));
+  const int status_top_padding = std::clamp(ui_px(24), ui_px(12), ui_px(24));
   const int status_height = status_content_height + status_top_padding;
-  const int nav_height = clamp_px(240, 180, 240);
-  const int outer_margin = clamp_px(56, 18, 56);
-  const int card_gap = clamp_px(22, 10, 22);
+  const int nav_height = std::clamp(ui_px(210), ui_px(154), ui_px(210));
+  const int outer_margin = std::clamp(ui_px(56), ui_px(18), ui_px(56));
+  const int card_gap = std::clamp(ui_px(22), ui_px(10), ui_px(22));
   const int content_width = width - outer_margin * 2;
-  const int card_height = landscape ? std::clamp(height * 12 / 100, px(82), px(148))
-                                    : std::clamp(width * 19 / 100, px(104), px(218));
-  const int icon_size = std::clamp(card_height * 60 / 100, px(64), px(132));
+  const int card_height = landscape ? std::clamp(height * 12 / 100, ui_px(82), ui_px(148))
+                                    : std::clamp(width * 18 / 100, ui_px(104), ui_px(210));
+  const int icon_size = std::clamp(card_height * 58 / 100, ui_px(48), ui_px(112));
   const lv_font_t* brand_font = runtime_brand_font;
 
   ui = {
@@ -1925,10 +2245,10 @@ static void create_gui2_shell(lv_obj_t* screen) {
     outer_margin,
     card_gap,
     content_width,
-    clamp_px(128, 80, 128),
-    clamp_px(24, 16, 24),
-    std::clamp(brand_font->line_height + runtime_status_font->line_height + px(18), px(120),
-               px(180)),
+    std::clamp(ui_px(112), ui_px(72), ui_px(112)),
+    std::clamp(ui_px(24), ui_px(16), ui_px(24)),
+    std::clamp(brand_font->line_height + runtime_status_font->line_height + ui_px(18), ui_px(120),
+               ui_px(180)),
     card_height,
     icon_size,
     text_font,
@@ -1970,34 +2290,19 @@ static void create_gui2_shell(lv_obj_t* screen) {
   lv_obj_align(battery_value_label, LV_ALIGN_TOP_RIGHT, -outer_margin,
                status_top_padding + (status_content_height - runtime_status_font->line_height) / 2);
 
-  battery_icon = lv_label_create(status_bar);
-  lv_label_set_text(battery_icon, LV_SYMBOL_BATTERY_FULL);
-  lv_obj_set_style_text_color(battery_icon, primary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(battery_icon, &lv_font_montserrat_48, LV_PART_MAIN);
-  scale_icon_font(battery_icon);
-  lv_obj_align_to(battery_icon, battery_value_label, LV_ALIGN_OUT_LEFT_MID, -ui_px(8), 0);
-
-  battery_charge_icon = lv_label_create(status_bar);
-  lv_label_set_text(battery_charge_icon, LV_SYMBOL_CHARGE);
-  lv_obj_set_style_text_color(battery_charge_icon, primary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(battery_charge_icon, &lv_font_montserrat_24, LV_PART_MAIN);
-  scale_icon_font(battery_charge_icon);
-  lv_obj_align(
-      battery_charge_icon, LV_ALIGN_TOP_RIGHT, -outer_margin,
-      status_top_padding + (status_content_height - lv_obj_get_height(battery_charge_icon)) / 2);
-  lv_obj_add_flag(battery_charge_icon, LV_OBJ_FLAG_HIDDEN);
+  battery_icon = create_svg_image(status_bar, &kGui2IconBattery100, ui_px(72), ui_px(48));
+  lv_obj_align_to(battery_icon, battery_value_label, LV_ALIGN_OUT_LEFT_MID, -ui_px(12), 0);
 
   recording_indicator = lv_label_create(status_bar);
   lv_label_set_text(recording_indicator, strings().recording_indicator);
-  lv_obj_align(recording_indicator, LV_ALIGN_TOP_MID, 0,
-               status_top_padding + (status_content_height - runtime_status_font->line_height) / 2);
+  lv_obj_align_to(recording_indicator, status_time_label, LV_ALIGN_OUT_RIGHT_MID, ui_px(12), 0);
   lv_obj_set_style_text_color(recording_indicator, lv_color_hex(0xF0443E), LV_PART_MAIN);
   lv_obj_set_style_text_font(recording_indicator, runtime_status_font, LV_PART_MAIN);
   lv_obj_add_flag(recording_indicator, LV_OBJ_FLAG_HIDDEN);
 
   page_layer = lv_obj_create(screen);
   lv_obj_set_pos(page_layer, 0, status_height);
-  lv_obj_set_size(page_layer, width, std::max(1, height - status_height - nav_height));
+  lv_obj_set_size(page_layer, width, std::max(1, height - status_height));
   set_surface_style(page_layer, background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(page_layer, 0, LV_PART_MAIN);
   disable_scrolling(page_layer);
@@ -2007,24 +2312,24 @@ static void create_gui2_shell(lv_obj_t* screen) {
   lv_obj_t* navigation = lv_obj_create(screen);
   lv_obj_set_pos(navigation, 0, height - nav_height);
   lv_obj_set_size(navigation, width, nav_height);
-  set_surface_style(navigation, background);
+  set_surface_style(navigation, background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(navigation, 0, LV_PART_MAIN);
   disable_scrolling(navigation);
 
-  const int navigation_control_size = std::clamp(nav_height * 76 / 100, ui_px(112), ui_px(172));
+  const int navigation_control_size = std::clamp(nav_height * 72 / 100, ui_px(108), ui_px(148));
   const int nav_button_size = navigation_control_size;
   const int pill_height = navigation_control_size;
   const int pill_width =
-      std::clamp(landscape ? width * 40 / 100 : width * 58 / 100, ui_px(238), ui_px(620));
-  const int navigation_gap = ui_px_clamped(28, 16, 28);
+      std::clamp(landscape ? width * 44 / 100 : width * 64 / 100, ui_px(270), ui_px(700));
+  const int navigation_gap = std::clamp(ui_px(30), ui_px(18), ui_px(30));
   const int navigation_group_width = nav_button_size + navigation_gap + pill_width;
   const int navigation_group_left = std::max(0, (width - navigation_group_width) / 2);
-  const int navigation_bottom_padding = ui_px_clamped(24, 12, 24);
+  const int navigation_bottom_padding = std::clamp(ui_px(22), ui_px(12), ui_px(22));
   const int navigation_content_height = std::max(1, nav_height - navigation_bottom_padding);
   const int navigation_group_top = std::max(0, (navigation_content_height - nav_button_size) / 2);
   const int pill_top = std::max(0, (navigation_content_height - pill_height) / 2);
 
-  lv_obj_t* back = create_nav_button(navigation, LV_SYMBOL_LEFT, nav_button_size, true, nav_color,
+  lv_obj_t* back = create_nav_button(navigation, &kGui2IconBack, nav_button_size, true, nav_color,
                                      primary_text, back_navigation);
   lv_obj_set_pos(back, navigation_group_left, navigation_group_top);
 
@@ -2034,6 +2339,9 @@ static void create_gui2_shell(lv_obj_t* screen) {
   set_surface_style(pill, nav_color);
   lv_obj_set_style_pad_all(pill, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(pill, pill_height / 2, LV_PART_MAIN);
+  lv_obj_set_style_border_width(pill, ui_px(4), LV_PART_MAIN);
+  lv_obj_set_style_border_color(pill, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+  lv_obj_set_style_border_opa(pill, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_shadow_width(pill, ui_px(10), LV_PART_MAIN);
   lv_obj_set_style_shadow_opa(pill, 45, LV_PART_MAIN);
   lv_obj_set_style_shadow_offset_y(pill, ui_px(3), LV_PART_MAIN);
@@ -2044,15 +2352,23 @@ static void create_gui2_shell(lv_obj_t* screen) {
   disable_scrolling(pill);
 
   const int pill_item_width = pill_width / 3;
-  const int pill_icon_size = std::min(pill_height - ui_px(14), ui_px(108));
-  create_nav_button(pill, LV_SYMBOL_HOME, pill_icon_size, false, nav_color, primary_text,
-                    home_navigation, pill_item_width, pill_height);
-  create_nav_button(pill, LV_SYMBOL_FILE, pill_icon_size, false, nav_color, secondary_text,
-                    log_navigation, pill_item_width, pill_height);
-  create_nav_button(pill, LV_SYMBOL_POWER, pill_icon_size, false, nav_color, secondary_text,
-                    power_navigation, pill_width - pill_item_width * 2, pill_height);
+  const int pill_icon_size = std::min(pill_height - ui_px(12), ui_px(108));
+  lv_obj_t* home_button = create_nav_button(
+      pill, home_navigation_active ? &kGui2IconHomeFilled : &kGui2IconHomeOutlined, pill_icon_size,
+      false, nav_color, primary_text, home_navigation, pill_item_width, pill_height, true);
+  lv_obj_t* console_button =
+      create_nav_button(pill, &kGui2IconConsoleOutline, pill_icon_size, false, nav_color,
+                        secondary_text, log_navigation, pill_item_width, pill_height, true);
+  lv_obj_t* power_button =
+      create_nav_button(pill, &kGui2IconPower, pill_icon_size, false, nav_color, secondary_text,
+                        power_navigation, pill_width - pill_item_width * 2, pill_height, true);
+  nav_home_icon = home_button == nullptr ? nullptr : lv_obj_get_child(home_button, 0);
+  nav_console_icon = console_button == nullptr ? nullptr : lv_obj_get_child(console_button, 0);
+  nav_power_icon = power_button == nullptr ? nullptr : lv_obj_get_child(power_button, 0);
+  refresh_navigation_icons();
 
   create_quick_menu();
+  create_mouse_cursor();
 }
 
 static void shutdown_gui2(bool keep_display = false) {
@@ -2063,6 +2379,7 @@ static void shutdown_gui2(bool keep_display = false) {
   }
 
   lv_deinit();
+  gui2_svg_cache_clear();
   gui2_display_deinit();
   if (runtime_text_font != nullptr) lv_tiny_ttf_destroy(runtime_text_font);
   if (runtime_status_font != nullptr) lv_tiny_ttf_destroy(runtime_status_font);
@@ -2073,19 +2390,22 @@ static void shutdown_gui2(bool keep_display = false) {
   pointer_indev = nullptr;
   status_timer = nullptr;
   battery_icon = nullptr;
-  battery_charge_icon = nullptr;
   status_time_label = nullptr;
   battery_value_label = nullptr;
   recording_indicator = nullptr;
+  mouse_cursor = nullptr;
   quick_menu = nullptr;
   quick_dismiss = nullptr;
   quick_record_button = nullptr;
   quick_record_label = nullptr;
   quick_feedback = nullptr;
+  quick_brightness_binding = {};
+  quick_brightness_dirty = false;
   screenshot_flash = nullptr;
   screenshot_flash_until_ms = 0;
   pending_screenshot = false;
   pending_screen_off = false;
+  reset_wheel_scroll();
   screen = nullptr;
   ev_exit();
   if (!keep_display) gr_exit();
@@ -2150,6 +2470,7 @@ int gui2_start(const gui2_context* context) {
   for (;;) {
     if (switch_to_legacy) break;
     const uint64_t loop_start_ms = monotonic_ms();
+    advance_wheel_scroll(loop_start_ms);
     perf_manager.Update();
     screen->tick(loop_start_ms);
     gui2_input_set_screen_off(screen->is_screen_off());
@@ -2161,6 +2482,8 @@ int gui2_start(const gui2_context* context) {
       if (key_action == gui2_key_action::SCREENSHOT) {
         close_quick_menu();
         pending_screenshot = true;
+      } else if (key_action == gui2_key_action::BACK) {
+        navigate_back();
       } else if (key_action == gui2_key_action::TOGGLE_SCREEN) {
         if (screen->is_screen_off()) {
           if (screen->screen_on()) {
@@ -2183,7 +2506,7 @@ int gui2_start(const gui2_context* context) {
       perf_manager.NotifyInteraction();
     }
     const int wheel = gui2_input_take_wheel();
-    if (wheel != 0 && main_content != nullptr) {
+    if (wheel != 0 && main_content != nullptr && !quick_menu_input_active()) {
       lv_point_t point;
       lv_indev_get_point(pointer_indev, &point);
       lv_area_t content_area;
@@ -2192,11 +2515,8 @@ int gui2_start(const gui2_context* context) {
       const bool over_content = point.x >= content_area.x1 && point.x <= content_area.x2 &&
                                 point.y >= content_area.y1 && point.y <= content_area.y2;
       if (over_content) {
-        lv_obj_scroll_by_bounded(main_content, 0, wheel * 80, LV_ANIM_OFF);
+        queue_wheel_scroll(wheel);
       }
-
-      const uint32_t wheel_delay_ms = lv_timer_handler();
-      if (wheel_delay_ms < delay_ms) delay_ms = wheel_delay_ms;
     }
 
     if (gui2_display_present(screen, loop_start_ms)) perf_manager.NotifyFrameActivity();

@@ -6,6 +6,8 @@
 #include <cstring>
 #include <vector>
 
+#include <android-base/properties.h>
+
 #include "src/themes/default/lv_theme_default.h"
 #include "twrpminui/minui.h"
 
@@ -16,6 +18,15 @@ static uint64_t last_recording_sample_ms;
 static std::vector<uint8_t> recording_shadow_buffer;
 static int recording_shadow_width;
 static int recording_shadow_height;
+
+static int display_dpi(int width) {
+  const int property_dpi = android::base::GetIntProperty("ro.sf.lcd_density", 0);
+  if (property_dpi > 0) return std::clamp(property_dpi, 120, 640);
+
+  // Recovery/QEMU may not expose Android density.
+  const int short_side = std::min(width, gr_fb_height());
+  return std::clamp(short_side * 160 / 480, 160, 360);
+}
 
 static void submit_recording_frame(gui2_backend::screen_backend* screen, uint64_t monotonic_ms) {
   if (screen == nullptr || !screen->is_recording()) {
@@ -110,7 +121,7 @@ lv_display_t* gui2_display_init(void) {
   lv_display_t* display = lv_display_create(width, height);
   if (!display) return nullptr;
 
-  const int dpi = std::clamp(width * 160 / 480, 160, 360);
+  const int dpi = display_dpi(width);
   lv_display_set_dpi(display, dpi);
   lv_theme_t* theme = lv_theme_default_init(display, lv_palette_main(LV_PALETTE_BLUE),
                                             lv_palette_main(LV_PALETTE_RED), true, LV_FONT_DEFAULT);

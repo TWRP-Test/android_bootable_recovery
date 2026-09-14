@@ -6,6 +6,7 @@
 enum class gui2_key_action {
   TOGGLE_SCREEN,
   SCREENSHOT,
+  BACK,
 };
 
 lv_indev_t* gui2_input_init(void);
