@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 #include <vector>
 
 #include <android-base/strings.h>
@@ -32,6 +33,8 @@
 #include "twrp_functions.hpp"
 #include "twrpadbbu/libtwrpadbbu.hpp"
 #include "twrpminui/minui.h"
+
+namespace fs = std::filesystem;
 
 int GUIFileSelector::mSortOrder = 0;
 
@@ -236,10 +239,6 @@ bool GUIFileSelector::fileSort(FileData d1, FileData d2)
 
 int GUIFileSelector::GetFileList(const std::string folder)
 {
-	DIR* d;
-	struct dirent* de;
-	struct stat st;
-
 	// Clear all data
 	mFolderList.clear();
 	mFileList.clear();
@@ -251,15 +250,13 @@ int GUIFileSelector::GetFileList(const std::string folder)
 	if (mPathCreate && !TWFunc::IsPathExists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
 		TWFunc::RecursiveMkdir(folder);
 
-	d = opendir(folder.c_str());
-	if (d == NULL) {
+	std::error_code ec;
+	fs::directory_iterator dir_iter(folder, ec);
+	if (ec) {
 		LOGINFO("Unable to open '%s'\n", folder.c_str());
 		if (folder != "/" && (mShowNavFolders != 0 || mShowFiles != 0)) {
-			size_t found;
-			found = folder.find_last_of('/');
-			if (found != std::string::npos) {
+      if (size_t found = folder.find_last_of('/'); found != std::string::npos) {
 				std::string new_folder = folder.substr(0, found);
-
 				if (new_folder.length() < 2)
 					new_folder = "/";
 				DataManager::SetValue(mPathVar, new_folder);
@@ -268,96 +265,68 @@ int GUIFileSelector::GetFileList(const std::string folder)
 		return -1;
 	}
 
-	while ((de = readdir(d)) != NULL) {
-		FileData data;
-		bool match = false;
+	// directory_iterator skips "." and ".."; add ".." manually for navigation.
+	if (folder != "/" && mShowNavFolders) {
+		FileData data{};
+		data.fileName = "..";
+		data.fileType = DT_DIR;
+		mFolderList.push_back(data);
+	}
 
-		data.fileName = de->d_name;
-		if (data.fileName == ".")
-			continue;
-		if (data.fileName == ".." && folder == "/")
-			continue;
+	for (const auto& entry : dir_iter) {
+		const std::string file_name = entry.path().filename();
 
-		data.fileType = de->d_type;
+		struct stat st{};
+		if (stat(entry.path().c_str(), &st) != 0) continue;
 
-		std::string path = folder + "/" + data.fileName;
-		stat(path.c_str(), &st);
-		data.protection = st.st_mode;
-		data.userId = st.st_uid;
-		data.groupId = st.st_gid;
-		data.fileSize = st.st_size;
-		data.lastAccess = st.st_atime;
-		data.lastModified = st.st_mtime;
-		data.lastStatChange = st.st_ctime;
+		FileData data{
+		  .fileName = file_name,
+		  .protection = st.st_mode,
+		  .userId = st.st_uid,
+		  .groupId = st.st_gid,
+		  .fileSize = st.st_size,
+		  .lastAccess = st.st_atime,
+		  .lastModified = st.st_mtime,
+		  .lastStatChange = st.st_ctime,
+		};
 
-		if (data.fileType == DT_UNKNOWN) {
-			data.fileType = TWFunc::GetDTypeFromStat(path);
-		}
-		if (data.fileType == DT_DIR) {
-			if (mShowNavFolders || (data.fileName != "." && data.fileName != ".."))
-				mFolderList.push_back(data);
-		} else if (data.fileType == DT_LNK && S_ISDIR(st.st_mode)) {
-			if (mShowNavFolders || (data.fileName != "." && data.fileName != ".."))
-				mFolderList.push_back(data);
-		} else if (data.fileType == DT_REG || data.fileType == DT_LNK || data.fileType == DT_BLK) {
-#ifdef __ANDROID_API_M__
-			std::vector<std::string> mExtnResults = android::base::Split(mExtn, ";");
-			for (const std::string& mExtnElement : mExtnResults)
-			{
-				std::string mExtnName = android::base::Trim(mExtnElement);
-				if (mExtnName.empty() || (data.fileName.length() >= mExtnName.length() && data.fileName.substr(data.fileName.length() - mExtnName.length()) == mExtnName)) {
-					if (mExtnName == ".ab" && twadbbu::Check_ADB_Backup_File(path))
+		if (S_ISDIR(st.st_mode)) {
+			// Real directories and symlinks to directories (stat follows symlinks).
+			data.fileType = DT_DIR;
+			mFolderList.push_back(data);
+		} else {
+			data.fileType = st.st_mode & S_IFMT;
+
+			const auto path = fs::path(folder) / file_name;
+
+			// Try extension matching first
+			bool matched = false;
+			for (const std::string& ext : android::base::Split(mExtn, ";")) {
+				const std::string trimmed = android::base::Trim(ext);
+				if (trimmed.empty() || file_name.ends_with(trimmed)) {
+					if (trimmed == ".ab" && twadbbu::Check_ADB_Backup_File(path))
 						mFolderList.push_back(data);
 					else
 						mFileList.push_back(data);
-					match = true;
+					matched = true;
 					break;
 				}
 			}
+			if (matched) continue;
 
-			if (!match) {
-				std::vector<std::string> mPrfxResults = android::base::Split(mPrfx, ";");
-				for (const std::string& mPrfxElement : mPrfxResults)
-				{
-					std::string mPrfxName = android::base::Trim(mPrfxElement);
-					if (!mPrfxName.empty() && data.fileName.length() >= mPrfxName.length() && data.fileName.substr(0, mPrfxName.length()) == mPrfxName) {
-						mFileList.push_back(data);
-					}
-#else //On android 5.1 we can't use android::base::Trim and Split so just use the first extension written in the list
-			std::size_t seppos = mExtn.find_first_of(";");
-			std::string mExtnf;
-			if (seppos!=std::string::npos){
-				mExtnf = mExtn.substr(0, seppos);
-			} else {
-				mExtnf = mExtn;
-			}
-			if (mExtnf.empty() || (data.fileName.length() >= mExtnf.length() && data.fileName.substr(data.fileName.length() - mExtnf.length()) == mExtnf)) {
-				if (mExtnf == ".ab" && twadbbu::Check_ADB_Backup_File(path))
-					mFolderList.push_back(data);
-				else
+			// Then try prefix matching
+			for (const std::string& prfx : android::base::Split(mPrfx, ";")) {
+				const std::string trimmed = android::base::Trim(prfx);
+				if (!trimmed.empty() && file_name.starts_with(trimmed)) {
 					mFileList.push_back(data);
-				match = true;
-			}
-
-			if (!match) {
-				std::size_t seppos = mPrfx.find_first_of(";");
-				std::string mPrfxf;
-				if (seppos!=std::string::npos){
-					mPrfxf = mPrfx.substr(0, seppos);
-				} else {
-					mPrfxf = mPrfx;
-				}
-				if (!mPrfxf.empty() && data.fileName.length() >= mPrfxf.length() && data.fileName.substr(0, mPrfxf.length()) == mPrfxf) {
-					mFileList.push_back(data);
-#endif
+					break;
 				}
 			}
 		}
 	}
-	closedir(d);
 
-	std::sort(mFolderList.begin(), mFolderList.end(), fileSort);
-	std::sort(mFileList.begin(), mFileList.end(), fileSort);
+	std::ranges::sort(mFolderList, fileSort);
+	std::ranges::sort(mFileList, fileSort);
 
 	return 0;
 }
