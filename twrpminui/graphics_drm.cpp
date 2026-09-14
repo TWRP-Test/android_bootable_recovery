@@ -258,6 +258,24 @@ static std::string spr_prop_name;
 
 static int set_legacy_crtc(uint32_t fb_id);
 
+static void free_object_properties(drmModeObjectProperties** properties,
+                                   drmModePropertyRes*** properties_info) {
+  if (properties_info != nullptr && *properties_info != nullptr && properties != nullptr &&
+      *properties != nullptr) {
+    for (uint32_t i = 0; i < (*properties)->count_props; ++i) {
+      if ((*properties_info)[i] != nullptr) drmModeFreeProperty((*properties_info)[i]);
+    }
+  }
+  if (properties_info != nullptr && *properties_info != nullptr) {
+    free(*properties_info);
+    *properties_info = nullptr;
+  }
+  if (properties != nullptr && *properties != nullptr) {
+    drmModeFreeObjectProperties(*properties);
+    *properties = nullptr;
+  }
+}
+
 static bool rect_empty(const GRRect& rect) {
   return rect.left >= rect.right || rect.top >= rect.bottom;
 }
@@ -1517,16 +1535,59 @@ static GRSurface* drm_flip(minui_backend* backend __unused) {
 }
 
 static void drm_exit(minui_backend* backend __unused) {
+    if (drm_fd < 0) return;
+
+    // The recovery UI can initialize minui more than once: the legacy UI is
+    // used for early pages and GUI2 owns a later instance. Release every DRM
+    // object before closing the fd; otherwise the next drm_init() can use
+    // property metadata belonging to the previous fd and its first atomic
+    // commit fails with EPERM (-13).
     drm_blank(nullptr, true);
-    drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+    if (crtc_res.mode_blob_id != 0)
+        drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+    if (crtc_res.spr_blob_id != 0)
+        drmModeDestroyPropertyBlob(drm_fd, crtc_res.spr_blob_id);
+
+    for (uint32_t i = 0; i < NUM_PLANES; ++i) {
+        free_object_properties(&plane_res[i].props, &plane_res[i].props_info);
+        if (plane_res[i].plane != nullptr) {
+            drmModeFreePlane(plane_res[i].plane);
+            plane_res[i].plane = nullptr;
+        }
+    }
+    free_object_properties(&conn_res.props, &conn_res.props_info);
+    free_object_properties(&crtc_res.props, &crtc_res.props_info);
+
+    if (main_monitor_crtc != nullptr) {
+        drmModeFreeCrtc(main_monitor_crtc);
+        main_monitor_crtc = nullptr;
+    }
+    if (main_monitor_connector != nullptr) {
+        drmModeFreeConnector(main_monitor_connector);
+        main_monitor_connector = nullptr;
+    }
+
     drm_destroy_surface(drm_surfaces[0]);
     drm_destroy_surface(drm_surfaces[1]);
+    drm_surfaces[0] = nullptr;
+    drm_surfaces[1] = nullptr;
     if (draw_buf) {
         free(draw_buf->data);
         free(draw_buf);
     }
     draw_buf = nullptr;
     direct_scanout = false;
+    displayed_buffer = -1;
+    current_buffer = 0;
+    current_blank_state = true;
+    fb_prop_id = 0;
+    number_of_lms = DEFAULT_NUM_LMS;
+    legacy_modeset = false;
+    legacy_page_flip = true;
+    atomic_page_flip = true;
+    spr_enabled = 0;
+    spr_bypass = 0;
+    spr_prop_name.clear();
     close(drm_fd);
     drm_fd = -1;
 }

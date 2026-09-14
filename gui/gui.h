@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 int gui_init();
+int gui_init_reuse_display();
 int gui_loadResources();
 int gui_loadCustomResources();
 int gui_start();
@@ -38,4 +39,3 @@ float get_scale_w();
 float get_scale_h();
 
 #endif  // _GUI_HEADER
-

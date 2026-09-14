@@ -97,8 +97,7 @@ status_snapshot status_backend::snapshot() const {
     snapshot = state_;
   }
 
-  // Reflect a newly applied clock format immediately, even if the worker
-  // has not reached its next one-second sample yet.
+  // Reflect a newly applied clock format immediately.
   const bool military_time = settings_ != nullptr && settings_->get_int("tw_military_time", 0) != 0;
   snapshot.time_text = format_time(military_time);
   return snapshot;

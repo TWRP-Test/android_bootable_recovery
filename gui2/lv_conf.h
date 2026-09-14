@@ -20,7 +20,6 @@
 #define LV_DRAW_BUF_ALIGN 4
 #define LV_USE_DRAW_SW 1
 #if defined(__aarch64__) || defined(__arm__)
-/* Use LVGL's NEON blend paths on recovery's ARM targets. */
 #define LV_USE_DRAW_SW_ASM LV_DRAW_SW_ASM_NEON
 #else
 #define LV_USE_DRAW_SW_ASM LV_DRAW_SW_ASM_NONE
@@ -148,4 +147,3 @@
 #define LV_IME_PINYIN_USE_K9_MODE 0
 
 #endif /* LV_CONF_H */
-

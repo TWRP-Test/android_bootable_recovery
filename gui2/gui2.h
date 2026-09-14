@@ -2,6 +2,7 @@
 #define GUI2_H
 
 #include "backend/hardware_settings.h"
+#include "backend/screen_backend.h"
 #include "backend/settings_store.h"
 
 enum gui2_exit_reason {
@@ -12,12 +13,12 @@ enum gui2_exit_reason {
 struct gui2_context {
   gui2_backend::settings_store* settings = nullptr;
   gui2_backend::hardware_settings* hardware = nullptr;
+  gui2_backend::screen_backend* screen = nullptr;
+  // Reuse an already initialized minui display when possible.
+  bool display_initialized = false;
 };
 
-// Start the LVGL-based recovery interface. The caller must provide the
-// recovery settings and hardware backends. This function owns the display,
-// input and event loop and returns only if initialization fails or the GUI is
-// explicitly stopped in the future.
+// Starts GUI2 and owns its display, input, and event loop.
 int gui2_start(const gui2_context* context);
 
 #endif

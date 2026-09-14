@@ -5,9 +5,7 @@
 
 namespace gui2_backend {
 
-// The UI uses this small interface instead of knowing anything about
-// DataManager or the on-disk TWRP settings format.  Recovery supplies the
-// DataManager implementation.
+// Persistence adapter used by GUI2 pages.
 class settings_store {
  public:
   virtual ~settings_store() = default;

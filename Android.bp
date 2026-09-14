@@ -461,6 +461,7 @@ cc_binary {
         "abx.cpp",
         "unit_conversion.cpp",
         "gui2/backend/twrp_hardware_settings.cpp",
+        "gui2/backend/twrp_screen_backend.cpp",
         "gui2/backend/twrp_settings_store.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [
@@ -502,6 +503,8 @@ cc_binary {
         "update_metadata-protos",
         "libtwrpgui",
         "libgui2",
+        "libvpx",
+        "libwebm_mkvmuxer",
         "liblvgl_twrp",
         "libtwrpperf",
         "libmounts",

@@ -2,9 +2,7 @@ package {
     default_applicable_licenses: ["bootable_recovery_license"],
 }
 
-// LVGL-based second-generation recovery UI. The public entry point is
-// gui2_start() in gui2.h; the recovery binary can link this library and own
-// the decision about which UI implementation to start.
+// LVGL-based recovery UI library.
 cc_library_static {
     name: "libgui2",
     defaults: ["twrp_defaults"],
@@ -24,7 +22,10 @@ cc_library_static {
         "bootable/recovery/twrpperf/include",
     ],
     srcs: [
+        "components/slider.cpp",
         "gui2.cpp",
+        "backend/rgb_to_i420.cpp",
+        "backend/webm_vp8.cpp",
         "backend/status_backend.cpp",
         "i18n/*.cpp",
         "gui2_display.cpp",
@@ -32,6 +33,8 @@ cc_library_static {
     ],
     static_libs: [
         "liblvgl_twrp",
+        "libvpx",
+        "libwebm_mkvmuxer",
         "libtwrpperf",
         "librecovery_utils",
     ],

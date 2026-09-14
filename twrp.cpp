@@ -30,6 +30,7 @@
 #include "gui/twmsg.h"
 #include "gui2/gui2.h"
 #include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/twrp_screen_backend.h"
 #include "gui2/backend/twrp_settings_store.h"
 
 #include "cutils/properties.h"
@@ -134,29 +135,33 @@ static void startLegacyBatteryMonitor() {
 // initialization sequence as a normal legacy startup.
 static bool legacy_gui_initialized;
 
-static bool initializeLegacyGui() {
+static bool initializeLegacyGui(bool reuse_display = false) {
 	if (legacy_gui_initialized)
 		return true;
 
-	if (gui_init() != 0)
+	if ((reuse_display ? gui_init_reuse_display() : gui_init()) != 0)
 		return false;
-	legacy_gui_initialized = true;
 
-	if (gui_loadResources() != 0)
+	if (gui_loadResources() != 0) {
+		// Do not leave the guard set after a partial initialization. The caller
+		// may still need to fall back to the other UI in this process.
 		return false;
+	}
 
 	PageManager::LoadLanguage(DataManager::GetStrValue("tw_language"));
 	GUIConsole::Translate_Now();
+	legacy_gui_initialized = true;
 	return true;
 }
 
-static void shutdownLegacyGui() {
+static void shutdownLegacyGui(bool keep_display) {
 	if (!legacy_gui_initialized)
 		return;
 
 	PageManager::ReleasePackage("TWRP");
 	ev_exit();
-	gr_exit();
+	if (!keep_display)
+		gr_exit();
 	legacy_gui_initialized = false;
 }
 
@@ -501,13 +506,19 @@ int main(int argc, char **argv) {
 	} else {
 		process_recovery_mode(adb_bu_fifo, startup.Should_Skip_Decryption());
 	}
-	shutdownLegacyGui();
+	// The decryption/read-only pages use the legacy UI, but Qualcomm DRM does
+	// not reliably accept a second modeset after the first pipeline is torn
+	// down. Keep minui initialized and let GUI2 render into the same pipeline.
+	shutdownLegacyGui(true);
 
 	gui2_backend::twrp_settings_store settings_store;
 	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
+	gui2_backend::twrp_screen_backend screen_backend(&settings_store);
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
+	gui2_context_value.screen = &screen_backend;
+	gui2_context_value.display_initialized = true;
 	const int gui2_result = gui2_start(&gui2_context_value);
 
 	// GUI2 owns the display and input loop.  A user-requested switch is a
@@ -516,7 +527,7 @@ int main(int argc, char **argv) {
 	// remains usable if a device cannot initialize LVGL or its font resources.
 	if (gui2_result == GUI2_EXIT_TO_LEGACY ||
 		gui2_result == GUI2_EXIT_INITIALIZATION_FAILED) {
-		if (!initializeLegacyGui())
+		if (!initializeLegacyGui(gui2_result == GUI2_EXIT_TO_LEGACY))
 			LOGERR("Unable to initialize the legacy GUI fallback.\n");
 		startLegacyBatteryMonitor();
 		gui_start();

@@ -48,6 +48,9 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - recovery DataManager 适配器：持久化设置继续使用 `.twrp_settings`。
 - 真实时间、电量、充电状态及 12/24 小时制显示。
 - 时间/时区设置（时区、UTC 偏移、DST）和语言设置持久化。
+- 屏幕能力 backend：旧 GUI 兼容的 PNG 截屏、自动/手动熄屏与触摸唤醒。
+- 内置无音频 VP8/WebM 录屏：支持 15/24/30/45/60 FPS、有界丢帧队列和后台编码，不依赖 Android 媒体服务。
+- shell 级状态栏下拉快捷菜单：截屏、熄屏和开始/停止录屏，录制状态同步显示在状态栏。
 - recovery 默认 GUI2 启动、初始化失败回退，以及运行时切换到旧 GUI。
 
 当前边界：
@@ -65,17 +68,20 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
   ```bash
   source build/envsetup.sh
   lunch twrp_sm8850
-  mka libgui2 recoveryimage
+  mka installclean
+  mka recoveryimage
   ```
 
-- `libgui2` 用于正式 recovery 集成；GUI2 的显示、输入和 backend 均通过 recovery 入口验证。
+- 每次生成最终 `recoveryimage` 前必须先执行 `mka installclean`；增量编译单独验证模块时可按需使用目标模块构建。
 
 ### 架构与资源
 
 - 修改 GUI 框架时优先使用 `create_gui2_shell()` 和 `create_page_scaffold()`；页面不得直接管理固定状态栏、顶栏或底部导航。
+- 可复用的自制 LVGL 组件统一放在 `gui2/components/`；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。
 - 页面标题统一使用 `ui.brand_font`；修改标题字号时必须同步检查主页、二级页和三级页。
 - GUI2 使用 `/twres` 中的运行时字体资源和 backend，不针对单一设备硬编码分辨率、圆角安全区或字号。
 - GUI2 不支持旧 GUI 的主题导入、`ui.xml` 自定义主题和主题重载；这些逻辑继续由旧 GUI 独立维护。
+- `gui2/` 内源文件不添加许可证文件头；构建系统中的模块许可证声明仍按 Android.bp 规范保留。
 
 ### 页面与交互
 
@@ -89,6 +95,7 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 带圆角和阴影的卡片或子卡片必须与父容器边界保持安全距离；多列行要把内边距计入子卡片宽度和行高度，必要时使用 `LV_OBJ_FLAG_OVERFLOW_VISIBLE`，避免圆角和阴影被裁切。
 - 同一页面的单行选项复用 `single_line_card_height()`；时间格式、UTC 偏移、时区选项、DST 选项和应用按钮保持一致高度。
 - 硬件滑块把标题/数值行和滑块视为一个内容组，在卡片内部整体垂直居中，四个方向使用统一的 `card_inner_padding()`，组内间距单独控制。
+- 滑块沿用 Miuix 风格：胶囊轨道、低对比度背景轨道、蓝色填充和较小的圆形滑块；交互热区与视觉滑块尺寸分离。
 - 页面标题区的状态栏留白和标题/副标题间距由 shell 的统一 metrics 控制；调整主页标题时必须同步检查所有二级、三级页面，避免页面自行写死坐标。
 - 卡片文本不得按固定的“一行标题 + 一行描述”计算位置；文本组应设置实际宽度，使用自动换行，按真实高度整体居中，必要时让卡片随内容增高。只有单行超长文本才按场景使用 `LV_LABEL_LONG_SCROLL`，不要让大量卡片同时滚动。
 - 状态栏中的电池图标、百分比和充电图标必须使用独立对象；文本更新后重新排列，顺序保持为“电池、数值、充电标志”，避免动态宽度造成重叠。
@@ -100,7 +107,30 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 硬件滑块变化时可实时更新硬件和内存状态，但不得为每个 `LV_EVENT_VALUE_CHANGED` 调用 `Flush()`；在 `LV_EVENT_RELEASED` 或等价结束事件统一落盘。
 - 亮度沿用 `tw_brightness` / `tw_brightness_pct` 和 TWRP 最大值映射；震动沿用 `tw_button_vibrate`、`tw_keyboard_vibrate`、`tw_action_vibrate`，不得引入 GUI2 私有配置键。
 - 修改时区按旧 GUI 的 `Zone[:offset][DSTZone]` 规则构造 `tw_time_zone`，然后更新环境并 `flush()`。
+- 录屏帧率设置统一使用 `tw_screen_record_fps`，界面只允许 15、24、30、45、60 FPS 五档；页面不得直接操作 recorder。
+- 录屏档位不得超过编译期 `TW_FRAMERATE`；backend、界面和录屏采样必须使用同一有效上限。
+- 录屏帧率改变时只更新 backend 的内存配置，不能在每个滑块事件中 `Flush()`，只在释放滑块时统一保存。
 
 ### 生命周期与旧 GUI
 
-- GUI2 切换旧 GUI 不写入界面选择配置；退出前必须停止状态线程，释放 LVGL、输入和 minui 资源，再初始化旧 GUI，避免重复初始化或残留线程访问已释放对象。
+- GUI2 切换旧 GUI 不写入界面选择配置；退出前必须停止状态线程、释放 LVGL 和输入资源。若是 GUI2→旧 GUI 的即时切换，必须保留已经工作的 minui/DRM 实例，由旧 GUI 只重建资源和输入，不能再次 modeset；只有 GUI2 完全退出或初始化失败时才释放 minui。
+- 解密等前置页面会让 minui/DRM 在同一 recovery 进程内经历二次初始化；确实退出 DRM backend 时必须释放 CRTC、connector、plane、property 和 blob，并重置 blank/缓冲区状态，否则下一次 atomic commit 可能失败。GUI2 启动阶段不得额外调用屏幕唤醒同步。
+
+### 屏幕能力与快捷菜单
+
+- 截屏、熄屏、唤醒和录屏只能通过 `gui2/backend` 的屏幕 backend；页面不得直接访问 minui、sysfs、脚本或配置文件。
+- 录屏默认且目前唯一实现是 GUI2 的 VP8/WebM backend；不得引入 MediaCodec、Stagefright、Codec2、Binder 媒体服务或 `screenrecord`。VP8 编码复用 manifest 管理的 `external/libvpx`，WebM 封装复用 `external/libwebm` 的 `libwebm_mkvmuxer`，不在 GUI2 复制第三方源码。
+- GUI2 只使用 libvpx 的 VP8 encoder API 和 libwebm 的三文件 muxer 模块；不要因录屏引入 VP9、解码器、音频轨道或完整媒体框架。保留两个 external 项目的 LICENSE/PATENTS/NOTICE 授权文件。
+- RGBX→I420 转换使用 GUI2 自己的 `backend/rgb_to_i420`，当前 LVGL XRGB8888 在小端内存中是 `[B,G,R,X]`；转换不能误当作 `[R,G,B,X]`。I420 的 U/V 平面使用 2x2 色度平均，并处理 stride、奇数宽高和边缘复制。
+- 录屏帧必须在本轮 LVGL flush 全部完成并完成 `gr_flip()` 后提交；GUI2 应维护一份由 `flush_cb()` 增量更新的、独立于 DRM 双缓冲的完整影子帧，不能在 direct-scanout 上直接读取可能只完成部分 damage 同步的 scanout/released buffer。即使页面没有 LVGL 脏区域，也要按录制帧率持续采样当前影子帧，不能只录制发生界面变化的瞬间。I420 转换、VP8 编码和 WebM 写入在有界后台队列中执行，不能阻塞 LVGL 渲染和触摸线程，队列满时丢帧。
+- VP8/WebM 输出必须使用标准 VP8 视频轨道和可回填的文件模式 WebM；修改后至少用 ffprobe、ffmpeg、VLC 或等价标准播放器验证非黑测试图、时间轴、帧数和尺寸。
+- 录屏时间轴使用单调时钟和固定帧率；队列满时丢弃原始帧但保留提交帧的单调时间戳，WebM SegmentInfo 在停止时回填实际时长，不能用“成功编码帧数”直接代表录制时长。VP8 不能像 MJPEG 那样复制压缩包补帧。
+- 所有后台线程退出前必须停止、`join` 并回收；停止录屏、熄屏、页面退出和 recovery 退出都必须完成 WebM 收尾。
+- 快捷菜单是 shell 的持久层，不由页面自行创建；面板、按钮和遮罩不得滚动，必须给圆角和阴影保留安全边距。下拉只移动菜单，不移动状态栏或底部导航。
+- 快捷菜单下拉/上滑必须让面板位置和遮罩透明度跟随手指，并在松手后使用短动画完成展开或收起；不能用阈值触发瞬间闪现。截图必须先收起菜单并提交当前页面帧，再执行 backend 截图。
+- 电源键、音量减以及电源键组合动作必须由 GUI2 输入层转换为抽象动作，页面不得直接读取 Linux 按键；电源单按切换屏幕，电源+音量减触发截图，并忽略按键自动重复。
+- 电源短按不能只依赖长按超时判断；按下/抬起可能在同一轮输入轮询内完成。屏幕熄灭时触摸报告仍需被输入层消费以唤醒屏幕，但必须以 `RELEASED` 形式提供给 LVGL，直到手指抬起，避免唤醒动作同时点击页面控件。
+- 截图成功后使用 shell 级短暂白屏提示，不能破坏 LVGL 当前帧或直接让页面对象承担系统提示职责。快捷菜单熄屏动作必须延迟到触摸帧提交后，避免同一次释放事件立即唤醒屏幕。
+- 截图提示应使用低不透明度、短时的柔和闪烁；不得使用长时间全屏纯白覆盖，避免刺眼和影响用户观察。
+- 快捷操作按钮内的图标和文本必须先作为一个内容组计算真实高度（包括多行文本），再在按钮内部水平/垂直居中，并保留一致的内边距；禁止分别锚定到按钮顶部和底部。
+- 存储路径、文件权限和截屏格式复用旧 GUI；存储不可用时使用 `/tmp/`，新增持久化设置仍只能经由 backend 写入 DataManager。
