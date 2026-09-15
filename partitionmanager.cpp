@@ -2800,7 +2800,7 @@ bool TWPartitionManager::Add_Remove_MTP_Storage(TWPartition *Part, int message_t
                 return false;
             }
             strcpy(mtp_message.display, Part->Storage_Name.c_str());
-            mtp_message.maxFileSize = Part->Get_Max_FileSize();
+            mtp_message.maxFileSize = Part->Current_File_System == "vfat" ? 0xFFFFFFFF : 0;
             LOGINFO("sending message to add %i '%s' '%s'\n", mtp_message.storage_id, mtp_message.path,
                     mtp_message.display);
             if (write(mtp_write_fd, &mtp_message, sizeof(mtp_message)) <= 0) {

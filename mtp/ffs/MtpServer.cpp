@@ -1028,7 +1028,7 @@ MtpResponseCode MtpServer::doSendObjectInfo() {
     if (maxFileSize != 0) {
         // if mSendObjectFileSize is 0xFFFFFFFF, then all we know is the file size
         // is >= 0xFFFFFFFF
-        if (mSendObjectFileSize > maxFileSize)
+        if (mSendObjectFileSize > maxFileSize || mSendObjectFileSize == 0xFFFFFFFF)
             return MTP_RESPONSE_OBJECT_TOO_LARGE;
     }
 
