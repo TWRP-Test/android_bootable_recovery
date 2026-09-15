@@ -22,6 +22,7 @@ class twrp_screen_backend final : public screen_backend {
   bool is_screen_off() const override;
   bool screen_off() override;
   bool screen_on() override;
+  void set_before_screen_off_callback(void (*callback)(void*), void* user_data) override;
   void on_input_activity() override;
   void tick(uint64_t monotonic_ms) override;
 
@@ -58,6 +59,8 @@ class twrp_screen_backend final : public screen_backend {
   uint64_t last_tick_ms_ = 0;
   uint64_t dim_start_ms_ = 0;
   int last_dim_brightness_ = -1;
+  void (*before_screen_off_callback_)(void*) = nullptr;
+  void* before_screen_off_user_data_ = nullptr;
 };
 
 }  // namespace gui2_backend

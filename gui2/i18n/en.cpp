@@ -43,6 +43,7 @@ extern const language_pack kEnglish = {
   "Turn screen off",
   "Unable to turn the screen off",
   "Turn screen on",
+  "Swipe to continue",
   "Start recording",
   "Stop recording",
   "Recording started",

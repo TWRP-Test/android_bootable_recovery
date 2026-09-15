@@ -140,6 +140,8 @@ bool twrp_screen_backend::is_screen_off() const {
 
 void twrp_screen_backend::blank_locked() {
   if (static_cast<int>(state_) >= static_cast<int>(screen_state::OFF)) return;
+  if (before_screen_off_callback_ != nullptr)
+    before_screen_off_callback_(before_screen_off_user_data_);
   // Preserve the pre-dimming brightness.
   if (state_ == screen_state::ON) original_brightness_ = current_brightness();
   state_ = screen_state::OFF;
@@ -149,6 +151,11 @@ void twrp_screen_backend::blank_locked() {
   gr_fb_blank(true);
   state_ = screen_state::BLANKED;
 #endif
+}
+
+void twrp_screen_backend::set_before_screen_off_callback(void (*callback)(void*), void* user_data) {
+  before_screen_off_callback_ = callback;
+  before_screen_off_user_data_ = user_data;
 }
 
 void twrp_screen_backend::unblank_locked() {

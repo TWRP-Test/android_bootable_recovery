@@ -42,6 +42,7 @@ class screen_backend {
   virtual bool is_screen_off() const = 0;
   virtual bool screen_off() = 0;
   virtual bool screen_on() = 0;
+  virtual void set_before_screen_off_callback(void (*callback)(void*), void* user_data) = 0;
   virtual void on_input_activity() = 0;
   virtual void tick(uint64_t monotonic_ms) = 0;
 

@@ -1,0 +1,38 @@
+#ifndef GUI2_PAGES_PAGE_ROUTER_H
+#define GUI2_PAGES_PAGE_ROUTER_H
+
+namespace gui2_pages {
+
+enum class page_id {
+  HOME,
+  ACTION,
+  LANGUAGE,
+  TIMEZONE,
+  BRIGHTNESS,
+  HAPTICS,
+  RECORDING,
+};
+
+struct page_request {
+  page_id id;
+  const void* payload = nullptr;
+};
+
+using page_builder = void (*)(const page_request& request);
+
+class page_router {
+ public:
+  explicit page_router(page_builder builder = nullptr) : builder_(builder) {}
+
+  void set_builder(page_builder builder) { builder_ = builder; }
+  bool navigate(page_id id, const void* payload = nullptr);
+  page_id current() const { return current_; }
+
+ private:
+  page_builder builder_ = nullptr;
+  page_id current_ = page_id::HOME;
+};
+
+}  // namespace gui2_pages
+
+#endif
