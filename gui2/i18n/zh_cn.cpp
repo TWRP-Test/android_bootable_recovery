@@ -43,6 +43,7 @@ extern const language_pack kSimplifiedChinese = {
   "熄屏",
   "无法熄屏",
   "亮屏",
+  "滑动以解锁",
   "开始录屏",
   "停止录屏",
   "录屏已开始",

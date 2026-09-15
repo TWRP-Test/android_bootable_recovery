@@ -54,6 +54,8 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 内置无音频 VP8/WebM 录屏：支持 15/24/30/45/60 FPS、有界丢帧队列和后台编码，不依赖 Android 媒体服务。
 - shell 级状态栏下拉快捷菜单：截屏、熄屏和开始/停止录屏，录制状态同步显示在状态栏。
 - recovery 默认 GUI2 启动、初始化失败回退，以及运行时切换到旧 GUI。
+- GUI2 已完成首轮模块化重构：入口 `gui2.cpp` 负责 recovery 业务回调和组装，`app/` 管理生命周期/主循环，`shell/` 管理持久系统层，`pages/` 管理页面，`components/` 管理可复用控件，`core/` 管理通用 UI 基础设施，`theme/` 管理字体资源。
+- `gui2.cpp` 已从单体页面实现拆分为约 1100 行的组装与业务适配入口；`libgui2` 和完整 `recoveryimage` 均已完成构建验证。
 
 当前边界：
 
@@ -75,28 +77,62 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
   ```
 
 - 每次生成最终 `recoveryimage` 前必须先执行 `mka installclean`；增量编译单独验证模块时可按需使用目标模块构建。
+- 本次模块化重构的验证命令和结果：
+
+  ```bash
+  git diff --check                         # 通过（在 bootable/recovery 执行）
+  source build/envsetup.sh
+  lunch twrp_sm8850
+  m libgui2                                # 成功
+  mka installclean
+  mka recoveryimage                        # 成功，生成 out/target/product/sm8850/recovery.img
+  ```
+
+  完整 recovery 构建出现的 `depmod` 缺失模块元数据为已有设备构建警告，不是 GUI2 编译错误。
 
 ### 架构与资源
 
-- 修改 GUI 框架时优先使用 `create_gui2_shell()` 和 `create_page_scaffold()`；页面不得直接管理固定状态栏、顶栏或底部导航。
-- 底部导航是 shell 级持久组件，所有页面必须复用同一个导航实例和 `create_page_scaffold()` 生命周期；页面不得创建、替换或复制底部导航，也不得使用页面专属坐标模拟导航。
+- GUI2 源码按以下职责组织：
+
+  ```text
+  app/        GUI2 生命周期、主循环、运行时服务和延迟屏幕动作
+  core/       metrics、缩放、点击取消 guard、滚轮惯性等无业务基础设施
+  shell/      状态栏、page host、顶栏/滚动脚手架、底栏、快捷面板和系统弹窗
+  pages/      page router、页面 builder、页面状态和页面专属逻辑
+  components/ 可复用 LVGL 控件和卡片
+  theme/      TinyTTF 字体生命周期
+  backend/    recovery/system backend，不依赖 LVGL
+  ```
+
+- 修改 GUI 框架时优先使用 `create_gui_shell_base()`、`page_host::build()` 和公共组件；页面不得直接管理固定状态栏、顶栏、底部导航、快捷面板或系统反馈层。
+- `gui2_start()` 只负责校验注入的 recovery services、调用 `app/gui2_lifecycle` 初始化图形资源、组装 Shell、启动状态栏 controller 和 `app/gui2_loop`；不要把新的 LVGL 主循环或资源释放逻辑塞回入口。
+- `app/gui2_lifecycle` 统一拥有 TinyTTF、LVGL、display、input 和 SVG cache 的初始化/释放顺序；初始化失败必须复用同一清理路径。
+- `app/gui2_loop` 统一处理 LVGL timer、screen tick、输入 activity、按键、滚轮、present 和性能 timeout；页面回调只接收抽象动作。
+- `page_router` 是页面跳转唯一入口。新增页面必须注册 `page_id`、builder/payload、路由、返回行为和 i18n；页面之间不得直接互相调用 `show_*`。
+- `page_host` 拥有当前页面层和当前 scaffold；页面 builder 只接收页面 options 中的 content、metrics、strings 和业务回调，不创建 Shell 持久对象。
+- `gui2/core/ui_metrics` 中的 `ui_metrics`、`ui_px()`、`card_inner_padding()`、`single_line_card_height()` 和 `navigation_safe_area()` 是全局尺寸 API；不要在新模块复制尺寸策略。
+- `gui2/core/ui_event_guard` 是统一的触摸取消和点击震动实现。新增可点击对象必须复用 `add_press_cancel_guard()`，不得自行实现一套点击取消状态。
+- `shell/` controller 持有各自的 LVGL 对象和 timer：状态栏使用 `status_bar_controller`，快捷面板使用 `quick_panel_controller`，系统反馈使用 `screen_feedback`，屏幕动作使用 `app/screen_actions`。停止/退出时必须由 owner 释放其 timer、线程和对象引用。
+- 底部导航是 shell 级持久组件，所有页面必须复用同一个导航实例和 `page_host`/scaffold 生命周期；页面不得创建、替换或复制底部导航，也不得使用页面专属坐标模拟导航。
 - 浮动导航的视觉层级固定为：滚动页面内容 → 局部渐变遮罩 → 导航控件。导航背景本身保持透明，让页面内容可以延伸到其下方；渐变遮罩只覆盖导航顶部上方的少量过渡区域及导航下方区域，不得形成可见的矩形边框。
 - 导航外形使用明确的半高圆角（控件高度的一半），不能只依赖主题默认的 `LV_RADIUS_CIRCLE`；右侧三按钮必须由父级胶囊统一绘制描边，子按钮设置透明背景、零圆角和零边框。
-- 可复用的自制 LVGL 组件统一放在 `gui2/components/`；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。
+- 可复用的自制 LVGL 组件统一放在 `gui2/components/`，当前包括 icon、choice card、setting card、slider card、swipe slider、quick action button、section label 和 apply button；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。
 - 页面标题统一使用 `ui.brand_font`；修改标题字号时必须同步检查主页、二级页和三级页。
 - GUI2 使用 `/twres` 中的运行时字体资源和 backend，不针对单一设备硬编码分辨率、圆角安全区或字号。
-- 全局尺寸统一使用 `ui_metrics::scale` 和 `ui_px()`；缩放基准为短边 1200px，最小/最大比例仅作保护，不能给高分辨率布局保留未缩放的固定上限。新增 shell、卡片或组件尺寸必须接入这套缩放。
+- 全局尺寸统一使用 `gui2_core::ui_metrics::scale` 和 `gui2_core::ui_px()`；缩放基准为短边 1200px，最小/最大比例仅作保护，不能给高分辨率布局保留未缩放的固定上限。新增 shell、卡片或组件尺寸必须接入这套缩放。
 - GUI2 不支持旧 GUI 的主题导入、`ui.xml` 自定义主题和主题重载；这些逻辑继续由旧 GUI 独立维护。
 - `gui2/` 内源文件不添加许可证文件头；构建系统中的模块许可证声明仍按 Android.bp 规范保留。
 
 ### 页面与交互
 
-- 新增页面必须同时接入路由、返回行为、i18n、滚动区域、底部导航和触摸取消逻辑。
-- 新增或修改页面必须通过公共滚动脚手架复用悬浮导航逻辑；`main_content` 的可视高度应延伸到屏幕底部，不能通过 `height - nav_height` 截短滚动视口来“给导航让位”。
+- 新增页面必须同时接入 `pages/page_router`、返回行为、i18n、滚动区域、底部导航和触摸取消逻辑；页面 builder 应放在 `pages/`，而不是继续增加 `gui2.cpp` 中的 `show_*` 实现。
+- 新增或修改页面必须通过 `page_host` 和公共滚动脚手架复用悬浮导航逻辑；`main_content` 的可视高度应延伸到屏幕底部，不能通过 `height - nav_height` 截短滚动视口来“给导航让位”。
 - 所有可滚动页面必须为内容末尾保留导航安全区，至少包含 `navigation_safe_area()`（导航高度加外边距）；安全区应作为滚动内容的底部 padding 或尾部占位，使最后一项能够完整滚动到浮动导航上方。页面有固定“应用”等操作按钮时，还必须额外保留按钮自身高度和间距。
 - 页面底部渐变由 shell 统一创建和复用，不得在各页面重复创建渐变层；渐变层是纯装饰对象，必须清除 border、outline、shadow、点击和滚动属性，并使用透明到半透明黑的局部渐变实现压暗。
 - 新增可点击子控件时检查 `LV_OBJ_FLAG_CLICKABLE`；装饰性子对象不得截获父卡片事件。所有可点击控件都要保证按下后移出区域再释放时取消点击。
 - `lv_obj_create()` 默认可能带有滚动属性。除 `main_content` 等明确的内容滚动区外，卡片、按钮、弹窗和布局容器必须调用 `disable_scrolling()` 并关闭滚动条。
+- 页面只通过 options/context 接收 `metrics`、语言包、content 和业务回调；不得直接访问 `sysfs`、minui、全局 DataManager 或 recorder。
+- 页面状态（选中项、slider binding、LVGL card 引用）集中放入对应的 page state/controller；不要继续在入口新增散落的静态状态变量。
 
 ### 布局与组件
 
@@ -124,12 +160,15 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 
 ### 生命周期与旧 GUI
 
+- GUI2 的 display/input/font/LVGL 生命周期由 `app/gui2_lifecycle` 统一管理；Shell controller 的 timer 必须在 LVGL 销毁前停止，backend worker 必须在 owner 的 `stop()` 中停止并 join。
+- 截图/熄屏请求通过 `app/screen_actions` 排队，在本轮 present 后执行；截图白闪由 `shell/screen_feedback` 管理。页面和快捷按钮不得直接调用 screenshot、screen-off 或 minui。
 - GUI2 切换旧 GUI 不写入界面选择配置；退出前必须停止状态线程、释放 LVGL 和输入资源。若是 GUI2→旧 GUI 的即时切换，必须保留已经工作的 minui/DRM 实例，由旧 GUI 只重建资源和输入，不能再次 modeset；只有 GUI2 完全退出或初始化失败时才释放 minui。
 - 解密等前置页面会让 minui/DRM 在同一 recovery 进程内经历二次初始化；确实退出 DRM backend 时必须释放 CRTC、connector、plane、property 和 blob，并重置 blank/缓冲区状态，否则下一次 atomic commit 可能失败。GUI2 启动阶段不得额外调用屏幕唤醒同步。
 
 ### 屏幕能力与快捷菜单
 
 - 截屏、熄屏、唤醒和录屏只能通过 `gui2/backend` 的屏幕 backend；页面不得直接访问 minui、sysfs、脚本或配置文件。
+- 熄屏前必须先由 Shell 绘制锁屏覆盖层，再由 screen backend 执行 blank；唤醒后覆盖层继续消费触摸，只有滑块完整到达 100% 才隐藏锁屏并恢复页面交互。锁屏使用 `ic_lock`、半透明背景和本地化滑动提示，视觉参数统一接入 `ui_metrics`。
 - 录屏默认且目前唯一实现是 GUI2 的 VP8/WebM backend；不得引入 MediaCodec、Stagefright、Codec2、Binder 媒体服务或 `screenrecord`。VP8 编码复用 manifest 管理的 `external/libvpx`，WebM 封装复用 `external/libwebm` 的 `libwebm_mkvmuxer`，不在 GUI2 复制第三方源码。
 - GUI2 只使用 libvpx 的 VP8 encoder API 和 libwebm 的三文件 muxer 模块；不要因录屏引入 VP9、解码器、音频轨道或完整媒体框架。保留两个 external 项目的 LICENSE/PATENTS/NOTICE 授权文件。
 - RGBX→I420 转换使用 GUI2 自己的 `backend/rgb_to_i420`，当前 LVGL XRGB8888 在小端内存中是 `[B,G,R,X]`；转换不能误当作 `[R,G,B,X]`。I420 的 U/V 平面使用 2x2 色度平均，并处理 stride、奇数宽高和边缘复制。

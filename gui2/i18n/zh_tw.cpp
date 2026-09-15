@@ -43,6 +43,7 @@ extern const language_pack kTraditionalChinese = {
   "關閉螢幕",
   "無法關閉螢幕",
   "開啟螢幕",
+  "滑動以解鎖",
   "開始錄影",
   "停止錄影",
   "錄影已開始",

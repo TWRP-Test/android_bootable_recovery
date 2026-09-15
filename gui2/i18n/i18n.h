@@ -56,6 +56,7 @@ struct language_pack {
   const char* screen_off;
   const char* screen_off_failed;
   const char* screen_on;
+  const char* swipe_to_unlock;
   const char* start_recording;
   const char* stop_recording;
   const char* recording_started;
