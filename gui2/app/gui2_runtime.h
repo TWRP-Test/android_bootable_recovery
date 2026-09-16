@@ -2,6 +2,7 @@
 #define GUI2_APP_GUI2_RUNTIME_H
 
 #include "backend/hardware_settings.h"
+#include "backend/reboot_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
 
@@ -14,7 +15,9 @@ struct runtime_state {
   gui2_backend::settings_store* settings = nullptr;
   gui2_backend::hardware_settings* hardware = nullptr;
   gui2_backend::screen_backend* screen = nullptr;
+  gui2_backend::reboot_backend* reboot = nullptr;
   bool switch_to_legacy = false;
+  bool reboot_requested = false;
 };
 
 }  // namespace gui2_app

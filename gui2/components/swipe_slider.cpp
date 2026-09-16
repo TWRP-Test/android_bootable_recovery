@@ -128,4 +128,18 @@ void swipe_slider::reset() {
   set_progress(0);
 }
 
+void swipe_slider::detach() {
+  track_ = nullptr;
+  fill_ = nullptr;
+  knob_ = nullptr;
+  prompt_ = nullptr;
+  callback_ = nullptr;
+  user_data_ = nullptr;
+  inner_margin_ = 0;
+  knob_width_ = 0;
+  prompt_inset_ = 0;
+  progress_ = 0;
+  dragging_ = false;
+}
+
 }  // namespace gui2_components

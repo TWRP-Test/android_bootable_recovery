@@ -30,6 +30,7 @@
 #include "gui/twmsg.h"
 #include "gui2/gui2.h"
 #include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/twrp_reboot_backend.h"
 #include "gui2/backend/twrp_screen_backend.h"
 #include "gui2/backend/twrp_settings_store.h"
 
@@ -514,10 +515,12 @@ int main(int argc, char **argv) {
 	gui2_backend::twrp_settings_store settings_store;
 	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
 	gui2_backend::twrp_screen_backend screen_backend(&settings_store);
+	gui2_backend::twrp_reboot_backend reboot_backend;
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
 	gui2_context_value.screen = &screen_backend;
+	gui2_context_value.reboot = &reboot_backend;
 	gui2_context_value.display_initialized = true;
 	const int gui2_result = gui2_start(&gui2_context_value);
 

@@ -461,6 +461,7 @@ cc_binary {
         "abx.cpp",
         "unit_conversion.cpp",
         "gui2/backend/twrp_hardware_settings.cpp",
+        "gui2/backend/twrp_reboot_backend.cpp",
         "gui2/backend/twrp_screen_backend.cpp",
         "gui2/backend/twrp_settings_store.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {

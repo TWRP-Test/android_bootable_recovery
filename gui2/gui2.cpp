@@ -39,6 +39,7 @@
 #include "pages/language_page.h"
 #include "pages/page_router.h"
 #include "pages/page_state.h"
+#include "pages/reboot_page.h"
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
 #include "pages/timezone_logic.h"
@@ -68,6 +69,7 @@ static gui2_app::runtime_state runtime;
 static gui2_backend::settings_store*& settings = runtime.settings;
 static gui2_backend::hardware_settings*& hardware = runtime.hardware;
 static gui2_backend::screen_backend*& screen = runtime.screen;
+static gui2_backend::reboot_backend*& reboot = runtime.reboot;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -107,12 +109,14 @@ static gui2_core::wheel_scroll_controller wheel_scroll_controller;
 static bool home_page_active;
 static bool home_navigation_active;
 static bool& switch_to_legacy = runtime.switch_to_legacy;
+static bool& reboot_requested = runtime.reboot_requested;
 
 using app_language = gui2_i18n::language_id;
 using language_pack = gui2_i18n::language_pack;
 using gui2_pages::action_definition;
 using gui2_pages::action_id;
 using page_kind = gui2_pages::page_id;
+using gui2_core::page_transition;
 using gui2_pages::format_indices;
 using gui2_pages::offset_indices;
 using gui2_pages::recording_fps_at;
@@ -122,7 +126,6 @@ using gui2_pages::recording_fps_values;
 using gui2_pages::timezone_indices;
 using gui2_pages::timezone_offsets;
 using gui2_pages::timezone_values;
-using gui2_core::page_transition;
 
 static app_language& current_language = page_state.current_language;
 static app_language& pending_language = page_state.pending_language;
@@ -145,6 +148,7 @@ static constexpr app_language language_values[3] = {
 
 static void show_home_page(page_transition transition);
 static void show_action_page(const action_definition& definition, page_transition transition);
+static void show_reboot_page(page_transition transition);
 static void show_language_page(page_transition transition);
 static void show_timezone_page(page_transition transition);
 static void show_brightness_page(page_transition transition);
@@ -157,9 +161,13 @@ static void status_gesture_event_cb(lv_event_t* event);
 static void quick_panel_gesture_event_cb(lv_event_t* event);
 static void create_quick_menu(void);
 static void screen_lock_unlocked(void* user_data);
+static void reboot_option_event_cb(lv_event_t* event);
+static void reboot_slot_event_cb(lv_event_t* event);
+static void reboot_confirmation_complete(void* user_data);
 
 static void navigate_to(page_kind page, const void* payload = nullptr,
                         page_transition transition = page_transition::PUSH) {
+  if (page_router.current() == page_kind::REBOOT) page_state.reboot.confirmation_slider.detach();
   page_router.navigate(page, payload, transition);
 }
 
@@ -214,8 +222,46 @@ static void action_card_event_cb(lv_event_t* event) {
   if (!accept_click(event)) return;
 
   const auto* definition = static_cast<const action_definition*>(lv_event_get_user_data(event));
-  if (definition != nullptr)
-    navigate_to(page_kind::ACTION, definition, page_transition::PUSH);
+  if (definition != nullptr) navigate_to(page_kind::ACTION, definition, page_transition::PUSH);
+}
+
+static void reset_reboot_page_state(void) {
+  page_state.reboot.target_selected = false;
+  page_state.reboot.has_error = false;
+  page_state.reboot.selected_target = gui2_backend::reboot_target::SYSTEM;
+}
+
+static void reboot_option_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* target =
+      static_cast<const gui2_backend::reboot_target*>(lv_event_get_user_data(event));
+  if (target == nullptr) return;
+
+  page_state.reboot.selected_target = *target;
+  page_state.reboot.target_selected = true;
+  page_state.reboot.has_error = false;
+  navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
+}
+
+static void reboot_slot_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* slot = static_cast<const gui2_backend::boot_slot*>(lv_event_get_user_data(event));
+  if (slot == nullptr || reboot == nullptr) return;
+
+  page_state.reboot.has_error = !reboot->set_active_slot(*slot);
+  navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
+}
+
+static void reboot_confirmation_complete(void* user_data) {
+  auto* state = static_cast<gui2_pages::reboot_page_state*>(user_data);
+  if (state == nullptr || reboot == nullptr || !state->target_selected) return;
+
+  if (!reboot->request_reboot(state->selected_target)) {
+    state->has_error = true;
+    navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
+    return;
+  }
+  reboot_requested = true;
 }
 
 enum class settings_target {
@@ -236,11 +282,14 @@ static constexpr settings_target legacy_target = settings_target::LEGACY;
 
 static void navigate_back(void) {
   close_quick_menu();
-  if (page_router.current() == page_kind::LANGUAGE ||
-      page_router.current() == page_kind::TIMEZONE ||
-      page_router.current() == page_kind::BRIGHTNESS ||
-      page_router.current() == page_kind::HAPTICS ||
-      page_router.current() == page_kind::RECORDING) {
+  if (page_router.current() == page_kind::REBOOT) {
+    const auto return_request = page_state.reboot.return_request;
+    navigate_to(return_request.id, return_request.payload, page_transition::POP);
+  } else if (page_router.current() == page_kind::LANGUAGE ||
+             page_router.current() == page_kind::TIMEZONE ||
+             page_router.current() == page_kind::BRIGHTNESS ||
+             page_router.current() == page_kind::HAPTICS ||
+             page_router.current() == page_kind::RECORDING) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
                 page_transition::POP);
@@ -259,6 +308,15 @@ static void navigation_event_cb(lv_event_t* event) {
   if (action == nullptr) return;
 
   close_quick_menu();
+
+  if (*action == gui2_shell::navigation_action::POWER) {
+    if (page_router.current() != page_kind::REBOOT) {
+      page_state.reboot.return_request = page_router.current_request();
+      reset_reboot_page_state();
+      navigate_to(page_kind::REBOOT, nullptr, page_transition::PUSH);
+    }
+    return;
+  }
 
   if (*action == gui2_shell::navigation_action::BACK ||
       (*action == gui2_shell::navigation_action::HOME && !home_page_active)) {
@@ -645,6 +703,57 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_layer = page_host.current_page();
 }
 
+static void show_reboot_page(page_transition transition) {
+  create_page_scaffold(page_kind::REBOOT, false, strings().reboot_title, strings().reboot_summary,
+                       0, transition);
+
+  gui2_backend::reboot_capabilities capabilities;
+  if (reboot != nullptr) capabilities = reboot->capabilities();
+
+  size_t option_count = 0;
+  auto add_option = [&](gui2_backend::reboot_target target, const char* label, bool available) {
+    if (!available || option_count >= std::size(page_state.reboot.options)) return;
+    page_state.reboot.options[option_count++] = { target, label };
+  };
+  add_option(gui2_backend::reboot_target::SYSTEM, strings().reboot_system, capabilities.system);
+  add_option(gui2_backend::reboot_target::POWER_OFF, strings().reboot_power_off,
+             capabilities.power_off);
+  add_option(gui2_backend::reboot_target::RECOVERY, strings().reboot_recovery,
+             capabilities.recovery);
+  add_option(gui2_backend::reboot_target::FASTBOOT, strings().reboot_fastboot,
+             capabilities.fastboot);
+  add_option(gui2_backend::reboot_target::BOOTLOADER, strings().reboot_bootloader,
+             capabilities.bootloader);
+  add_option(gui2_backend::reboot_target::DOWNLOAD, strings().reboot_download,
+             capabilities.download);
+  add_option(gui2_backend::reboot_target::EDL, strings().reboot_edl, capabilities.edl);
+
+  const std::string active_slot = reboot == nullptr ? std::string() : reboot->active_slot();
+  const std::string current_slot_text = std::string(strings().current_boot_slot) + ": " +
+                                        (active_slot.empty() ? std::string("-") : active_slot);
+  gui2_pages::reboot_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.options = page_state.reboot.options;
+  options.option_count = option_count;
+  options.target_selected = page_state.reboot.target_selected;
+  options.selected_target = page_state.reboot.selected_target;
+  options.error_text = page_state.reboot.has_error ? strings().reboot_failed : nullptr;
+  options.has_boot_slots = capabilities.boot_slots;
+  options.current_slot_text = current_slot_text.c_str();
+  options.active_slot = &active_slot;
+  options.slots = page_state.reboot.slots;
+  options.slot_count = std::size(page_state.reboot.slots);
+  options.option_event_callback = reboot_option_event_cb;
+  options.slot_event_callback = reboot_slot_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  options.confirmation_slider = &page_state.reboot.confirmation_slider;
+  options.confirmation_callback = reboot_confirmation_complete;
+  options.confirmation_user_data = &page_state.reboot;
+  gui2_pages::build_reboot_page(options);
+}
+
 static void settings_option_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   const auto* target = static_cast<const settings_target*>(lv_event_get_user_data(event));
@@ -976,6 +1085,9 @@ static void route_page(const gui2_pages::page_request& request) {
         show_action_page(*static_cast<const action_definition*>(request.payload),
                          request.transition);
       return;
+    case page_kind::REBOOT:
+      show_reboot_page(request.transition);
+      return;
     case page_kind::LANGUAGE:
       show_language_page(request.transition);
       return;
@@ -1029,6 +1141,7 @@ static void screen_lock_before_screen_off(void*) {
 static void shutdown_gui2(bool keep_display = false) {
   if (screen != nullptr && screen->is_recording()) screen->stop_recording();
   status_controller.stop();
+  page_state.reboot.confirmation_slider.detach();
   page_host.clear();
 
   gui2_app::shutdown_graphics(&graphics, keep_display);
@@ -1053,12 +1166,14 @@ static void shutdown_gui2(bool keep_display = false) {
   screen_actions.reset();
   wheel_scroll_controller.reset();
   screen = nullptr;
+  reboot = nullptr;
+  reboot_requested = false;
   ev_exit();
   if (!keep_display) gr_exit();
 }
 
 static bool gui2_loop_should_exit(void*) {
-  return switch_to_legacy;
+  return switch_to_legacy || reboot_requested;
 }
 
 static void gui2_loop_tick(void*, uint64_t now_ms) {
@@ -1098,15 +1213,17 @@ static void gui2_loop_after_present(void*) {
 
 int gui2_start(const gui2_context* context) {
   if (context == nullptr || context->settings == nullptr || context->hardware == nullptr ||
-      context->screen == nullptr)
+      context->screen == nullptr || context->reboot == nullptr)
     return GUI2_EXIT_INITIALIZATION_FAILED;
 
   settings = context->settings;
   hardware = context->hardware;
   screen = context->screen;
+  reboot = context->reboot;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   switch_to_legacy = false;
+  reboot_requested = false;
   screen_actions.reset();
 
   if (!gui2_app::initialize_graphics(context, &graphics, lv_tick_ms)) {
