@@ -612,5 +612,14 @@
 		<string name="cancel_sideload">Cancelamento de sideload ADB...</string>
 		<string name="change_fs_err">Sistema de arquivo erro em mudança.</string>
 		<string name="theme_ver_err">Versão personalizada do tema não coincide com a versão TWRP. Usando o tema conservado em estoque.</string>
+		<string name="install_kernelsu">Instalar KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Instalar KernelSU no init_boot ativo?</string>
+		<string name="root_tools_backup_note">A imagem original será salva primeiro.</string>
+		<string name="installing_kernelsu">Instalando KernelSU...</string>
+		<string name="install_kernelsu_complete">Instalação do KernelSU concluída</string>
+		<string name="install_magisk">Instalar Magisk</string>
+		<string name="install_magisk_confirm">Instalar Magisk no slot ativo?</string>
+		<string name="installing_magisk">Instalando Magisk...</string>
+		<string name="install_magisk_complete">Instalação do Magisk concluída</string>
 	</resources>
 </language>

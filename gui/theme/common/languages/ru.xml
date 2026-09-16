@@ -730,5 +730,14 @@
 		<string name="change_twrp_folder_on_process">Смена папки TWRP</string>
 		<string name="change_twrp_folder_after_process">Папка TWRP изменена на</string>
 		<string name="tw_folder_exists">Папка с таким именем уже существует!</string>
+		<string name="install_kernelsu">Установить KernelSU (LKM)</string>
+		<string name="install_kernelsu_confirm">Установить KernelSU в активный init_boot?</string>
+		<string name="root_tools_backup_note">Сначала будет создана копия исходного образа.</string>
+		<string name="installing_kernelsu">Установка KernelSU...</string>
+		<string name="install_kernelsu_complete">Установка KernelSU завершена</string>
+		<string name="install_magisk">Установить Magisk</string>
+		<string name="install_magisk_confirm">Установить Magisk в активный слот?</string>
+		<string name="installing_magisk">Установка Magisk...</string>
+		<string name="install_magisk_complete">Установка Magisk завершена</string>
 	</resources>
 </language>
