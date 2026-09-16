@@ -20,6 +20,7 @@
 #include "components/section_label.h"
 #include "components/slider.h"
 #include "components/slider_card.h"
+#include "core/page_transition.h"
 #include "core/ui_event_guard.h"
 #include "core/ui_helpers.h"
 #include "core/ui_metrics.h"
@@ -121,6 +122,7 @@ using gui2_pages::recording_fps_values;
 using gui2_pages::timezone_indices;
 using gui2_pages::timezone_offsets;
 using gui2_pages::timezone_values;
+using gui2_core::page_transition;
 
 static app_language& current_language = page_state.current_language;
 static app_language& pending_language = page_state.pending_language;
@@ -141,13 +143,13 @@ static constexpr app_language language_values[3] = {
   app_language::ZH_TW,
 };
 
-static void show_home_page(void);
-static void show_action_page(const action_definition& definition);
-static void show_language_page(void);
-static void show_timezone_page(void);
-static void show_brightness_page(void);
-static void show_haptics_page(void);
-static void show_recording_page(void);
+static void show_home_page(page_transition transition);
+static void show_action_page(const action_definition& definition, page_transition transition);
+static void show_language_page(page_transition transition);
+static void show_timezone_page(page_transition transition);
+static void show_brightness_page(page_transition transition);
+static void show_haptics_page(page_transition transition);
+static void show_recording_page(page_transition transition);
 static void create_gui2_shell(lv_obj_t* screen);
 static void close_quick_menu(void);
 static void refresh_recording_ui(void);
@@ -156,8 +158,9 @@ static void quick_panel_gesture_event_cb(lv_event_t* event);
 static void create_quick_menu(void);
 static void screen_lock_unlocked(void* user_data);
 
-static void navigate_to(page_kind page, const void* payload = nullptr) {
-  page_router.navigate(page, payload);
+static void navigate_to(page_kind page, const void* payload = nullptr,
+                        page_transition transition = page_transition::PUSH) {
+  page_router.navigate(page, payload, transition);
 }
 
 static int& pending_timezone_index = page_state.pending_timezone_index;
@@ -211,7 +214,8 @@ static void action_card_event_cb(lv_event_t* event) {
   if (!accept_click(event)) return;
 
   const auto* definition = static_cast<const action_definition*>(lv_event_get_user_data(event));
-  if (definition != nullptr) navigate_to(page_kind::ACTION, definition);
+  if (definition != nullptr)
+    navigate_to(page_kind::ACTION, definition, page_transition::PUSH);
 }
 
 enum class settings_target {
@@ -238,9 +242,10 @@ static void navigate_back(void) {
       page_router.current() == page_kind::HAPTICS ||
       page_router.current() == page_kind::RECORDING) {
     navigate_to(page_kind::ACTION,
-                &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)]);
+                &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
+                page_transition::POP);
   } else if (!home_page_active) {
-    navigate_to(page_kind::HOME);
+    navigate_to(page_kind::HOME, nullptr, page_transition::POP);
   }
 }
 
@@ -256,9 +261,9 @@ static void navigation_event_cb(lv_event_t* event) {
   close_quick_menu();
 
   if (*action == gui2_shell::navigation_action::BACK ||
-      *action == gui2_shell::navigation_action::HOME) {
+      (*action == gui2_shell::navigation_action::HOME && !home_page_active)) {
     if (*action == gui2_shell::navigation_action::HOME) {
-      navigate_to(page_kind::HOME);
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
     } else {
       navigate_back();
     }
@@ -299,7 +304,8 @@ static void apply_language_event_cb(lv_event_t* event) {
   current_language = pending_language;
   status_controller.refresh();
   navigate_to(page_kind::ACTION,
-              &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)]);
+              &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
+              page_transition::POP);
 }
 
 static void refresh_time_choices(void) {
@@ -356,7 +362,7 @@ static void apply_timezone_event_cb(lv_event_t* event) {
     if (!settings->flush()) return;
     status_controller.refresh();
   }
-  navigate_to(page_kind::TIMEZONE);
+  navigate_to(page_kind::TIMEZONE, nullptr, page_transition::REPLACE);
 }
 
 static void legacy_dialog_cancel_event_cb(lv_event_t* event) {
@@ -626,7 +632,8 @@ static void create_quick_menu(void) {
 }
 
 static void create_page_scaffold(page_kind page, bool is_home, const char* title,
-                                 const char* summary, int bottom_reserved = 0) {
+                                 const char* summary, int bottom_reserved = 0,
+                                 page_transition transition = page_transition::NONE) {
   close_quick_menu();
   for (int i = 0; i < 3; ++i) {
     language_option_cards[i] = nullptr;
@@ -634,7 +641,8 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   }
   home_page_active = is_home;
   home_navigation_active = true;
-  main_content = page_host.build(title, summary, bottom_reserved).content;
+  main_content = page_host.build(title, summary, bottom_reserved, transition).content;
+  page_layer = page_host.current_page();
 }
 
 static void settings_option_event_cb(lv_event_t* event) {
@@ -745,11 +753,11 @@ static gui2_pages::hardware_page_view create_hardware_page(
   return view;
 }
 
-static void show_brightness_page(void) {
+static void show_brightness_page(page_transition transition) {
   hardware_settings_dirty = false;
   brightness_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, true, false };
   create_page_scaffold(page_kind::BRIGHTNESS, false, strings().brightness_title,
-                       strings().brightness_summary);
+                       strings().brightness_summary, 0, transition);
   const int value = hardware == nullptr ? 20 : hardware->brightness_percent();
   gui2_pages::hardware_slider_spec slider = { strings().brightness_label,
                                               10,
@@ -765,12 +773,12 @@ static void show_brightness_page(void) {
   lv_obj_update_layout(page.body);
 }
 
-static void show_haptics_page(void) {
+static void show_haptics_page(page_transition transition) {
   hardware_settings_dirty = false;
   for (auto& binding : haptic_bindings)
     binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false };
   create_page_scaffold(page_kind::HAPTICS, false, strings().haptics_title,
-                       strings().haptics_summary);
+                       strings().haptics_summary, 0, transition);
   const gui2_backend::haptic_channel channels[3] = {
     gui2_backend::haptic_channel::BUTTON,
     gui2_backend::haptic_channel::KEYBOARD,
@@ -800,11 +808,11 @@ static void show_haptics_page(void) {
   lv_obj_update_layout(page.body);
 }
 
-static void show_recording_page(void) {
+static void show_recording_page(page_transition transition) {
   hardware_settings_dirty = false;
   recording_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, true };
   create_page_scaffold(page_kind::RECORDING, false, strings().recording_settings_title,
-                       strings().recording_settings_summary);
+                       strings().recording_settings_summary, 0, transition);
   int fps = screen == nullptr ? 30 : screen->recording_fps();
   int index = 2;
   for (int i = 0; i < recording_fps_count(screen); ++i) {
@@ -827,7 +835,7 @@ static void show_recording_page(void) {
   lv_obj_update_layout(page.body);
 }
 
-static void show_timezone_page(void) {
+static void show_timezone_page(page_transition transition) {
   pending_military_time = settings != nullptr && settings->get_int("tw_military_time", 0) != 0;
   pending_dst = settings != nullptr && settings->get_int("tw_time_zone_guidst", 0) != 0;
   pending_offset_index = 0;
@@ -855,7 +863,7 @@ static void show_timezone_page(void) {
   const int button_height = single_line_card_height();
   const int bottom_reserved = button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::TIMEZONE, false, strings().time_title, strings().time_summary,
-                       bottom_reserved);
+                       bottom_reserved, transition);
 
   const std::string current = settings == nullptr
                                   ? "CST6CDT,M3.2.0,M11.1.0"
@@ -886,8 +894,8 @@ static void show_timezone_page(void) {
                                        press_cancel_guard_cb);
 }
 
-static void show_home_page(void) {
-  create_page_scaffold(page_kind::HOME, true, "YARP", strings().home_summary);
+static void show_home_page(page_transition transition) {
+  create_page_scaffold(page_kind::HOME, true, "YARP", strings().home_summary, 0, transition);
   gui2_pages::home_page_options options;
   options.content = main_content;
   options.metrics = &ui;
@@ -899,9 +907,10 @@ static void show_home_page(void) {
   gui2_pages::build_home_page(options);
 }
 
-static void show_action_page(const action_definition& definition) {
+static void show_action_page(const action_definition& definition, page_transition transition) {
   const auto& action_text = strings().actions[static_cast<int>(definition.id)];
-  create_page_scaffold(page_kind::ACTION, false, action_text.title, action_text.summary);
+  create_page_scaffold(page_kind::ACTION, false, action_text.title, action_text.summary, 0,
+                       transition);
   gui2_pages::action_page_options options;
   options.content = main_content;
   options.metrics = &ui;
@@ -930,13 +939,13 @@ static void show_action_page(const action_definition& definition) {
   }
 }
 
-static void show_language_page(void) {
+static void show_language_page(page_transition transition) {
   pending_language = current_language;
 
   const int button_height = single_line_card_height();
   const int bottom_reserved = button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::LANGUAGE, false, strings().language_title,
-                       strings().language_summary, bottom_reserved);
+                       strings().language_summary, bottom_reserved, transition);
 
   gui2_pages::language_page_options options;
   options.content = main_content;
@@ -960,26 +969,27 @@ static void show_language_page(void) {
 static void route_page(const gui2_pages::page_request& request) {
   switch (request.id) {
     case page_kind::HOME:
-      show_home_page();
+      show_home_page(request.transition);
       return;
     case page_kind::ACTION:
       if (request.payload != nullptr)
-        show_action_page(*static_cast<const action_definition*>(request.payload));
+        show_action_page(*static_cast<const action_definition*>(request.payload),
+                         request.transition);
       return;
     case page_kind::LANGUAGE:
-      show_language_page();
+      show_language_page(request.transition);
       return;
     case page_kind::TIMEZONE:
-      show_timezone_page();
+      show_timezone_page(request.transition);
       return;
     case page_kind::BRIGHTNESS:
-      show_brightness_page();
+      show_brightness_page(request.transition);
       return;
     case page_kind::HAPTICS:
-      show_haptics_page();
+      show_haptics_page(request.transition);
       return;
     case page_kind::RECORDING:
-      show_recording_page();
+      show_recording_page(request.transition);
       return;
   }
 }
@@ -999,7 +1009,7 @@ static void create_gui2_shell(lv_obj_t* screen) {
   page_host.initialize(page_layer, ui);
   wheel_scroll_controller.initialize(ui, pointer_indev);
 
-  navigate_to(page_kind::HOME);
+  navigate_to(page_kind::HOME, nullptr, page_transition::NONE);
 
   navigation_view = gui2_shell::create_bottom_navigation(
       screen, ui, home_navigation_active, navigation_event_cb, press_cancel_guard_cb);
@@ -1019,6 +1029,7 @@ static void screen_lock_before_screen_off(void*) {
 static void shutdown_gui2(bool keep_display = false) {
   if (screen != nullptr && screen->is_recording()) screen->stop_recording();
   status_controller.stop();
+  page_host.clear();
 
   gui2_app::shutdown_graphics(&graphics, keep_display);
   runtime_text_font = nullptr;
@@ -1027,6 +1038,8 @@ static void shutdown_gui2(bool keep_display = false) {
   pointer_indev = nullptr;
   gui2_core::configure_click_guard(nullptr, nullptr);
   status_view = {};
+  page_layer = nullptr;
+  main_content = nullptr;
   mouse_cursor = nullptr;
   quick_panel_view = {};
   quick_panel_controller = {};
