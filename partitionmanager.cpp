@@ -76,9 +76,9 @@
 #endif
 
 #ifdef TW_HAS_MTP
-#include "mtp/ffs/MtpMessage.hpp"
-#include "mtp/ffs/TwrpMtp.hpp"
-#include "mtp/ffs/TwrpMtpServer.hpp"
+#include "MtpMessage.hpp"
+#include "TwrpMtp.hpp"
+#include "TwrpMtpServer.hpp"
 #endif
 
 extern "C" {
@@ -2688,8 +2688,8 @@ bool TWPartitionManager::Enable_MTP() {
     /* To enable MTP debug, use the twrp command line feature:
      * twrp set tw_mtp_debug 1
      */
-    auto mtp = std::make_unique<TwrpMtp>(DataManager::GetIntValue("tw_mtp_debug"));
-    mtppid = mtp->forkserver(mtppipe);
+    auto mtp = std::make_unique<android::TwrpMtp>(DataManager::GetIntValue("tw_mtp_debug"));
+    mtppid = mtp->ForkServer(mtppipe);
     if (mtppid) {
         close(mtppipe[0]); // Host closes read side
         mtp_write_fd = mtppipe[1];
@@ -2763,7 +2763,7 @@ TWPartition *TWPartitionManager::Find_Partition_By_MTP_Storage_ID(unsigned int S
 
 bool TWPartitionManager::Add_Remove_MTP_Storage(TWPartition *Part, int message_type) {
 #ifdef TW_HAS_MTP
-    struct mtpmsg mtp_message;
+    struct MtpMessage mtp_message;
 
     if (!mtppid)
         return false; // MTP is disabled
@@ -2800,7 +2800,7 @@ bool TWPartitionManager::Add_Remove_MTP_Storage(TWPartition *Part, int message_t
                 return false;
             }
             strcpy(mtp_message.display, Part->Storage_Name.c_str());
-            mtp_message.maxFileSize = Part->Current_File_System == "vfat" ? 0xFFFFFFFF : 0;
+            mtp_message.max_file_size = Part->Current_File_System == "vfat" ? 0xFFFFFFFF : 0;
             LOGINFO("sending message to add %i '%s' '%s'\n", mtp_message.storage_id, mtp_message.path,
                     mtp_message.display);
             if (write(mtp_write_fd, &mtp_message, sizeof(mtp_message)) <= 0) {
