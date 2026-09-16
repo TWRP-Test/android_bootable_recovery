@@ -18,6 +18,7 @@
 
 #include <format>
 #include <string>
+#include <sys/mount.h>
 #include <sys/wait.h>
 
 #include "data.hpp"

@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>

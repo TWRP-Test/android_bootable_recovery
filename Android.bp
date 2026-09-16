@@ -463,7 +463,7 @@ cc_binary {
         "unit_conversion.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [
-            "twrpApex.cpp"
+            "twrp_apex.cpp"
         ],
         default: []
     }),

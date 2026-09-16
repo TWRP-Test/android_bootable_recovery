@@ -17,6 +17,7 @@
 */
 
 
+#include <sys/mount.h>
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include <cutils/properties.h>
 
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 
 #include "twcommon.h"

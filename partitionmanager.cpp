@@ -496,9 +496,8 @@ void TWPartitionManager::Setup_Fstab_Partitions(bool Display_Error) {
 #ifdef TW_EXCLUDE_APEX
             LOGINFO("Apex is disabled in this build\n");
 #else
-            twrpApex apex;
-            if (!apex.loadApexImages()) {
-                LOGERR("Unable to load apex images from %s\n", APEX_DIR);
+            if (!TwrpApex::LoadApexImages()) {
+                LOGERR("Unable to load apex images from %s\n", TwrpApex::kApexDir.c_str());
                 android::base::SetProperty("twrp.apex.loaded", "false");
             } else {
                 android::base::SetProperty("twrp.apex.loaded", "true");
@@ -1723,8 +1722,7 @@ int TWPartitionManager::Format_Data() {
     if (dat) {
         if (android::base::GetBoolProperty("ro.virtual_ab.enabled", false)) {
 #ifndef TW_EXCLUDE_APEX
-            twrpApex apex;
-            apex.Unmount();
+            TwrpApex::Unmount();
 #endif
             if (metadata)
                 metadata->Mount(true);
@@ -3507,8 +3505,7 @@ bool TWPartitionManager::Unmap_Super_Devices() {
         return false;
     };
 #ifndef TW_EXCLUDE_APEX
-    twrpApex apex;
-    apex.Unmount();
+    TwrpApex::Unmount();
 #endif
     for (auto iter = Partitions.begin(); iter != Partitions.end();) {
         LOGINFO("Checking partition: %s\n", (*iter)->Get_Mount_Point().c_str());

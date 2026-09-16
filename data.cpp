@@ -40,6 +40,8 @@
 #include "gui/blanktimer.hpp"
 #endif
 
+#include <android-base/properties.h>
+
 #include "gui/gui.hpp"
 #include "gui/pages.h"
 #include "infomanager.hpp"
