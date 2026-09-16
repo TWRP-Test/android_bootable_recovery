@@ -3077,7 +3077,7 @@ bool TWPartition::Flash_Image(PartitionSettings *part_settings) {
     }
     unsigned long long image_size = TWFunc::GetFileSize(full_filename);
     if (image_size > Size) {
-        LOGINFO("Size (%llu bytes) of image '%s' is larger than target device '%s' (%llu bytes)\n",
+        LOGINFO("Size (%llu bytes) of image '%s' is larger than target device '%s' (%lu bytes)\n",
                 image_size, Backup_FileName.c_str(), Actual_Block_Device.c_str(), Size);
         gui_err("img_size_err=Size of image is larger than target device");
         return false;

@@ -745,7 +745,7 @@ void DataManager::SetDefaultValues() {
 
   persist_["tw_mount_system_ro"] = 2;
   persist_["tw_never_show_system_ro_page"] = false;
-  persist_["tw_language"] = std::string(TW_DEFAULT_LANGUAGE);
+  persist_["tw_language"] = EXPAND(TW_DEFAULT_LANGUAGE);
   LOGINFO("LANG: %s\n", EXPAND(TW_DEFAULT_LANGUAGE));
 
   data_["tw_has_adopted_storage"] = false;
