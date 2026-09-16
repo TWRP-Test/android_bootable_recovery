@@ -8,6 +8,7 @@ namespace gui2_pages {
 enum class page_id {
   HOME,
   ACTION,
+  REBOOT,
   LANGUAGE,
   TIMEZONE,
   BRIGHTNESS,
@@ -33,12 +34,15 @@ class page_router {
   bool navigate(page_id id, const void* payload = nullptr,
                 gui2_core::page_transition transition = gui2_core::page_transition::PUSH);
   page_id current() const {
+    return current_.id;
+  }
+  const page_request& current_request() const {
     return current_;
   }
 
  private:
   page_builder builder_ = nullptr;
-  page_id current_ = page_id::HOME;
+  page_request current_{ page_id::HOME, nullptr, gui2_core::page_transition::NONE };
 };
 
 }  // namespace gui2_pages

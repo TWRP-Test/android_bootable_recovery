@@ -2,6 +2,7 @@
 #define GUI2_H
 
 #include "backend/hardware_settings.h"
+#include "backend/reboot_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
 
@@ -14,6 +15,7 @@ struct gui2_context {
   gui2_backend::settings_store* settings = nullptr;
   gui2_backend::hardware_settings* hardware = nullptr;
   gui2_backend::screen_backend* screen = nullptr;
+  gui2_backend::reboot_backend* reboot = nullptr;
   // Reuse an already initialized minui display when possible.
   bool display_initialized = false;
 };

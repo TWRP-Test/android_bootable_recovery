@@ -77,7 +77,7 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
   lv_obj_align(text_block, LV_ALIGN_LEFT_MID, left, 0);
 
   lv_obj_t* arrow =
-      create_svg_image(card, &kGui2IconArrowRight, gui2_core::ui_px(32), gui2_core::ui_px(32));
+      create_svg_image(card, &kGui2IconArrowRight, gui2_core::ui_px(48), gui2_core::ui_px(48));
   lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -card_inner_padding(metrics), 0);
   return card;
 }

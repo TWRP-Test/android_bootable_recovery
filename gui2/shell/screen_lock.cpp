@@ -59,7 +59,7 @@ bool screen_lock::visible() const {
 void screen_lock::reset() {
   root_ = nullptr;
   metrics_ = nullptr;
-  slider_.reset();
+  slider_.detach();
 }
 
 }  // namespace gui2_shell

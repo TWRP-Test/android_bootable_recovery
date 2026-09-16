@@ -16,6 +16,7 @@ class swipe_slider {
   lv_obj_t* create(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, int x, int y, int width,
                    int height, const char* text, swipe_complete_callback callback, void* user_data);
   void reset();
+  void detach();
   int progress() const {
     return progress_;
   }

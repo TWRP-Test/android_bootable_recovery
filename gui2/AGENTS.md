@@ -42,7 +42,10 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 浮动式底部导航：导航采用左侧独立圆形返回按钮加右侧三按钮整体胶囊的 `1+3` 结构；两个外形由 shell 统一绘制背景、半圆角、描边和阴影，胶囊内部按钮只能提供交互和图标，不得各自绘制圆角背景。
 - 页面内容在浮动导航下方连续延伸，并由 shell 提供局部透明黑渐变遮罩；遮罩必须位于滚动内容之上、导航控件之下，且不得带 border、outline 或 shadow。
 - 返回、主页和页面路由逻辑。
-- 主页功能卡片及二级占位页面。
+- 页面 PUSH/POP/REPLACE 过渡动画：前进时新页面从右侧进入，返回时新页面从左侧进入；动画期间页面内容暂时阻止输入，固定状态栏和底部导航保持不动。
+- 主页功能卡片、通用操作占位页面以及设置、语言、时区和硬件页面。
+- 重启页面：通过底栏 Power 按钮进入，支持 System、Power Off、Recovery、Fastbootd、Bootloader、Download 和 EDL；每个目标按编译参数决定是否显示，点击后使用带箭头的滑块确认。
+- 重启页面的 A/B 槽位区域：只有编译启用 `AB_OTA_UPDATER` 且运行时存在有效 `A/B` 活动槽位时显示；槽位切换复用 recovery 的 boot control 逻辑。
 - 英文、简体中文和繁体中文 i18n。
 - TinyTTF 动态字号和中文字体渲染。
 - `libgui2` 静态库及 `gui2_start()` 公共入口。
@@ -54,13 +57,13 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 内置无音频 VP8/WebM 录屏：支持 15/24/30/45/60 FPS、有界丢帧队列和后台编码，不依赖 Android 媒体服务。
 - shell 级状态栏下拉快捷菜单：截屏、熄屏和开始/停止录屏，录制状态同步显示在状态栏。
 - recovery 默认 GUI2 启动、初始化失败回退，以及运行时切换到旧 GUI。
-- GUI2 已完成首轮模块化重构：入口 `gui2.cpp` 负责 recovery 业务回调和组装，`app/` 管理生命周期/主循环，`shell/` 管理持久系统层，`pages/` 管理页面，`components/` 管理可复用控件，`core/` 管理通用 UI 基础设施，`theme/` 管理字体资源。
-- `gui2.cpp` 已从单体页面实现拆分为约 1100 行的组装与业务适配入口；`libgui2` 和完整 `recoveryimage` 均已完成构建验证。
+- GUI2 已完成首轮模块化重构：入口 `gui2.cpp` 负责 recovery 业务回调和组装，`app/` 管理生命周期/主循环，`shell/` 管理持久系统层，`pages/` 管理页面，`components/` 管理可复用控件，`core/` 管理通用 UI 基础设施，`theme/` 管理字体资源，`backend/` 管理 recovery/system 能力。
+- 重启能力已经通过 `backend/reboot_backend` 注入 GUI2；确认后写入旧 GUI 使用的重启状态并退出 GUI2，由 `twrp.cpp` 统一完成最终同步、卸载和重启。
 
 当前边界：
 
 - 启动前仍需短暂初始化旧 GUI，以支持现有解密、只读确认等 recovery 前置页面；随后会释放旧 GUI 的资源再进入 GUI2。
-- 真实安装、备份、恢复等操作尚未全部接入 GUI2 页面。
+- 重启和 A/B 槽位切换已经接入；安装、清除、备份、恢复、挂载和高级工具等真实 recovery 操作尚未全部接入 GUI2 页面。
 
 ## 注意事项
 
@@ -77,13 +80,14 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
   ```
 
 - 每次生成最终 `recoveryimage` 前必须先执行 `mka installclean`；增量编译单独验证模块时可按需使用目标模块构建。
-- 本次模块化重构的验证命令和结果：
+- 最近验证命令和结果：
 
   ```bash
   git diff --check                         # 通过（在 bootable/recovery 执行）
   source build/envsetup.sh
   lunch twrp_sm8850
   m libgui2                                # 成功
+  m recovery                               # 成功
   mka installclean
   mka recoveryimage                        # 成功，生成 out/target/product/sm8850/recovery.img
   ```
@@ -98,17 +102,17 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
   app/        GUI2 生命周期、主循环、运行时服务和延迟屏幕动作
   core/       metrics、缩放、点击取消 guard、滚轮惯性等无业务基础设施
   shell/      状态栏、page host、顶栏/滚动脚手架、底栏、快捷面板和系统弹窗
-  pages/      page router、页面 builder、页面状态和页面专属逻辑
+  pages/      page router、页面 builder、页面状态、页面专属逻辑和重启页
   components/ 可复用 LVGL 控件和卡片
   theme/      TinyTTF 字体生命周期
-  backend/    recovery/system backend，不依赖 LVGL
+  backend/    recovery/system backend（设置、硬件、屏幕、重启），不依赖 LVGL
   ```
 
 - 修改 GUI 框架时优先使用 `create_gui_shell_base()`、`page_host::build()` 和公共组件；页面不得直接管理固定状态栏、顶栏、底部导航、快捷面板或系统反馈层。
-- `gui2_start()` 只负责校验注入的 recovery services、调用 `app/gui2_lifecycle` 初始化图形资源、组装 Shell、启动状态栏 controller 和 `app/gui2_loop`；不要把新的 LVGL 主循环或资源释放逻辑塞回入口。
+- `gui2_start()` 只负责校验注入的 recovery services、调用 `app/gui2_lifecycle` 初始化图形资源、组装 Shell、启动状态栏 controller 和 `app/gui2_loop`；不要把新的 LVGL 主循环或资源释放逻辑塞回入口。重启 service 也必须通过 context 注入。
 - `app/gui2_lifecycle` 统一拥有 TinyTTF、LVGL、display、input 和 SVG cache 的初始化/释放顺序；初始化失败必须复用同一清理路径。
 - `app/gui2_loop` 统一处理 LVGL timer、screen tick、输入 activity、按键、滚轮、present 和性能 timeout；页面回调只接收抽象动作。
-- `page_router` 是页面跳转唯一入口。新增页面必须注册 `page_id`、builder/payload、路由、返回行为和 i18n；页面之间不得直接互相调用 `show_*`。
+- `page_router` 是页面跳转唯一入口，并保存当前页面 request 供跨页面返回使用。新增页面必须注册 `page_id`、builder/payload、路由、返回行为和 i18n；页面之间不得直接互相调用 `show_*`。
 - `page_host` 拥有当前页面层和当前 scaffold；页面 builder 只接收页面 options 中的 content、metrics、strings 和业务回调，不创建 Shell 持久对象。
 - `gui2/core/ui_metrics` 中的 `ui_metrics`、`ui_px()`、`card_inner_padding()`、`single_line_card_height()` 和 `navigation_safe_area()` 是全局尺寸 API；不要在新模块复制尺寸策略。
 - `gui2/core/ui_event_guard` 是统一的触摸取消和点击震动实现。新增可点击对象必须复用 `add_press_cancel_guard()`，不得自行实现一套点击取消状态。
@@ -116,7 +120,7 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 底部导航是 shell 级持久组件，所有页面必须复用同一个导航实例和 `page_host`/scaffold 生命周期；页面不得创建、替换或复制底部导航，也不得使用页面专属坐标模拟导航。
 - 浮动导航的视觉层级固定为：滚动页面内容 → 局部渐变遮罩 → 导航控件。导航背景本身保持透明，让页面内容可以延伸到其下方；渐变遮罩只覆盖导航顶部上方的少量过渡区域及导航下方区域，不得形成可见的矩形边框。
 - 导航外形使用明确的半高圆角（控件高度的一半），不能只依赖主题默认的 `LV_RADIUS_CIRCLE`；右侧三按钮必须由父级胶囊统一绘制描边，子按钮设置透明背景、零圆角和零边框。
-- 可复用的自制 LVGL 组件统一放在 `gui2/components/`，当前包括 icon、choice card、setting card、slider card、swipe slider、quick action button、section label 和 apply button；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。
+- 可复用的自制 LVGL 组件统一放在 `gui2/components/`，当前包括 icon、choice card、setting card、slider card、swipe slider、quick action button、section label 和 apply button；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。`swipe_slider` 始终绘制箭头，并提供 `detach()` 释放已删除 LVGL 对象引用的能力。
 - 页面标题统一使用 `ui.brand_font`；修改标题字号时必须同步检查主页、二级页和三级页。
 - GUI2 使用 `/twres` 中的运行时字体资源和 backend，不针对单一设备硬编码分辨率、圆角安全区或字号。
 - 全局尺寸统一使用 `gui2_core::ui_metrics::scale` 和 `gui2_core::ui_px()`；缩放基准为短边 1200px，最小/最大比例仅作保护，不能给高分辨率布局保留未缩放的固定上限。新增 shell、卡片或组件尺寸必须接入这套缩放。
@@ -133,24 +137,30 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - `lv_obj_create()` 默认可能带有滚动属性。除 `main_content` 等明确的内容滚动区外，卡片、按钮、弹窗和布局容器必须调用 `disable_scrolling()` 并关闭滚动条。
 - 页面只通过 options/context 接收 `metrics`、语言包、content 和业务回调；不得直接访问 `sysfs`、minui、全局 DataManager 或 recorder。
 - 页面状态（选中项、slider binding、LVGL card 引用）集中放入对应的 page state/controller；不要继续在入口新增散落的静态状态变量。
+- 重启页只接收 backend 提供的能力、当前槽位和抽象回调；重启目标卡片不使用图标或描述，卡片高度统一使用 `single_line_card_height()`，确认滑块位于可选 A/B 槽位区域之后。
 
 ### 布局与组件
 
 - 所有卡片类组件复用 `card_inner_padding()` 作为响应式水平内边距；卡片、设置项、语言项、时区项、硬件项、弹窗内容卡和信息卡不得各自硬编码不同的左右 padding。调整卡片时同时检查文字、图标、箭头和多列行的可用宽度。
 - 导航图标尺寸必须通过统一 `ui_px()` 和导航按钮尺寸计算，不能使用未缩放的固定像素；调整图标时同时检查 SVG 栅格内容的实际可见边界，避免外层图片盒子放大但图形仍偏小。
-- 页面复用检查应覆盖主页、操作页、设置页、时区页、语言页和硬件页：它们必须拥有相同的浮动导航层级、渐变遮罩行为和滚动到底安全区，不能只在主页单独适配。
+- 页面复用检查应覆盖主页、操作页、重启页、设置页、时区页、语言页和硬件页：它们必须拥有相同的浮动导航层级、渐变遮罩行为和滚动到底安全区，不能只在主页单独适配。
 - 带圆角和阴影的卡片或子卡片必须与父容器边界保持安全距离；多列行要把内边距计入子卡片宽度和行高度，必要时使用 `LV_OBJ_FLAG_OVERFLOW_VISIBLE`，避免圆角和阴影被裁切。
 - 同一页面的单行选项复用 `single_line_card_height()`；时间格式、UTC 偏移、时区选项、DST 选项和应用按钮保持一致高度。
+- 重启目标和 A/B 槽位卡片复用无描述、居中文本的单行选项样式；确认滑块始终保留箭头，不提供隐藏箭头的变体。
 - 硬件滑块把标题/数值行和滑块视为一个内容组，在卡片内部整体垂直居中，四个方向使用统一的 `card_inner_padding()`，组内间距单独控制。
 - 滑块沿用 Miuix 风格：胶囊轨道、低对比度背景轨道、蓝色填充和较小的圆形滑块；交互热区与视觉滑块尺寸分离。
 - 页面标题区的状态栏留白和标题/副标题间距由 shell 的统一 metrics 控制；调整主页标题时必须同步检查所有二级、三级页面，避免页面自行写死坐标。
 - 卡片文本不得按固定的“一行标题 + 一行描述”计算位置；文本组应设置实际宽度，使用自动换行，按真实高度整体居中，必要时让卡片随内容增高。只有单行超长文本才按场景使用 `LV_LABEL_LONG_SCROLL`，不要让大量卡片同时滚动。
 - 状态栏中的电池图标、百分比和充电图标必须使用独立对象；文本更新后重新排列，顺序保持为“电池、数值、充电标志”，避免动态宽度造成重叠。
 
-### 设置与硬件 backend
+### 设置、硬件与重启 backend
 
 - 所有持久化设置必须通过 `backend/settings_store`；recovery 实现使用 DataManager，页面不得直接读写配置文件。
 - 所有硬件设置必须通过 `backend/hardware_settings`；页面不得直接访问 sysfs、DataManager 或震动 HAL。能力不可用时隐藏入口，不创建“不可用”页面。
+- 所有重启和槽位操作必须通过 `backend/reboot_backend`；页面不得直接访问 DataManager、PartitionManager、TWFunc、minui 或 sysfs。
+- 重启目标能力必须同时遵循编译参数和旧 GUI 语义：`TW_NO_REBOOT_RECOVERY`、`TW_NO_REBOOT_BOOTLOADER`、`TW_INCLUDE_FASTBOOTD`、`PRODUCT_USE_DYNAMIC_PARTITIONS`、`TW_HAS_DOWNLOAD_MODE`、`TW_HAS_EDL_MODE` 和 `AB_OTA_UPDATER`。不可用目标隐藏，不创建“不可用”卡片。
+- A/B 槽位卡片不能只依据 `AB_OTA_UPDATER`；还必须确认运行时 `ro.boot.slot_suffix` 对应有效的 `A` 或 `B`，从而兼容 A-only、传统 A/B 和 Virtual A/B 设备。
+- 重启确认只写入旧 GUI 使用的 `tw_reboot_arg` 和 `tw_gui_done`，由 GUI2 退出后交给 `twrp.cpp` 的统一重启流程执行；页面和滑块不得直接触发设备重启。
 - 硬件滑块变化时可实时更新硬件和内存状态，但不得为每个 `LV_EVENT_VALUE_CHANGED` 调用 `Flush()`；在 `LV_EVENT_RELEASED` 或等价结束事件统一落盘。
 - 亮度沿用 `tw_brightness` / `tw_brightness_pct` 和 TWRP 最大值映射；震动沿用 `tw_button_vibrate`、`tw_keyboard_vibrate`、`tw_action_vibrate`，不得引入 GUI2 私有配置键。
 - 修改时区按旧 GUI 的 `Zone[:offset][DSTZone]` 规则构造 `tw_time_zone`，然后更新环境并 `flush()`。
