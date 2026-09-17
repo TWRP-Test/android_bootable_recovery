@@ -878,7 +878,13 @@ static void update_hardware_slider_value(const hardware_slider_binding& binding,
   } else if (binding.brightness) {
     lv_label_set_text_fmt(binding.value_label, "%d%%", value);
   } else if (binding.screen_timeout) {
-    lv_label_set_text_fmt(binding.value_label, "%d s", value);
+    const int seconds = gui2_pages::screen_timeout_at(value);
+    if (seconds <= 0)
+      lv_label_set_text(binding.value_label, strings().screen_timeout_never);
+    else if (seconds % 60 == 0)
+      lv_label_set_text_fmt(binding.value_label, "%d min", seconds / 60);
+    else
+      lv_label_set_text_fmt(binding.value_label, "%d s", seconds);
   } else if (binding.console_font) {
     lv_label_set_text(binding.value_label, strings().console_font_steps[std::clamp(value, 0, 2)]);
   } else {
@@ -889,41 +895,6 @@ static void update_hardware_slider_value(const hardware_slider_binding& binding,
 static void hardware_slider_state_event_cb(lv_event_t* event) {
   auto* binding = static_cast<hardware_slider_binding*>(lv_event_get_user_data(event));
   if (binding != nullptr) gui2_components::refresh_slider(&binding->visual);
-}
-
-static void refresh_screen_timeout_enabled(void) {
-  const bool enabled = page_state.screen_timeout_enabled;
-  gui2_components::set_enabled(&screen_timeout_binding.visual, enabled);
-  if (screen_timeout_binding.value_label != nullptr)
-    lv_obj_set_style_opa(screen_timeout_binding.value_label, enabled ? LV_OPA_COVER : LV_OPA_40,
-                         LV_PART_MAIN);
-}
-
-static bool store_screen_timeout(int seconds) {
-  if (settings == nullptr) return false;
-  if (!settings->set_persistent("tw_screen_timeout_secs", std::to_string(seconds))) return false;
-  return settings->flush();
-}
-
-static void screen_timeout_toggle_event_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
-  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
-  if (toggle == nullptr) return;
-
-  const bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
-  page_state.screen_timeout_enabled = enabled;
-  if (!store_screen_timeout(enabled ? page_state.screen_timeout_seconds : 0)) {
-    page_state.screen_timeout_enabled = !enabled;
-    if (enabled)
-      lv_obj_remove_state(toggle, LV_STATE_CHECKED);
-    else
-      lv_obj_add_state(toggle, LV_STATE_CHECKED);
-    show_hardware_error(strings().hardware_error);
-    return;
-  }
-  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
-  clear_hardware_error();
-  refresh_screen_timeout_enabled();
 }
 
 static void hardware_slider_event_cb(lv_event_t* event) {
@@ -941,9 +912,11 @@ static void hardware_slider_event_cb(lv_event_t* event) {
     if (binding->recording_fps) {
       applied = screen != nullptr && screen->set_recording_fps(recording_fps_at(screen, value));
     } else if (binding->screen_timeout) {
-      page_state.screen_timeout_seconds = value;
+      page_state.screen_timeout_index = std::clamp(value, 0, gui2_pages::screen_timeout_count - 1);
       applied = settings != nullptr &&
-                settings->set_persistent("tw_screen_timeout_secs", std::to_string(value));
+                settings->set_persistent(
+                    "tw_screen_timeout_secs",
+                    std::to_string(gui2_pages::screen_timeout_at(page_state.screen_timeout_index)));
     } else if (binding->console_font) {
       page_state.console_font_index = std::clamp(value, 0, 2);
       applied = settings != nullptr &&
@@ -973,8 +946,7 @@ static void hardware_slider_event_cb(lv_event_t* event) {
 }
 
 static gui2_pages::hardware_page_view create_hardware_page(
-    const gui2_pages::hardware_slider_spec* sliders, size_t slider_count,
-    const gui2_pages::hardware_toggle_spec* toggle = nullptr) {
+    const gui2_pages::hardware_slider_spec* sliders, size_t slider_count) {
   gui2_pages::hardware_page_options options;
   options.content = main_content;
   options.metrics = &ui;
@@ -982,8 +954,6 @@ static gui2_pages::hardware_page_view create_hardware_page(
   options.slider_count = slider_count;
   options.value_changed_callback = hardware_slider_event_cb;
   options.pressed_callback = hardware_slider_state_event_cb;
-  options.toggle = toggle;
-  options.toggle_event_callback = screen_timeout_toggle_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   const auto view = gui2_pages::build_hardware_page(options);
   hardware_error_label = view.error_label;
@@ -1013,32 +983,23 @@ static void show_brightness_page(page_transition transition) {
                                 &brightness_binding.value_label,
                                 &brightness_binding };
   }
-  gui2_pages::hardware_toggle_spec toggle;
   if (has_timeout) {
     const int stored = settings == nullptr ? 60 : settings->get_int("tw_screen_timeout_secs", 60);
-    page_state.screen_timeout_enabled = stored > 0;
-    page_state.screen_timeout_seconds = std::clamp(stored > 0 ? stored : 60, 15, 300);
-    toggle.label = strings().screen_timeout_label;
-    toggle.enabled = page_state.screen_timeout_enabled;
-    toggle.slider_index = slider_count;
+    page_state.screen_timeout_index = gui2_pages::screen_timeout_index_for(stored);
     bindings[slider_count] = &screen_timeout_binding;
-    sliders[slider_count++] = { nullptr,
-                                15,
-                                300,
-                                page_state.screen_timeout_seconds,
+    sliders[slider_count++] = { strings().screen_timeout_label,
+                                0,
+                                gui2_pages::screen_timeout_count - 1,
+                                page_state.screen_timeout_index,
                                 &screen_timeout_binding.visual,
                                 &screen_timeout_binding.value_label,
                                 &screen_timeout_binding };
   }
 
-  const auto page = create_hardware_page(sliders, slider_count, has_timeout ? &toggle : nullptr);
+  const auto page = create_hardware_page(sliders, slider_count);
   for (size_t i = 0; i < slider_count; ++i) {
     update_hardware_slider_value(*bindings[i], gui2_components::get_value(&bindings[i]->visual));
     gui2_components::refresh_slider(&bindings[i]->visual);
-  }
-  if (has_timeout) {
-    page_state.screen_timeout_toggle = page.toggle_switch;
-    refresh_screen_timeout_enabled();
   }
   lv_obj_update_layout(page.body);
 }
