@@ -11,6 +11,7 @@
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "pages/console_page.h"
+#include "pages/wipe_progress_page.h"
 #include "pages/page_router.h"
 #include "pages/reboot_page.h"
 
@@ -70,6 +71,15 @@ struct page_state {
   lv_obj_t* logcat_card = nullptr;
   lv_obj_t* export_result_label = nullptr;
   console_page_view console;
+  wipe_progress_page_view wipe_progress;
+  lv_obj_t* format_data_input = nullptr;
+  lv_obj_t* format_data_button = nullptr;
+  lv_obj_t* format_data_keyboard = nullptr;
+  size_t wipe_console_consumed = 0;
+  uint64_t wipe_last_poll_ms = 0;
+  bool wipe_selected[24] = {};
+  size_t wipe_target_count = 0;
+  gui2_components::swipe_slider wipe_confirm;
   size_t console_consumed = 0;
   uint64_t console_last_poll_ms = 0;
   reboot_page_state reboot;

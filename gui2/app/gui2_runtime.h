@@ -4,6 +4,7 @@
 #include "backend/console_backend.h"
 #include "backend/hardware_settings.h"
 #include "backend/log_export_backend.h"
+#include "backend/wipe_backend.h"
 #include "backend/reboot_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
@@ -20,6 +21,7 @@ struct runtime_state {
   gui2_backend::reboot_backend* reboot = nullptr;
   gui2_backend::console_backend* console = nullptr;
   gui2_backend::log_export_backend* log_export = nullptr;
+  gui2_backend::wipe_backend* wipe = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };
