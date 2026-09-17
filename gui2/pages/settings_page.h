@@ -15,11 +15,12 @@ struct settings_page_options {
   lv_event_cb_t press_guard_callback = nullptr;
   const void* language_target = nullptr;
   const void* timezone_target = nullptr;
-  const void* brightness_target = nullptr;
+  const void* screen_target = nullptr;
   const void* haptics_target = nullptr;
   const void* recording_target = nullptr;
+  const void* console_settings_target = nullptr;
   const void* legacy_target = nullptr;
-  bool has_brightness = false;
+  bool has_screen = false;
   bool has_haptics = false;
   bool has_recording = false;
 };

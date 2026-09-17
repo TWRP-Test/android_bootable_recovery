@@ -34,6 +34,9 @@
 #include "lvgl.h"
 #include "pages/action_definitions.h"
 #include "pages/action_page.h"
+#include "pages/advanced_page.h"
+#include "pages/console_page.h"
+#include "pages/export_log_page.h"
 #include "pages/hardware_page.h"
 #include "pages/home_page.h"
 #include "pages/language_page.h"
@@ -63,6 +66,7 @@
 
 static lv_font_t* runtime_text_font;
 static lv_font_t* runtime_status_font;
+static lv_font_t* runtime_console_fonts[3];
 static lv_font_t* runtime_brand_font;
 static gui2_app::graphics_state graphics;
 static gui2_app::runtime_state runtime;
@@ -70,6 +74,8 @@ static gui2_backend::settings_store*& settings = runtime.settings;
 static gui2_backend::hardware_settings*& hardware = runtime.hardware;
 static gui2_backend::screen_backend*& screen = runtime.screen;
 static gui2_backend::reboot_backend*& reboot = runtime.reboot;
+static gui2_backend::console_backend*& console = runtime.console;
+static gui2_backend::log_export_backend*& log_export = runtime.log_export;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -102,6 +108,7 @@ static gui2_shell::quick_panel_controller quick_panel_controller;
 static lv_obj_t* quick_record_button;
 static lv_obj_t* quick_record_label;
 static lv_obj_t* quick_feedback;
+static bool quick_feedback_pending;
 static gui2_shell::screen_feedback screen_feedback;
 static gui2_shell::screen_lock screen_lock;
 static gui2_app::screen_actions screen_actions;
@@ -154,6 +161,9 @@ static void show_timezone_page(page_transition transition);
 static void show_brightness_page(page_transition transition);
 static void show_haptics_page(page_transition transition);
 static void show_recording_page(page_transition transition);
+static void show_console_page(page_transition transition);
+static void show_export_log_page(page_transition transition);
+static void show_console_settings_page(page_transition transition);
 static void create_gui2_shell(lv_obj_t* screen);
 static void close_quick_menu(void);
 static void refresh_recording_ui(void);
@@ -184,6 +194,8 @@ static lv_obj_t*& hardware_error_label = page_state.hardware_error_label;
 static bool& hardware_settings_dirty = page_state.hardware_settings_dirty;
 using hardware_slider_binding = gui2_pages::hardware_slider_binding;
 static hardware_slider_binding& brightness_binding = page_state.brightness_binding;
+static hardware_slider_binding& screen_timeout_binding = page_state.screen_timeout_binding;
+static hardware_slider_binding& console_font_binding = page_state.console_font_binding;
 static hardware_slider_binding& quick_brightness_binding = page_state.quick_brightness_binding;
 static hardware_slider_binding (&haptic_bindings)[3] = page_state.haptic_bindings;
 static hardware_slider_binding& recording_binding = page_state.recording_binding;
@@ -271,6 +283,8 @@ enum class settings_target {
   HAPTICS,
   RECORDING,
   LEGACY,
+  EXPORT_LOG,
+  CONSOLE_SETTINGS,
 };
 
 static constexpr settings_target language_target = settings_target::LANGUAGE;
@@ -279,6 +293,23 @@ static constexpr settings_target brightness_target = settings_target::BRIGHTNESS
 static constexpr settings_target haptics_target = settings_target::HAPTICS;
 static constexpr settings_target recording_target = settings_target::RECORDING;
 static constexpr settings_target legacy_target = settings_target::LEGACY;
+static constexpr settings_target export_log_target = settings_target::EXPORT_LOG;
+static constexpr settings_target console_settings_target = settings_target::CONSOLE_SETTINGS;
+
+static int navigation_rank(page_kind page) {
+  if (page == page_kind::HOME) return 0;
+  if (page == page_kind::CONSOLE) return 1;
+  if (page == page_kind::REBOOT) return 2;
+  return -1;
+}
+
+static page_transition navigation_transition(page_kind target) {
+  const int current = navigation_rank(page_router.current());
+  const int from = current < 0 ? navigation_rank(page_kind::CONSOLE) : current;
+  const int to = navigation_rank(target);
+  if (to < 0 || from == to) return page_transition::PUSH;
+  return to > from ? page_transition::PUSH : page_transition::POP;
+}
 
 static void navigate_back(void) {
   close_quick_menu();
@@ -289,9 +320,14 @@ static void navigate_back(void) {
              page_router.current() == page_kind::TIMEZONE ||
              page_router.current() == page_kind::BRIGHTNESS ||
              page_router.current() == page_kind::HAPTICS ||
-             page_router.current() == page_kind::RECORDING) {
+             page_router.current() == page_kind::RECORDING ||
+             page_router.current() == page_kind::CONSOLE_SETTINGS) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
+                page_transition::POP);
+  } else if (page_router.current() == page_kind::EXPORT_LOG) {
+    navigate_to(page_kind::ACTION,
+                &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
                 page_transition::POP);
   } else if (!home_page_active) {
     navigate_to(page_kind::HOME, nullptr, page_transition::POP);
@@ -311,17 +347,24 @@ static void navigation_event_cb(lv_event_t* event) {
 
   if (*action == gui2_shell::navigation_action::POWER) {
     if (page_router.current() != page_kind::REBOOT) {
+      const page_transition transition = navigation_transition(page_kind::REBOOT);
       page_state.reboot.return_request = page_router.current_request();
       reset_reboot_page_state();
-      navigate_to(page_kind::REBOOT, nullptr, page_transition::PUSH);
+      navigate_to(page_kind::REBOOT, nullptr, transition);
     }
+    return;
+  }
+
+  if (*action == gui2_shell::navigation_action::LOG) {
+    if (page_router.current() != page_kind::CONSOLE)
+      navigate_to(page_kind::CONSOLE, nullptr, navigation_transition(page_kind::CONSOLE));
     return;
   }
 
   if (*action == gui2_shell::navigation_action::BACK ||
       (*action == gui2_shell::navigation_action::HOME && !home_page_active)) {
     if (*action == gui2_shell::navigation_action::HOME) {
-      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+      navigate_to(page_kind::HOME, nullptr, navigation_transition(page_kind::HOME));
     } else {
       navigate_back();
     }
@@ -472,12 +515,30 @@ static void set_quick_feedback(const char* title, const char* detail = nullptr) 
     lv_label_set_text_fmt(quick_feedback, "%s: %s", title, detail);
   else
     lv_label_set_text(quick_feedback, title);
-  lv_obj_clear_flag(quick_feedback, LV_OBJ_FLAG_HIDDEN);
+
+  if (quick_panel_controller.is_open()) {
+    quick_feedback_pending = false;
+    gui2_shell::set_quick_panel_feedback_visible(&quick_panel_view, true);
+    quick_panel_controller.sync_geometry(quick_panel_view);
+  } else {
+    quick_feedback_pending = true;
+  }
+}
+
+static void screenshot_result_cb(void*, const gui2_backend::capture_result& result) {
+  if (result.success)
+    set_quick_feedback(strings().screenshot_saved, result.path.c_str());
+  else
+    set_quick_feedback(strings().screenshot_failed);
 }
 
 static void quick_action_event_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || screen == nullptr)
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  if (quick_panel_controller.gesture_moved()) {
+    clear_click_guard();
     return;
+  }
+  if (!accept_click(event) || screen == nullptr) return;
   const auto* action = static_cast<const quick_action*>(lv_event_get_user_data(event));
   if (action == nullptr) return;
 
@@ -575,6 +636,9 @@ static void refresh_recording_ui(void) {
 }
 
 static void refresh_quick_panel_on_open(void) {
+  gui2_shell::set_quick_panel_feedback_visible(&quick_panel_view, quick_feedback_pending);
+  quick_feedback_pending = false;
+  quick_panel_controller.sync_geometry(quick_panel_view);
   refresh_recording_ui();
   sync_quick_brightness();
 }
@@ -697,6 +761,12 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
     language_option_cards[i] = nullptr;
     language_check_labels[i] = nullptr;
   }
+  page_state.console = {};
+  page_state.console_consumed = 0;
+  page_state.screen_timeout_toggle = nullptr;
+  page_state.kernel_log_card = nullptr;
+  page_state.logcat_card = nullptr;
+  page_state.export_result_label = nullptr;
   home_page_active = is_home;
   home_navigation_active = true;
   main_content = page_host.build(title, summary, bottom_reserved, transition).content;
@@ -768,6 +838,10 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::HAPTICS);
   else if (*target == settings_target::RECORDING)
     navigate_to(page_kind::RECORDING);
+  else if (*target == settings_target::EXPORT_LOG)
+    navigate_to(page_kind::EXPORT_LOG);
+  else if (*target == settings_target::CONSOLE_SETTINGS)
+    navigate_to(page_kind::CONSOLE_SETTINGS);
   else
     request_legacy_gui_event_cb(event);
 }
@@ -803,6 +877,10 @@ static void update_hardware_slider_value(const hardware_slider_binding& binding,
     lv_label_set_text_fmt(binding.value_label, "%d FPS", recording_fps_at(screen, value));
   } else if (binding.brightness) {
     lv_label_set_text_fmt(binding.value_label, "%d%%", value);
+  } else if (binding.screen_timeout) {
+    lv_label_set_text_fmt(binding.value_label, "%d s", value);
+  } else if (binding.console_font) {
+    lv_label_set_text(binding.value_label, strings().console_font_steps[std::clamp(value, 0, 2)]);
   } else {
     lv_label_set_text_fmt(binding.value_label, "%d ms", value);
   }
@@ -813,10 +891,47 @@ static void hardware_slider_state_event_cb(lv_event_t* event) {
   if (binding != nullptr) gui2_components::refresh_slider(&binding->visual);
 }
 
+static void refresh_screen_timeout_enabled(void) {
+  const bool enabled = page_state.screen_timeout_enabled;
+  gui2_components::set_enabled(&screen_timeout_binding.visual, enabled);
+  if (screen_timeout_binding.value_label != nullptr)
+    lv_obj_set_style_opa(screen_timeout_binding.value_label, enabled ? LV_OPA_COVER : LV_OPA_40,
+                         LV_PART_MAIN);
+}
+
+static bool store_screen_timeout(int seconds) {
+  if (settings == nullptr) return false;
+  if (!settings->set_persistent("tw_screen_timeout_secs", std::to_string(seconds))) return false;
+  return settings->flush();
+}
+
+static void screen_timeout_toggle_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (toggle == nullptr) return;
+
+  const bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  page_state.screen_timeout_enabled = enabled;
+  if (!store_screen_timeout(enabled ? page_state.screen_timeout_seconds : 0)) {
+    page_state.screen_timeout_enabled = !enabled;
+    if (enabled)
+      lv_obj_remove_state(toggle, LV_STATE_CHECKED);
+    else
+      lv_obj_add_state(toggle, LV_STATE_CHECKED);
+    show_hardware_error(strings().hardware_error);
+    return;
+  }
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+  clear_hardware_error();
+  refresh_screen_timeout_enabled();
+}
+
 static void hardware_slider_event_cb(lv_event_t* event) {
   auto* binding = static_cast<hardware_slider_binding*>(lv_event_get_user_data(event));
   lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(event));
-  if (binding == nullptr || slider == nullptr || (hardware == nullptr && !binding->recording_fps))
+  if (binding == nullptr || slider == nullptr ||
+      (hardware == nullptr && !binding->recording_fps && !binding->screen_timeout &&
+       !binding->console_font))
     return;
 
   const lv_event_code_t code = lv_event_get_code(event);
@@ -825,6 +940,15 @@ static void hardware_slider_event_cb(lv_event_t* event) {
     bool applied = false;
     if (binding->recording_fps) {
       applied = screen != nullptr && screen->set_recording_fps(recording_fps_at(screen, value));
+    } else if (binding->screen_timeout) {
+      page_state.screen_timeout_seconds = value;
+      applied = settings != nullptr &&
+                settings->set_persistent("tw_screen_timeout_secs", std::to_string(value));
+    } else if (binding->console_font) {
+      page_state.console_font_index = std::clamp(value, 0, 2);
+      applied = settings != nullptr &&
+                settings->set_persistent("tw_gui2_console_font",
+                                         std::to_string(page_state.console_font_index));
     } else {
       applied = binding->brightness ? hardware->set_brightness_percent(value)
                                     : hardware->set_haptic_duration_ms(binding->channel, value);
@@ -849,7 +973,8 @@ static void hardware_slider_event_cb(lv_event_t* event) {
 }
 
 static gui2_pages::hardware_page_view create_hardware_page(
-    const gui2_pages::hardware_slider_spec* sliders, size_t slider_count) {
+    const gui2_pages::hardware_slider_spec* sliders, size_t slider_count,
+    const gui2_pages::hardware_toggle_spec* toggle = nullptr) {
   gui2_pages::hardware_page_options options;
   options.content = main_content;
   options.metrics = &ui;
@@ -857,6 +982,9 @@ static gui2_pages::hardware_page_view create_hardware_page(
   options.slider_count = slider_count;
   options.value_changed_callback = hardware_slider_event_cb;
   options.pressed_callback = hardware_slider_state_event_cb;
+  options.toggle = toggle;
+  options.toggle_event_callback = screen_timeout_toggle_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
   const auto view = gui2_pages::build_hardware_page(options);
   hardware_error_label = view.error_label;
   return view;
@@ -864,21 +992,77 @@ static gui2_pages::hardware_page_view create_hardware_page(
 
 static void show_brightness_page(page_transition transition) {
   hardware_settings_dirty = false;
-  brightness_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, true, false };
-  create_page_scaffold(page_kind::BRIGHTNESS, false, strings().brightness_title,
-                       strings().brightness_summary, 0, transition);
-  const int value = hardware == nullptr ? 20 : hardware->brightness_percent();
-  gui2_pages::hardware_slider_spec slider = { strings().brightness_label,
-                                              10,
-                                              100,
-                                              value,
-                                              &brightness_binding.visual,
-                                              &brightness_binding.value_label,
-                                              &brightness_binding };
+  brightness_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, true, false, false, false };
+  screen_timeout_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false, true,
+                             false };
+  create_page_scaffold(page_kind::BRIGHTNESS, false, strings().screen_title,
+                       strings().screen_summary, 0, transition);
+
+  const bool has_brightness = hardware != nullptr && hardware->has_brightness();
+  const bool has_timeout = screen != nullptr && screen->has_screen_off();
+  gui2_pages::hardware_slider_spec sliders[3];
+  size_t slider_count = 0;
+  hardware_slider_binding* bindings[3] = {};
+  if (has_brightness) {
+    bindings[slider_count] = &brightness_binding;
+    sliders[slider_count++] = { strings().brightness_label,
+                                10,
+                                100,
+                                hardware->brightness_percent(),
+                                &brightness_binding.visual,
+                                &brightness_binding.value_label,
+                                &brightness_binding };
+  }
+  gui2_pages::hardware_toggle_spec toggle;
+  if (has_timeout) {
+    const int stored = settings == nullptr ? 60 : settings->get_int("tw_screen_timeout_secs", 60);
+    page_state.screen_timeout_enabled = stored > 0;
+    page_state.screen_timeout_seconds = std::clamp(stored > 0 ? stored : 60, 15, 300);
+    toggle.label = strings().screen_timeout_label;
+    toggle.enabled = page_state.screen_timeout_enabled;
+    toggle.slider_index = slider_count;
+    bindings[slider_count] = &screen_timeout_binding;
+    sliders[slider_count++] = { nullptr,
+                                15,
+                                300,
+                                page_state.screen_timeout_seconds,
+                                &screen_timeout_binding.visual,
+                                &screen_timeout_binding.value_label,
+                                &screen_timeout_binding };
+  }
+
+  const auto page = create_hardware_page(sliders, slider_count, has_timeout ? &toggle : nullptr);
+  for (size_t i = 0; i < slider_count; ++i) {
+    update_hardware_slider_value(*bindings[i], gui2_components::get_value(&bindings[i]->visual));
+    gui2_components::refresh_slider(&bindings[i]->visual);
+  }
+  if (has_timeout) {
+    page_state.screen_timeout_toggle = page.toggle_switch;
+    refresh_screen_timeout_enabled();
+  }
+  lv_obj_update_layout(page.body);
+}
+
+static void show_console_settings_page(page_transition transition) {
+  hardware_settings_dirty = false;
+  console_font_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false, false,
+                           true };
+  create_page_scaffold(page_kind::CONSOLE_SETTINGS, false, strings().console_settings_title,
+                       strings().console_settings_summary, 0, transition);
+
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+  gui2_pages::hardware_slider_spec slider = { strings().console_font_label,
+                                              0,
+                                              2,
+                                              page_state.console_font_index,
+                                              &console_font_binding.visual,
+                                              &console_font_binding.value_label,
+                                              &console_font_binding };
   const auto page = create_hardware_page(&slider, 1);
-  update_hardware_slider_value(brightness_binding,
-                               gui2_components::get_value(&brightness_binding.visual));
-  gui2_components::refresh_slider(&brightness_binding.visual);
+  update_hardware_slider_value(console_font_binding,
+                               gui2_components::get_value(&console_font_binding.visual));
+  gui2_components::refresh_slider(&console_font_binding.visual);
   lv_obj_update_layout(page.body);
 }
 
@@ -944,6 +1128,75 @@ static void show_recording_page(page_transition transition) {
   lv_obj_update_layout(page.body);
 }
 
+static void poll_console(bool scroll_to_end) {
+  if (console == nullptr || page_state.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  const size_t total = console->fetch(page_state.console_consumed, &lines);
+  page_state.console_consumed = total;
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.console, ui, lines);
+  if (scroll_to_end) gui2_pages::scroll_console_to_end(page_state.console);
+}
+
+static void show_console_page(page_transition transition) {
+  create_page_scaffold(page_kind::CONSOLE, false, strings().console_title,
+                       strings().console_summary, 0, transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+  gui2_pages::console_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.empty_text = strings().console_empty;
+  options.font = runtime_console_fonts[page_state.console_font_index];
+  page_state.console = gui2_pages::build_console_page(options);
+  page_state.console_consumed = 0;
+  page_state.console_last_poll_ms = 0;
+  poll_console(true);
+}
+
+static constexpr int kKernelLogTarget = 0;
+static constexpr int kLogcatTarget = 1;
+
+static void log_option_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const auto* target = static_cast<const int*>(lv_event_get_user_data(event));
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (target == nullptr || toggle == nullptr) return;
+
+  const bool checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (*target == kKernelLogTarget)
+    page_state.include_kernel_log = checked;
+  else
+    page_state.include_logcat = checked;
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void export_log_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (page_state.export_result_label == nullptr) return;
+
+  if (log_export == nullptr) {
+    lv_label_set_text(page_state.export_result_label, strings().export_log_failed);
+    lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
+                                LV_PART_MAIN);
+    lv_obj_clear_flag(page_state.export_result_label, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+
+  const auto result = log_export->export_logs(page_state.include_kernel_log,
+                                              page_state.include_logcat);
+  if (result.success) {
+    lv_label_set_text_fmt(page_state.export_result_label, "%s: %s", strings().export_log_done,
+                          result.path.c_str());
+    lv_obj_set_style_text_color(page_state.export_result_label, ui.secondary_text, LV_PART_MAIN);
+  } else {
+    lv_label_set_text(page_state.export_result_label, strings().export_log_failed);
+    lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
+                                LV_PART_MAIN);
+  }
+  lv_obj_clear_flag(page_state.export_result_label, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void show_timezone_page(page_transition transition) {
   pending_military_time = settings != nullptr && settings->get_int("tw_military_time", 0) != 0;
   pending_dst = settings != nullptr && settings->get_int("tw_time_zone_guidst", 0) != 0;
@@ -970,7 +1223,7 @@ static void show_timezone_page(page_transition transition) {
   }
 
   const int button_height = single_line_card_height();
-  const int bottom_reserved = button_height + ui.cards_top_gap * 2;
+  const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::TIMEZONE, false, strings().time_title, strings().time_summary,
                        bottom_reserved, transition);
 
@@ -1037,22 +1290,60 @@ static void show_action_page(const action_definition& definition, page_transitio
     settings_options.press_guard_callback = press_cancel_guard_cb;
     settings_options.language_target = &language_target;
     settings_options.timezone_target = &timezone_target;
-    settings_options.brightness_target = &brightness_target;
+    settings_options.screen_target = &brightness_target;
     settings_options.haptics_target = &haptics_target;
     settings_options.recording_target = &recording_target;
+    settings_options.console_settings_target = &console_settings_target;
     settings_options.legacy_target = &legacy_target;
-    settings_options.has_brightness = hardware != nullptr && hardware->has_brightness();
+    settings_options.has_screen = true;
     settings_options.has_haptics = hardware != nullptr && hardware->has_haptics();
     settings_options.has_recording = screen != nullptr && screen->has_recording();
     gui2_pages::build_settings_page(settings_options);
+  } else if (definition.id == action_id::ADVANCED) {
+    gui2_pages::advanced_page_options advanced_options;
+    advanced_options.content = body;
+    advanced_options.metrics = &ui;
+    advanced_options.strings = &strings();
+    advanced_options.option_event_callback = settings_option_event_cb;
+    advanced_options.press_guard_callback = press_cancel_guard_cb;
+    advanced_options.export_log_target = &export_log_target;
+    gui2_pages::build_advanced_page(advanced_options);
   }
+}
+
+static void show_export_log_page(page_transition transition) {
+  const int bottom_reserved = ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::EXPORT_LOG, false, strings().export_log_title,
+                       strings().export_log_summary, bottom_reserved, transition);
+
+  const bool has_logcat = log_export != nullptr && log_export->has_logcat();
+  if (!has_logcat) page_state.include_logcat = false;
+
+  gui2_pages::export_log_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.option_event_callback = log_option_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  options.kernel_log_target = &kKernelLogTarget;
+  options.logcat_target = &kLogcatTarget;
+  options.include_kernel_log = page_state.include_kernel_log;
+  options.include_logcat = page_state.include_logcat;
+  options.has_logcat = has_logcat;
+  const auto view = gui2_pages::build_export_log_page(options);
+  page_state.kernel_log_card = view.kernel_log_card;
+  page_state.logcat_card = view.logcat_card;
+  page_state.export_result_label = view.result_label;
+
+  gui2_components::create_apply_button(page_layer, ui, export_log_event_cb, strings().export_log,
+                                       press_cancel_guard_cb);
 }
 
 static void show_language_page(page_transition transition) {
   pending_language = current_language;
 
   const int button_height = single_line_card_height();
-  const int bottom_reserved = button_height + ui.cards_top_gap * 2;
+  const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::LANGUAGE, false, strings().language_title,
                        strings().language_summary, bottom_reserved, transition);
 
@@ -1103,6 +1394,15 @@ static void route_page(const gui2_pages::page_request& request) {
     case page_kind::RECORDING:
       show_recording_page(request.transition);
       return;
+    case page_kind::CONSOLE:
+      show_console_page(request.transition);
+      return;
+    case page_kind::EXPORT_LOG:
+      show_export_log_page(request.transition);
+      return;
+    case page_kind::CONSOLE_SETTINGS:
+      show_console_settings_page(request.transition);
+      return;
   }
 }
 
@@ -1148,6 +1448,7 @@ static void shutdown_gui2(bool keep_display = false) {
   runtime_text_font = nullptr;
   runtime_status_font = nullptr;
   runtime_brand_font = nullptr;
+  for (lv_font_t*& font : runtime_console_fonts) font = nullptr;
   pointer_indev = nullptr;
   gui2_core::configure_click_guard(nullptr, nullptr);
   status_view = {};
@@ -1179,6 +1480,10 @@ static bool gui2_loop_should_exit(void*) {
 static void gui2_loop_tick(void*, uint64_t now_ms) {
   advance_wheel_scroll(now_ms);
   screen_feedback.update(now_ms);
+  if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 250) {
+    page_state.console_last_poll_ms = now_ms;
+    poll_console(false);
+  }
 }
 
 static void gui2_loop_key_action(void*, gui2_key_action key_action) {
@@ -1220,6 +1525,8 @@ int gui2_start(const gui2_context* context) {
   hardware = context->hardware;
   screen = context->screen;
   reboot = context->reboot;
+  console = context->console;
+  log_export = context->log_export;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   switch_to_legacy = false;
@@ -1233,12 +1540,15 @@ int gui2_start(const gui2_context* context) {
   runtime_text_font = graphics.text_font;
   runtime_status_font = graphics.status_font;
   runtime_brand_font = graphics.brand_font;
+  for (size_t i = 0; i < std::size(runtime_console_fonts); ++i)
+    runtime_console_fonts[i] = graphics.console_fonts[i];
   pointer_indev = graphics.pointer_indev;
   gui2_core::configure_click_guard(pointer_indev, hardware);
 
   create_gui2_shell(lv_screen_active());
   screen_lock.create(ui, "", strings().swipe_to_unlock, screen_lock_unlocked, nullptr);
   screen_actions.initialize(screen, &screen_feedback, screen_lock_before_screen_off, nullptr);
+  screen_actions.set_screenshot_result_callback(screenshot_result_cb);
 
   if (!status_controller.start(settings, ui, status_view, refresh_recording_ui)) {
     shutdown_gui2();

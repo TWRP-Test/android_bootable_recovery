@@ -1,12 +1,16 @@
 #ifndef GUI2_PAGES_PAGE_STATE_H
 #define GUI2_PAGES_PAGE_STATE_H
 
+#include <cstddef>
+#include <cstdint>
+
 #include "backend/hardware_settings.h"
 #include "backend/reboot_backend.h"
 #include "components/slider.h"
 #include "components/swipe_slider.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
+#include "pages/console_page.h"
 #include "pages/page_router.h"
 #include "pages/reboot_page.h"
 
@@ -17,6 +21,8 @@ struct hardware_slider_binding {
   gui2_backend::haptic_channel channel = gui2_backend::haptic_channel::BUTTON;
   bool brightness = false;
   bool recording_fps = false;
+  bool screen_timeout = false;
+  bool console_font = false;
   gui2_components::slider visual;
 };
 
@@ -50,10 +56,24 @@ struct page_state {
   lv_obj_t* hardware_error_label = nullptr;
   bool hardware_settings_dirty = false;
   hardware_slider_binding brightness_binding;
+  hardware_slider_binding screen_timeout_binding;
+  hardware_slider_binding console_font_binding;
   hardware_slider_binding quick_brightness_binding;
   hardware_slider_binding haptic_bindings[3];
   hardware_slider_binding recording_binding;
   bool quick_brightness_dirty = false;
+  bool screen_timeout_enabled = false;
+  int screen_timeout_seconds = 60;
+  int console_font_index = 1;
+  bool include_kernel_log = false;
+  bool include_logcat = true;
+  lv_obj_t* kernel_log_card = nullptr;
+  lv_obj_t* logcat_card = nullptr;
+  lv_obj_t* export_result_label = nullptr;
+  lv_obj_t* screen_timeout_toggle = nullptr;
+  console_page_view console;
+  size_t console_consumed = 0;
+  uint64_t console_last_poll_ms = 0;
   reboot_page_state reboot;
 };
 

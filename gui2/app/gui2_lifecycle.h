@@ -12,6 +12,7 @@ struct graphics_state {
   lv_font_t* text_font = nullptr;
   lv_font_t* status_font = nullptr;
   lv_font_t* brand_font = nullptr;
+  lv_font_t* console_fonts[3] = {};
   lv_indev_t* pointer_indev = nullptr;
   bool events_initialized = false;
   bool lv_initialized = false;

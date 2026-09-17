@@ -21,11 +21,18 @@ class font_manager {
   lv_font_t* brand() const {
     return brand_;
   }
+  lv_font_t* console(int index) const;
+  static int console_count() {
+    return kConsoleSizeCount;
+  }
 
  private:
+  static constexpr int kConsoleSizeCount = 3;
+
   lv_font_t* text_ = nullptr;
   lv_font_t* status_ = nullptr;
   lv_font_t* brand_ = nullptr;
+  lv_font_t* console_[kConsoleSizeCount] = {};
 };
 
 }  // namespace gui2_theme

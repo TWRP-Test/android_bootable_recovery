@@ -17,11 +17,10 @@ void build_settings_page(const settings_page_options& options) {
   gui2_components::create_setting_card(options.content, metrics, strings.time_title,
                                        strings.time_summary, options.option_event_callback,
                                        options.timezone_target, options.press_guard_callback);
-  if (options.has_brightness) {
-    gui2_components::create_setting_card(options.content, metrics, strings.brightness_title,
-                                         strings.brightness_summary,
-                                         options.option_event_callback, options.brightness_target,
-                                         options.press_guard_callback);
+  if (options.has_screen) {
+    gui2_components::create_setting_card(options.content, metrics, strings.screen_title,
+                                         strings.screen_summary, options.option_event_callback,
+                                         options.screen_target, options.press_guard_callback);
   }
   if (options.has_haptics) {
     gui2_components::create_setting_card(options.content, metrics, strings.haptics_title,
@@ -34,6 +33,10 @@ void build_settings_page(const settings_page_options& options) {
         strings.recording_settings_summary, options.option_event_callback, options.recording_target,
         options.press_guard_callback);
   }
+  gui2_components::create_setting_card(
+      options.content, metrics, strings.console_settings_title, strings.console_settings_summary,
+      options.option_event_callback, options.console_settings_target,
+      options.press_guard_callback);
   gui2_components::create_setting_card(options.content, metrics, strings.classic_gui_title,
                                        strings.classic_gui_detail, options.option_event_callback,
                                        options.legacy_target, options.press_guard_callback);
