@@ -14,6 +14,9 @@ enum class page_id {
   BRIGHTNESS,
   HAPTICS,
   RECORDING,
+  CONSOLE,
+  CONSOLE_SETTINGS,
+  EXPORT_LOG,
 };
 
 struct page_request {

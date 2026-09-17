@@ -824,6 +824,8 @@ public:
 
 	static void Translate_Now();
 	static void Clear_For_Retranslation();
+	static size_t Get_Lines(size_t from, std::vector<std::string>* lines,
+							std::vector<std::string>* colors);
 protected:
 	enum SlideoutState
 	{
