@@ -43,11 +43,15 @@ struct quick_panel_view {
   lv_obj_t* feedback = nullptr;
   lv_obj_t* screenshot_flash = nullptr;
   int menu_height = 0;
+  int menu_collapsed_height = 0;
+  int menu_expanded_height = 0;
   int menu_open_y = 0;
   int menu_closed_y = 0;
 };
 
 quick_panel_view create_quick_panel(const quick_panel_options& options);
+
+void set_quick_panel_feedback_visible(quick_panel_view* view, bool visible);
 
 }  // namespace gui2_shell
 

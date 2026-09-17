@@ -63,7 +63,7 @@ void quick_panel_controller::animate(bool open) {
   animation_target_open_ = open;
   lv_anim_del(this, animation_exec);
   if (open) {
-    if (on_open_ != nullptr) on_open_();
+    if (progress_ == 0 && on_open_ != nullptr) on_open_();
     lv_obj_clear_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(view_.menu, LV_OBJ_FLAG_HIDDEN);
   }
@@ -89,6 +89,14 @@ void quick_panel_controller::animate(bool open) {
   lv_anim_start(&animation);
 }
 
+void quick_panel_controller::sync_geometry(const quick_panel_view& view) {
+  view_.menu_height = view.menu_height;
+  view_.menu_collapsed_height = view.menu_collapsed_height;
+  view_.menu_expanded_height = view.menu_expanded_height;
+  view_.menu_closed_y = view.menu_closed_y;
+  set_progress(progress_);
+}
+
 void quick_panel_controller::open() {
   animate(true);
 }
@@ -110,6 +118,7 @@ lv_indev_t* quick_panel_controller::event_indev(lv_event_t* event) const {
 void quick_panel_controller::begin_drag(lv_event_t* event, bool from_dismiss) {
   lv_indev_t* indev = event_indev(event);
   if (indev == nullptr || view_.menu == nullptr || view_.dismiss == nullptr) return;
+  if (!from_dismiss && progress_ == 0 && on_open_ != nullptr) on_open_();
   lv_point_t point;
   lv_indev_get_point(indev, &point);
   lv_anim_del(this, animation_exec);
