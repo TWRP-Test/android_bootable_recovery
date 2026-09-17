@@ -33,7 +33,7 @@ console_page_view build_console_page(const console_page_options& options) {
   view.content = options.content;
   view.font = options.font != nullptr ? options.font : metrics.status_font;
 
-  view.padding = gui2_core::card_inner_padding();
+  view.padding = std::max(gui2_core::ui_px(12), gui2_core::card_inner_padding() / 2);
   view.line_gap = gui2_core::ui_px(8);
   view.next_y = view.padding;
 
