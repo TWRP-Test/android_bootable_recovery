@@ -40,7 +40,7 @@ cc_library_static {
         "components/choice_card.cpp",
         "components/apply_button.cpp",
         "components/slider_card.cpp",
-        "components/switch_row.cpp",
+        "components/check_row.cpp",
         "components/quick_action_button.cpp",
         "components/setting_card.cpp",
         "components/section_label.cpp",
