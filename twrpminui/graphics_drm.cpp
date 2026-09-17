@@ -992,6 +992,25 @@ static bool get_kernel_video_mode(uint32_t* width, uint32_t* height) {
     return false;
 }
 
+static bool pick_fastest_mode(drmModeConnector* connector, uint32_t width, uint32_t height,
+                              uint32_t* mode_index) {
+    bool found = false;
+    uint32_t best_refresh = 0;
+    for (int modes = 0; modes < connector->count_modes; modes++) {
+        const drmModeModeInfo& mode = connector->modes[modes];
+        if (mode.hdisplay != width || mode.vdisplay != height)
+            continue;
+        if (!found || mode.vrefresh > best_refresh) {
+            found = true;
+            best_refresh = mode.vrefresh;
+            *mode_index = modes;
+        }
+    }
+    if (found)
+        printf("Using %ux%u@%u\n", width, height, best_refresh);
+    return found;
+}
+
 static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
         uint32_t *mode_index) {
     /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
@@ -1025,13 +1044,10 @@ static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
     if (get_kernel_video_mode(&requested_width, &requested_height)) {
         printf("Kernel video mode requested: %u x %u\n", requested_width,
                requested_height);
-        for (int modes = 0; modes < main_monitor_connector->count_modes; modes++) {
-            const drmModeModeInfo& mode = main_monitor_connector->modes[modes];
-            if (mode.hdisplay == requested_width && mode.vdisplay == requested_height) {
-                *mode_index = modes;
-                printf("Choosing kernel video mode #%d\n", modes);
-                return main_monitor_connector;
-            }
+        if (pick_fastest_mode(main_monitor_connector, requested_width,
+                              requested_height, mode_index)) {
+            printf("Choosing kernel video mode #%d\n", *mode_index);
+            return main_monitor_connector;
         }
         printf("Requested kernel video mode is unavailable; using DRM preferred mode\n");
     }
@@ -1043,6 +1059,15 @@ static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
             break;
         }
     }
+
+    /* Panels commonly advertise the same resolution at several refresh rates
+     * and list the slowest first. Keep the resolution the preferred mode picked
+     * but take the fastest timing available for it. */
+    const drmModeModeInfo& chosen = main_monitor_connector->modes[*mode_index];
+    uint32_t fastest = *mode_index;
+    if (pick_fastest_mode(main_monitor_connector, chosen.hdisplay, chosen.vdisplay,
+                          &fastest))
+        *mode_index = fastest;
 
     return main_monitor_connector;
 }
