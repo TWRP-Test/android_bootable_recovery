@@ -261,6 +261,7 @@ finish:
   data->point = pointer_state.point;
   data->state = screen_off_input ? LV_INDEV_STATE_RELEASED : pointer_state.state;
   data->timestamp = lv_tick_get();
+  data->continue_reading = touch_frame_seen;
 }
 
 bool gui2_input_take_activity(void) {
