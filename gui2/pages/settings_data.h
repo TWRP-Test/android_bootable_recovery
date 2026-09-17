@@ -25,6 +25,22 @@ inline constexpr int offset_indices[4] = { 0, 1, 2, 3 };
 inline constexpr int format_indices[2] = { 0, 1 };
 inline constexpr int recording_fps_values[5] = { 15, 24, 30, 45, 60 };
 
+// Seconds per slider step; the last step disables the timeout entirely.
+inline constexpr int screen_timeout_values[8] = { 15, 30, 45, 60, 120, 300, 600, 0 };
+inline constexpr int screen_timeout_count = 8;
+
+inline int screen_timeout_index_for(int seconds) {
+  if (seconds <= 0) return screen_timeout_count - 1;
+  for (int i = 0; i < screen_timeout_count - 1; ++i) {
+    if (seconds <= screen_timeout_values[i]) return i;
+  }
+  return screen_timeout_count - 2;
+}
+
+inline int screen_timeout_at(int index) {
+  return screen_timeout_values[std::clamp(index, 0, screen_timeout_count - 1)];
+}
+
 inline int recording_fps_limit(const gui2_backend::screen_backend* screen) {
   return screen == nullptr ? 60 : std::clamp(screen->max_recording_fps(), 15, 60);
 }

@@ -62,15 +62,13 @@ struct page_state {
   hardware_slider_binding haptic_bindings[3];
   hardware_slider_binding recording_binding;
   bool quick_brightness_dirty = false;
-  bool screen_timeout_enabled = false;
-  int screen_timeout_seconds = 60;
+  int screen_timeout_index = 3;
   int console_font_index = 1;
   bool include_kernel_log = false;
   bool include_logcat = true;
   lv_obj_t* kernel_log_card = nullptr;
   lv_obj_t* logcat_card = nullptr;
   lv_obj_t* export_result_label = nullptr;
-  lv_obj_t* screen_timeout_toggle = nullptr;
   console_page_view console;
   size_t console_consumed = 0;
   uint64_t console_last_poll_ms = 0;
