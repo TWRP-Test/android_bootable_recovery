@@ -45,6 +45,8 @@
 #include "pages/reboot_page.h"
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
+#include "pages/wipe_page.h"
+#include "pages/wipe_progress_page.h"
 #include "pages/timezone_logic.h"
 #include "pages/timezone_page.h"
 #include "shell/bottom_navigation.h"
@@ -76,6 +78,7 @@ static gui2_backend::screen_backend*& screen = runtime.screen;
 static gui2_backend::reboot_backend*& reboot = runtime.reboot;
 static gui2_backend::console_backend*& console = runtime.console;
 static gui2_backend::log_export_backend*& log_export = runtime.log_export;
+static gui2_backend::wipe_backend*& wipe = runtime.wipe;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -164,6 +167,10 @@ static void show_recording_page(page_transition transition);
 static void show_console_page(page_transition transition);
 static void show_export_log_page(page_transition transition);
 static void show_console_settings_page(page_transition transition);
+static void show_wipe_page(page_transition transition);
+static void show_advanced_wipe_page(page_transition transition);
+static void show_format_data_page(page_transition transition);
+static void show_wipe_progress_page(page_transition transition);
 static void create_gui2_shell(lv_obj_t* screen);
 static void close_quick_menu(void);
 static void refresh_recording_ui(void);
@@ -285,6 +292,8 @@ enum class settings_target {
   LEGACY,
   EXPORT_LOG,
   CONSOLE_SETTINGS,
+  ADVANCED_WIPE,
+  FORMAT_DATA,
 };
 
 static constexpr settings_target language_target = settings_target::LANGUAGE;
@@ -295,6 +304,12 @@ static constexpr settings_target recording_target = settings_target::RECORDING;
 static constexpr settings_target legacy_target = settings_target::LEGACY;
 static constexpr settings_target export_log_target = settings_target::EXPORT_LOG;
 static constexpr settings_target console_settings_target = settings_target::CONSOLE_SETTINGS;
+static constexpr settings_target advanced_wipe_target = settings_target::ADVANCED_WIPE;
+static constexpr settings_target format_data_target = settings_target::FORMAT_DATA;
+static constexpr int wipe_target_indices[24] = {
+  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+};
 
 static int navigation_rank(page_kind page) {
   if (page == page_kind::HOME) return 0;
@@ -325,6 +340,12 @@ static void navigate_back(void) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
                 page_transition::POP);
+  } else if (page_router.current() == page_kind::ADVANCED_WIPE ||
+             page_router.current() == page_kind::FORMAT_DATA) {
+    navigate_to(page_kind::WIPE, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::WIPE_PROGRESS) {
+    if (wipe == nullptr || wipe->status().state != gui2_backend::wipe_state::RUNNING)
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::EXPORT_LOG) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
@@ -763,7 +784,15 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   }
   page_state.console = {};
   page_state.console_consumed = 0;
-  page_state.screen_timeout_toggle = nullptr;
+  page_state.wipe_progress = {};
+  page_state.wipe_console_consumed = 0;
+  page_state.format_data_input = nullptr;
+  page_state.format_data_button = nullptr;
+  if (page_state.format_data_keyboard != nullptr) {
+    lv_obj_delete(page_state.format_data_keyboard);
+    page_state.format_data_keyboard = nullptr;
+  }
+  page_state.wipe_confirm.detach();
   page_state.kernel_log_card = nullptr;
   page_state.logcat_card = nullptr;
   page_state.export_result_label = nullptr;
@@ -842,6 +871,10 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::EXPORT_LOG);
   else if (*target == settings_target::CONSOLE_SETTINGS)
     navigate_to(page_kind::CONSOLE_SETTINGS);
+  else if (*target == settings_target::ADVANCED_WIPE)
+    navigate_to(page_kind::ADVANCED_WIPE);
+  else if (*target == settings_target::FORMAT_DATA)
+    navigate_to(page_kind::FORMAT_DATA);
   else
     request_legacy_gui_event_cb(event);
 }
@@ -1115,6 +1148,188 @@ static void show_console_page(page_transition transition) {
   poll_console(true);
 }
 
+static void poll_wipe_console(void) {
+  if (console == nullptr || page_state.wipe_progress.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  const size_t total = console->fetch(page_state.wipe_console_consumed, &lines);
+  page_state.wipe_console_consumed = total;
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.wipe_progress.console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.wipe_progress.console);
+}
+
+static void show_wipe_progress_page(page_transition transition) {
+  create_page_scaffold(page_kind::WIPE_PROGRESS, false, strings().wipe_title,
+                       strings().wiping, 0, transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::wipe_progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  page_state.wipe_progress = gui2_pages::build_wipe_progress_page(options);
+  page_state.wipe_console_consumed = 0;
+  page_state.wipe_last_poll_ms = 0;
+  poll_wipe_console();
+  if (wipe != nullptr)
+    gui2_pages::update_wipe_progress(page_state.wipe_progress, strings(), wipe->status());
+}
+
+static void start_wipe_job(bool started) {
+  if (!started) return;
+  navigate_to(page_kind::WIPE_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void factory_reset_confirmed(void*) {
+  if (wipe == nullptr) return;
+  start_wipe_job(wipe->start_factory_reset());
+}
+
+static void wipe_selection_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (index == nullptr || toggle == nullptr) return;
+  if (*index < 0 || static_cast<size_t>(*index) >= std::size(page_state.wipe_selected)) return;
+
+  page_state.wipe_selected[*index] = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static std::vector<gui2_backend::wipe_target> wipe_targets;
+
+static void advanced_wipe_confirmed(void*) {
+  if (wipe == nullptr) return;
+  std::vector<std::string> selected;
+  for (size_t i = 0; i < wipe_targets.size() && i < std::size(page_state.wipe_selected); ++i) {
+    if (page_state.wipe_selected[i]) selected.push_back(wipe_targets[i].mount_point);
+  }
+  if (selected.empty()) return;
+  start_wipe_job(wipe->start_wipe(selected));
+}
+
+static void format_data_confirmed(void*) {
+  if (wipe == nullptr) return;
+  start_wipe_job(wipe->start_format_data());
+}
+
+static void show_wipe_page(page_transition transition) {
+  const int bottom_reserved = ui.nav_height + gui2_pages::wipe_track_height() +
+                              gui2_pages::wipe_hint_height(ui, strings().factory_reset_detail) +
+                              ui.cards_top_gap * 3;
+  create_page_scaffold(page_kind::WIPE, false, strings().wipe_title, strings().wipe_summary,
+                       bottom_reserved, transition);
+
+  gui2_pages::action_page_options action_options;
+  action_options.content = main_content;
+  action_options.metrics = &ui;
+  action_options.strings = &strings();
+  action_options.definition =
+      &gui2_pages::action_definitions()[static_cast<int>(action_id::WIPE)];
+  lv_obj_t* body = gui2_pages::build_action_page(action_options);
+  if (body == nullptr) return;
+
+  gui2_pages::wipe_page_options options;
+  options.content = body;
+  options.page_layer = page_layer;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.option_event_callback = settings_option_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  options.advanced_target = &advanced_wipe_target;
+  options.format_data_target = &format_data_target;
+  options.has_data_media = wipe != nullptr && wipe->has_data_media();
+  options.confirm = &page_state.wipe_confirm;
+  options.confirm_callback = factory_reset_confirmed;
+  gui2_pages::build_wipe_page(options);
+}
+
+static void show_advanced_wipe_page(page_transition transition) {
+  const int track_height = gui2_pages::wipe_track_height();
+  const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::ADVANCED_WIPE, false, strings().advanced_wipe_title,
+                       strings().advanced_wipe_summary, bottom_reserved, transition);
+
+  wipe_targets = wipe == nullptr ? std::vector<gui2_backend::wipe_target>() : wipe->targets();
+  for (bool& selected : page_state.wipe_selected) selected = false;
+  page_state.wipe_target_count = std::min(wipe_targets.size(), std::size(page_state.wipe_selected));
+
+  gui2_pages::advanced_wipe_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.targets = wipe_targets.data();
+  options.target_count = page_state.wipe_target_count;
+  options.selected = page_state.wipe_selected;
+  options.option_event_callback = wipe_selection_event_cb;
+  options.target_indices = wipe_target_indices;
+  gui2_pages::build_advanced_wipe_page(options);
+
+  const int page_height = ui.height - ui.status_height - ui.nav_height;
+  page_state.wipe_confirm.create(page_layer, ui, ui.outer_margin,
+                                 page_height - track_height - ui.cards_top_gap, ui.content_width,
+                                 track_height, strings().swipe_wipe, advanced_wipe_confirmed,
+                                 nullptr);
+}
+
+static void format_data_input_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t* input = page_state.format_data_input;
+  if (input == nullptr || page_state.format_data_button == nullptr) return;
+
+  const char* text = lv_textarea_get_text(input);
+  const bool ready = text != nullptr && std::string(text) == "yes";
+  lv_obj_set_style_opa(page_state.format_data_button, ready ? LV_OPA_COVER : LV_OPA_40,
+                       LV_PART_MAIN);
+  if (ready)
+    lv_obj_add_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
+  else
+    lv_obj_remove_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
+}
+
+static void format_data_key_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_PRESSED) return;
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::KEYBOARD);
+}
+
+static void format_data_apply_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  lv_obj_t* input = page_state.format_data_input;
+  if (input == nullptr) return;
+  const char* text = lv_textarea_get_text(input);
+  if (text == nullptr || std::string(text) != "yes") return;
+  format_data_confirmed(nullptr);
+}
+
+static void show_format_data_page(page_transition transition) {
+  const int button_height = single_line_card_height();
+  const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::FORMAT_DATA, false, strings().format_data_title,
+                       strings().format_data_summary, bottom_reserved, transition);
+
+  gui2_pages::format_data_page_options options;
+  options.content = main_content;
+  options.page_layer = page_layer;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.input_event_callback = format_data_input_event_cb;
+  options.keyboard_event_callback = format_data_key_event_cb;
+  options.overlay_layer = lv_layer_top();
+  const auto view = gui2_pages::build_format_data_page(options);
+  page_state.format_data_input = view.input;
+  page_state.format_data_keyboard = view.keyboard;
+
+  page_state.format_data_button = gui2_components::create_apply_button(
+      page_layer, ui, format_data_apply_event_cb, strings().format_data_action,
+      press_cancel_guard_cb);
+  if (page_state.format_data_button != nullptr) {
+    lv_obj_set_style_opa(page_state.format_data_button, LV_OPA_40, LV_PART_MAIN);
+    lv_obj_remove_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
+  }
+}
+
 static constexpr int kKernelLogTarget = 0;
 static constexpr int kLogcatTarget = 1;
 
@@ -1231,6 +1446,11 @@ static void show_home_page(page_transition transition) {
 }
 
 static void show_action_page(const action_definition& definition, page_transition transition) {
+  if (definition.id == action_id::WIPE) {
+    show_wipe_page(transition);
+    return;
+  }
+
   const auto& action_text = strings().actions[static_cast<int>(definition.id)];
   create_page_scaffold(page_kind::ACTION, false, action_text.title, action_text.summary, 0,
                        transition);
@@ -1364,6 +1584,18 @@ static void route_page(const gui2_pages::page_request& request) {
     case page_kind::CONSOLE_SETTINGS:
       show_console_settings_page(request.transition);
       return;
+    case page_kind::WIPE:
+      show_wipe_page(request.transition);
+      return;
+    case page_kind::ADVANCED_WIPE:
+      show_advanced_wipe_page(request.transition);
+      return;
+    case page_kind::FORMAT_DATA:
+      show_format_data_page(request.transition);
+      return;
+    case page_kind::WIPE_PROGRESS:
+      show_wipe_progress_page(request.transition);
+      return;
   }
 }
 
@@ -1445,6 +1677,12 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     page_state.console_last_poll_ms = now_ms;
     poll_console(false);
   }
+  if (page_state.wipe_progress.body != nullptr && now_ms - page_state.wipe_last_poll_ms >= 250) {
+    page_state.wipe_last_poll_ms = now_ms;
+    poll_wipe_console();
+    if (wipe != nullptr)
+      gui2_pages::update_wipe_progress(page_state.wipe_progress, strings(), wipe->status());
+  }
 }
 
 static void gui2_loop_key_action(void*, gui2_key_action key_action) {
@@ -1488,6 +1726,7 @@ int gui2_start(const gui2_context* context) {
   reboot = context->reboot;
   console = context->console;
   log_export = context->log_export;
+  wipe = context->wipe;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   switch_to_legacy = false;

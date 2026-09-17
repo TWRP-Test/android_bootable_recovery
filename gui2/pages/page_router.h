@@ -17,6 +17,10 @@ enum class page_id {
   CONSOLE,
   CONSOLE_SETTINGS,
   EXPORT_LOG,
+  WIPE,
+  ADVANCED_WIPE,
+  FORMAT_DATA,
+  WIPE_PROGRESS,
 };
 
 struct page_request {
