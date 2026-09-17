@@ -53,6 +53,7 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
   gui2_core::set_surface_style(view.root, metrics.background);
   lv_obj_set_style_pad_all(view.root, 0, LV_PART_MAIN);
   lv_obj_add_flag(view.root, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(view.root, LV_OBJ_FLAG_PRESS_LOCK);
   if (gesture_callback != nullptr)
     lv_obj_add_event_cb(view.root, gesture_callback, LV_EVENT_ALL, nullptr);
   gui2_core::disable_scrolling(view.root);

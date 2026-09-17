@@ -55,6 +55,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   gui2_core::set_surface_style(knob_, lv_color_hex(0x347FF1));
   lv_obj_set_style_radius(knob_, inner_height / 2, LV_PART_MAIN);
   lv_obj_add_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(knob_, LV_OBJ_FLAG_PRESS_LOCK);
   gui2_core::disable_scrolling(knob_);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSED, this);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSING, this);
@@ -81,14 +82,23 @@ void swipe_slider::set_progress(int progress) {
   lv_obj_set_x(prompt_, inner_margin_ + knob_width_ - prompt_inset_);
 }
 
+void swipe_slider::begin_drag(lv_point_t point) {
+  dragging_ = true;
+  grab_offset_ = 0;
+  if (track_ == nullptr || knob_ == nullptr) return;
+  lv_area_t area;
+  lv_obj_get_coords(track_, &area);
+  grab_offset_ = std::clamp(point.x - area.x1 - lv_obj_get_x(knob_), 0, knob_width_);
+}
+
 void swipe_slider::update_from_point(lv_point_t point) {
   if (track_ == nullptr) return;
   lv_area_t area;
   lv_obj_get_coords(track_, &area);
-  const int local_x = std::clamp(point.x - area.x1, 0, static_cast<int>(lv_area_get_width(&area)));
   const int inner_width = lv_obj_get_width(track_) - inner_margin_ * 2;
   const int travel = std::max(1, inner_width - knob_width_);
-  set_progress((local_x - inner_margin_ - knob_width_ / 2) * 1000 / travel);
+  const int knob_x = point.x - area.x1 - grab_offset_ - inner_margin_;
+  set_progress(knob_x * 1000 / travel);
 }
 
 void swipe_slider::finish_drag(bool cancelled) {
@@ -108,10 +118,9 @@ void swipe_slider::event_callback(lv_event_t* event) {
   if (indev == nullptr) return;
   const lv_event_code_t code = lv_event_get_code(event);
   if (code == LV_EVENT_PRESSED) {
-    slider->dragging_ = true;
     lv_point_t point;
     lv_indev_get_point(indev, &point);
-    slider->update_from_point(point);
+    slider->begin_drag(point);
   } else if (code == LV_EVENT_PRESSING && slider->dragging_) {
     lv_point_t point;
     lv_indev_get_point(indev, &point);
@@ -125,6 +134,7 @@ void swipe_slider::event_callback(lv_event_t* event) {
 
 void swipe_slider::reset() {
   dragging_ = false;
+  grab_offset_ = 0;
   set_progress(0);
 }
 
@@ -139,6 +149,7 @@ void swipe_slider::detach() {
   knob_width_ = 0;
   prompt_inset_ = 0;
   progress_ = 0;
+  grab_offset_ = 0;
   dragging_ = false;
 }
 
