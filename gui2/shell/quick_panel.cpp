@@ -23,6 +23,8 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   const auto& metrics = *options.metrics;
   const int inner_padding = card_inner_padding(metrics);
   const int gap = metrics.card_gap;
+  const int section_gap =
+      std::clamp(metrics.card_gap * 9 / 5, gui2_core::ui_px(40), gui2_core::ui_px(72));
 
   view.dismiss = lv_obj_create(lv_layer_top());
   lv_obj_set_size(view.dismiss, metrics.width, metrics.height);
@@ -30,6 +32,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   gui2_core::set_surface_style(view.dismiss, lv_color_hex(0x000000), LV_OPA_30);
   lv_obj_set_style_pad_all(view.dismiss, 0, LV_PART_MAIN);
   lv_obj_add_flag(view.dismiss, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(view.dismiss, LV_OBJ_FLAG_PRESS_LOCK);
   gui2_core::disable_scrolling(view.dismiss);
   if (options.press_guard_callback != nullptr)
     lv_obj_add_event_cb(view.dismiss, options.press_guard_callback, LV_EVENT_ALL, nullptr);
@@ -46,6 +49,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   lv_obj_set_style_shadow_offset_y(view.menu, gui2_core::ui_px(4), LV_PART_MAIN);
   lv_obj_add_flag(view.menu, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
   lv_obj_add_flag(view.menu, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(view.menu, LV_OBJ_FLAG_PRESS_LOCK);
   gui2_core::disable_scrolling(view.menu);
   if (options.panel_gesture_callback != nullptr) {
     lv_obj_add_event_cb(view.menu, options.panel_gesture_callback, LV_EVENT_PRESSED, nullptr);
@@ -106,7 +110,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
                             options.brightness_user_data);
       }
     }
-    content_top += header_height + slider_gap + slider_height + gap;
+    content_top += header_height + slider_gap + slider_height + section_gap;
   }
 
   const int action_count = std::min<int>(3, options.action_count);
@@ -134,9 +138,10 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
 
   view.feedback = lv_label_create(view.menu);
   const int feedback_height = std::max(gui2_core::ui_px(36), metrics.status_font->line_height * 2);
-  const int feedback_gap =
-      std::clamp(metrics.card_gap / 2, gui2_core::ui_px(8), gui2_core::ui_px(12));
-  view.menu_height = content_top + feedback_gap + feedback_height + inner_padding;
+  const int feedback_gap = section_gap;
+  view.menu_collapsed_height = content_top + inner_padding;
+  view.menu_expanded_height = content_top + feedback_gap + feedback_height + inner_padding;
+  view.menu_height = view.menu_collapsed_height;
   lv_obj_set_size(view.menu, metrics.content_width, view.menu_height);
   lv_obj_set_style_radius(
       view.menu, std::clamp(view.menu_height / 4, gui2_core::ui_px(24), gui2_core::ui_px(40)),
@@ -164,6 +169,24 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   gui2_core::disable_scrolling(view.screenshot_flash);
   lv_obj_add_flag(view.screenshot_flash, LV_OBJ_FLAG_HIDDEN);
   return view;
+}
+
+void set_quick_panel_feedback_visible(quick_panel_view* view, bool visible) {
+  if (view == nullptr || view->menu == nullptr || view->feedback == nullptr) return;
+
+  const int height = visible ? view->menu_expanded_height : view->menu_collapsed_height;
+  if (visible)
+    lv_obj_clear_flag(view->feedback, LV_OBJ_FLAG_HIDDEN);
+  else
+    lv_obj_add_flag(view->feedback, LV_OBJ_FLAG_HIDDEN);
+
+  if (height == view->menu_height) return;
+  view->menu_height = height;
+  view->menu_closed_y = -height;
+  lv_obj_set_height(view->menu, height);
+  lv_obj_set_style_radius(view->menu,
+                          std::clamp(height / 4, gui2_core::ui_px(24), gui2_core::ui_px(40)),
+                          LV_PART_MAIN);
 }
 
 }  // namespace gui2_shell
