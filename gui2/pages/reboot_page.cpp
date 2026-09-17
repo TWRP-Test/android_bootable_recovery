@@ -26,7 +26,7 @@ lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_bottom(body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
-  lv_obj_set_style_pad_row(body, metrics.card_gap, LV_PART_MAIN);
+  lv_obj_set_style_pad_row(body, metrics.card_gap * 3 / 2, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -73,7 +73,7 @@ reboot_page_view build_reboot_page(const reboot_page_options& options) {
 
   const auto& metrics = *options.metrics;
   view.body = create_body(options.content, metrics);
-  const int choice_height = gui2_core::single_line_card_height();
+  const int choice_height = gui2_core::single_line_card_height() * 7 / 6;
   const size_t option_count = std::min(options.option_count, size_t(7));
 
   for (size_t i = 0; i < option_count; ++i) {
