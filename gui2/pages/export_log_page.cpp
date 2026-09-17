@@ -1,7 +1,7 @@
 #include "pages/export_log_page.h"
 
 #include "components/section_label.h"
-#include "components/switch_row.h"
+#include "components/check_row.h"
 #include "core/ui_helpers.h"
 
 namespace gui2_pages {
@@ -28,12 +28,12 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
   lv_obj_add_flag(view.body, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
   gui2_core::disable_scrolling(view.body);
 
-  view.kernel_log_card = gui2_components::create_switch_row(
+  view.kernel_log_card = gui2_components::create_check_row(
       view.body, metrics, strings.include_kernel_log, options.include_kernel_log,
       options.option_event_callback, const_cast<void*>(options.kernel_log_target));
 
   if (options.has_logcat) {
-    view.logcat_card = gui2_components::create_switch_row(
+    view.logcat_card = gui2_components::create_check_row(
         view.body, metrics, strings.include_logcat, options.include_logcat,
         options.option_event_callback, const_cast<void*>(options.logcat_target));
   }
