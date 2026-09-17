@@ -31,7 +31,7 @@ page_scaffold_result page_host::build(const char* title, const char* summary, in
   lv_obj_set_pos(new_page, 0, 0);
   lv_obj_set_size(new_page, metrics_->width,
                   std::max(1, metrics_->height - metrics_->status_height));
-  gui2_core::set_surface_style(new_page, metrics_->background, LV_OPA_TRANSP);
+  gui2_core::set_surface_style(new_page, metrics_->background, LV_OPA_COVER);
   lv_obj_set_style_pad_all(new_page, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(new_page);
 
