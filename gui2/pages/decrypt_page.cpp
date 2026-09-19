@@ -4,6 +4,7 @@
 
 #include "components/apply_button.h"
 #include "components/icon.h"
+#include "components/keyboard_maps.h"
 #include "core/ui_helpers.h"
 #include "gui2_svg_assets.h"
 
@@ -16,6 +17,11 @@ constexpr uint32_t kAccent = 0x347FF1;
 void show_keyboard_cb(lv_event_t* event) {
   auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_user_data(event));
   if (keyboard != nullptr) lv_obj_remove_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+}
+
+void hide_keyboard_cb(lv_event_t* event) {
+  auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (keyboard != nullptr) lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace
@@ -109,6 +115,7 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
         std::min(metrics.height / 3, metrics.width * 2 / 3);
     lv_obj_t* parent = options.overlay_layer != nullptr ? options.overlay_layer : view.body;
     view.keyboard = lv_keyboard_create(parent);
+    gui2_components::install_keyboard_maps(view.keyboard);
     lv_obj_set_size(view.keyboard, metrics.width, keyboard_height);
     lv_keyboard_set_mode(view.keyboard, options.kind == gui2_backend::lock_kind::PIN
                                             ? LV_KEYBOARD_MODE_NUMBER
@@ -122,6 +129,8 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
     lv_obj_set_style_pad_bottom(view.keyboard, gui2_core::ui_px(72), LV_PART_MAIN);
     lv_keyboard_set_textarea(view.keyboard, view.input);
     lv_obj_set_style_text_font(view.keyboard, &lv_font_montserrat_48, LV_PART_ITEMS);
+    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_CANCEL, nullptr);
+    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_READY, nullptr);
     if (options.input_ready_callback != nullptr)
       lv_obj_add_event_cb(view.keyboard, options.input_ready_callback, LV_EVENT_READY, nullptr);
     if (options.keyboard_event_callback != nullptr)

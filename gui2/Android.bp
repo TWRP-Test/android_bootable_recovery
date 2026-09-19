@@ -41,6 +41,7 @@ cc_library_static {
         "components/apply_button.cpp",
         "components/slider_card.cpp",
         "components/check_row.cpp",
+        "components/keyboard_maps.cpp",
         "components/pattern_lock.cpp",
         "components/tab_bar.cpp",
         "components/quick_action_button.cpp",
