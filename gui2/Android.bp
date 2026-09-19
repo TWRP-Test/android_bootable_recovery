@@ -71,7 +71,7 @@ cc_library_static {
         "pages/reboot_page.cpp",
         "pages/settings_page.cpp",
         "pages/wipe_page.cpp",
-        "pages/wipe_progress_page.cpp",
+        "pages/progress_page.cpp",
         "pages/timezone_page.cpp",
         "pages/timezone_logic.cpp",
         "shell/page_scaffold.cpp",

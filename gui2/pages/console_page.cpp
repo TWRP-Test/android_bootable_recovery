@@ -48,7 +48,15 @@ console_page_view build_console_page(const console_page_options& options) {
   gui2_core::set_surface_style(view.body, metrics.card_color);
   lv_obj_set_style_radius(view.body, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.body, 0, LV_PART_MAIN);
-  gui2_core::disable_scrolling(view.body);
+  view.self_scrolling = options.self_scrolling;
+  if (view.self_scrolling) {
+    lv_obj_add_flag(view.body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(view.body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(view.body, LV_SCROLLBAR_MODE_AUTO);
+    view.content = view.body;
+  } else {
+    gui2_core::disable_scrolling(view.body);
+  }
 
   view.empty_label = lv_label_create(view.body);
   lv_label_set_text(view.empty_label, options.empty_text == nullptr ? "" : options.empty_text);
@@ -88,6 +96,8 @@ void append_console_lines(console_page_view* view, const gui2_core::ui_metrics& 
     lv_obj_set_pos(label, view->padding, view->next_y);
     view->next_y += std::max<int32_t>(1, size.y) + view->line_gap;
   }
+
+  if (view->self_scrolling) return;
 
   const int height = std::max(view->minimum_height,
                               view->next_y - view->line_gap + view->padding +
