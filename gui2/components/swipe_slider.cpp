@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "components/icon.h"
+#include "core/ui_event_guard.h"
 #include "core/ui_helpers.h"
 #include "gui2_svg_assets.h"
 
@@ -107,6 +108,7 @@ void swipe_slider::finish_drag(bool cancelled) {
     set_progress(0);
     return;
   }
+  gui2_core::vibrate_action();
   if (callback_ != nullptr) callback_(user_data_);
 }
 

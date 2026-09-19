@@ -62,6 +62,10 @@ bool accept_click(lv_event_t* event) {
   return result;
 }
 
+void vibrate_action() {
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
+}
+
 void clear_click_guard() {
   reset_click_guard();
 }
