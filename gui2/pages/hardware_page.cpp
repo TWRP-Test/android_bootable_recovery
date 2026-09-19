@@ -1,5 +1,8 @@
 #include "pages/hardware_page.h"
 
+#include <algorithm>
+#include <iterator>
+
 #include "components/slider_card.h"
 #include "core/ui_helpers.h"
 
@@ -49,10 +52,11 @@ hardware_page_view build_hardware_page(const hardware_page_options& options) {
 
   for (size_t i = 0; i < options.slider_count; ++i) {
     const auto& spec = options.sliders[i];
-    gui2_components::create_slider_card(
+    lv_obj_t* card = gui2_components::create_slider_card(
         view.body, metrics, spec.label, spec.minimum, spec.maximum, spec.value, spec.visual,
         spec.value_label, options.value_changed_callback, options.pressed_callback,
         spec.user_data);
+    if (i < std::size(view.slider_cards)) view.slider_cards[i] = card;
   }
   return view;
 }

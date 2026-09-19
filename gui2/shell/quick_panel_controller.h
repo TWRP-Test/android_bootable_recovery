@@ -13,6 +13,9 @@ class quick_panel_controller {
                   lv_indev_t* pointer_indev, void (*on_open)());
 
   bool input_active() const;
+  bool is_open() const {
+    return progress_ > 0;
+  }
   bool gesture_tracking() const {
     return gesture_tracking_;
   }
@@ -22,6 +25,7 @@ class quick_panel_controller {
   void stop_tracking() {
     gesture_tracking_ = false;
   }
+  void sync_geometry(const quick_panel_view& view);
   void open();
   void close();
   void begin_drag(lv_event_t* event, bool from_dismiss);

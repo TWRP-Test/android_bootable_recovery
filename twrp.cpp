@@ -29,10 +29,16 @@
 #include "recovery_utils/battery_utils.h"
 #include "gui/twmsg.h"
 #include "gui2/gui2.h"
+#include "gui2/backend/twrp_console_backend.h"
+#include "gui2/backend/twrp_backup_backend.h"
+#include "gui2/backend/twrp_decrypt_backend.h"
+#include "gui2/backend/twrp_mount_backend.h"
 #include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/twrp_log_export_backend.h"
 #include "gui2/backend/twrp_reboot_backend.h"
 #include "gui2/backend/twrp_screen_backend.h"
 #include "gui2/backend/twrp_settings_store.h"
+#include "gui2/backend/twrp_wipe_backend.h"
 
 #include "cutils/properties.h"
 
@@ -170,19 +176,27 @@ static void Print_Prop(const char *key, const char *name, void *cookie) {
 	printf("%s=%s\n", key, name);
 }
 
+// Only reached when GUI2 could not take over: it owns the unlock flow and shows
+// its own page, so running this during startup would hide it behind the legacy
+// one.
+static void Legacy_Decrypt_Page(void) {
+	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0) return;
+	if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) == 0) return;
+
+	LOGINFO("Is encrypted, do decrypt page first\n");
+	if (DataManager::GetIntValue(TW_IS_FBE))
+		DataManager::SetValue("tw_crypto_user_id", "0");
+	if (gui_startPage("decrypt", 1, 1) != 0) {
+		LOGERR("Failed to start decrypt GUI page.\n");
+	}
+}
+
 static void Decrypt_Page(bool SkipDecryption, bool datamedia) {
 	// Offer to decrypt if the device is encrypted
 	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0) {
 		if (SkipDecryption) {
 			LOGINFO("Skipping decryption\n");
 			PartitionManager.Update_System_Details(true);
-		} else if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) != 0) {
-			LOGINFO("Is encrypted, do decrypt page first\n");
-			if (DataManager::GetIntValue(TW_IS_FBE))
-				DataManager::SetValue("tw_crypto_user_id", "0");
-			if (gui_startPage("decrypt", 1, 1) != 0) {
-				LOGERR("Failed to start decrypt GUI page.\n");
-			}
 		}
 	} else if (datamedia) {
 		PartitionManager.Update_System_Details(true);
@@ -516,11 +530,23 @@ int main(int argc, char **argv) {
 	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
 	gui2_backend::twrp_screen_backend screen_backend(&settings_store);
 	gui2_backend::twrp_reboot_backend reboot_backend;
+	gui2_backend::twrp_console_backend console_backend;
+	gui2_backend::twrp_log_export_backend log_export_backend(&settings_store);
+	gui2_backend::twrp_wipe_backend wipe_backend(&settings_store);
+	gui2_backend::twrp_decrypt_backend decrypt_backend;
+	gui2_backend::twrp_backup_backend backup_backend;
+	gui2_backend::twrp_mount_backend mount_backend;
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
 	gui2_context_value.screen = &screen_backend;
 	gui2_context_value.reboot = &reboot_backend;
+	gui2_context_value.console = &console_backend;
+	gui2_context_value.log_export = &log_export_backend;
+	gui2_context_value.wipe = &wipe_backend;
+	gui2_context_value.decrypt = &decrypt_backend;
+	gui2_context_value.backup = &backup_backend;
+	gui2_context_value.mount = &mount_backend;
 	gui2_context_value.display_initialized = true;
 	const int gui2_result = gui2_start(&gui2_context_value);
 
@@ -532,6 +558,7 @@ int main(int argc, char **argv) {
 		gui2_result == GUI2_EXIT_INITIALIZATION_FAILED) {
 		if (!initializeLegacyGui(gui2_result == GUI2_EXIT_TO_LEGACY))
 			LOGERR("Unable to initialize the legacy GUI fallback.\n");
+		Legacy_Decrypt_Page();
 		startLegacyBatteryMonitor();
 		gui_start();
 	}

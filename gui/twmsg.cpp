@@ -74,6 +74,16 @@ Message::operator std::string() const
 /*
 Resource manager lookup
 */
+namespace msg
+{
+	static Translator gTranslator = NULL;
+
+	void SetTranslator(Translator translator)
+	{
+		gTranslator = translator;
+	}
+}
+
 class ResourceLookup : public StringLookup
 {
 public:
@@ -88,6 +98,12 @@ public:
 		} else {
 			resname = name.substr(0, pos);
 			default_value = name.substr(pos + 1);
+		}
+
+		if (msg::gTranslator) {
+			std::string translated = msg::gTranslator(resname);
+			if (!translated.empty())
+				return translated;
 		}
 #ifndef BUILD_TWRPTAR_MAIN
 		const ResourceManager* res = PageManager::GetResources();

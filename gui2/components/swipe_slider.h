@@ -17,12 +17,16 @@ class swipe_slider {
                    int height, const char* text, swipe_complete_callback callback, void* user_data);
   void reset();
   void detach();
+  // A disabled track keeps its place but refuses the gesture outright, rather
+  // than letting it run and rejecting the result afterwards.
+  void set_enabled(bool enabled);
   int progress() const {
     return progress_;
   }
 
  private:
   static void event_callback(lv_event_t* event);
+  void begin_drag(lv_point_t point);
   void update_from_point(lv_point_t point);
   void finish_drag(bool cancelled);
   void set_progress(int progress);
@@ -35,6 +39,7 @@ class swipe_slider {
   int knob_width_ = 0;
   int prompt_inset_ = 0;
   int progress_ = 0;
+  int grab_offset_ = 0;
   bool dragging_ = false;
   swipe_complete_callback callback_ = nullptr;
   void* user_data_ = nullptr;

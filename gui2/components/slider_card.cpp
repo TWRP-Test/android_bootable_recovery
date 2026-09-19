@@ -43,18 +43,21 @@ lv_obj_t* create_slider_card(lv_obj_t* parent, const gui2_core::ui_metrics& metr
   lv_obj_add_flag(card, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
   gui2_core::disable_scrolling(card);
 
-  lv_obj_t* title_label = lv_label_create(card);
-  lv_label_set_text(title_label, label);
-  lv_label_set_long_mode(title_label, LV_LABEL_LONG_CLIP);
-  lv_obj_set_width(title_label, content_width * 65 / 100);
-  lv_obj_set_pos(title_label, side_padding, content_top);
-  lv_obj_set_style_text_color(title_label, metrics.primary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(title_label, metrics.text_font, LV_PART_MAIN);
+  if (label != nullptr && label[0] != '\0') {
+    lv_obj_t* title_label = lv_label_create(card);
+    lv_label_set_text(title_label, label);
+    lv_label_set_long_mode(title_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(title_label, content_width * 65 / 100);
+    lv_obj_set_pos(title_label, side_padding, content_top);
+    lv_obj_set_style_text_color(title_label, metrics.primary_text, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title_label, metrics.text_font, LV_PART_MAIN);
+  }
 
+  const int value_width = content_width * 35 / 100;
   *value_label = lv_label_create(card);
-  lv_obj_set_width(*value_label, content_width * 35 / 100);
+  lv_obj_set_width(*value_label, value_width);
   lv_obj_set_style_text_align(*value_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-  lv_obj_set_pos(*value_label, card_width - side_padding - content_width * 35 / 100, content_top);
+  lv_obj_set_pos(*value_label, card_width - side_padding - value_width, content_top);
   lv_obj_set_style_text_color(*value_label, metrics.secondary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(*value_label, metrics.text_font, LV_PART_MAIN);
 

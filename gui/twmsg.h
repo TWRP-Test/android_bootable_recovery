@@ -39,6 +39,12 @@ public:
 
 namespace msg
 {
+	// Lets a UI resolve a resource key itself. Returning an empty string means
+	// "no opinion" and the normal resource lookup runs instead. GUI2 installs
+	// one because it does not load the legacy theme's resources.
+	typedef std::string (*Translator)(const std::string& name);
+	void SetTranslator(Translator translator);
+
 	// These get translated to colors in the GUI console
 	enum Kind
 	{
