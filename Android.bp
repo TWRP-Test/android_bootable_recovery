@@ -466,6 +466,9 @@ cc_binary {
         "gui2/backend/twrp_reboot_backend.cpp",
         "gui2/backend/twrp_screen_backend.cpp",
         "gui2/backend/twrp_settings_store.cpp",
+        "gui2/backend/twrp_backup_backend.cpp",
+        "gui2/backend/twrp_decrypt_backend.cpp",
+        "gui2/backend/twrp_mount_backend.cpp",
         "gui2/backend/twrp_wipe_backend.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [

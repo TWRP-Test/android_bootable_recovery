@@ -82,8 +82,40 @@ void build_home_page(const home_page_options& options) {
   const int card_width =
       (metrics.content_width - metrics.card_gap * (columns - 1)) / columns;
 
+  int cards_top = 0;
+  if (options.notice_text != nullptr) {
+    const int notice_pad = gui2_core::card_inner_padding();
+    lv_point_t size;
+    lv_text_get_size(&size, options.notice_text, metrics.status_font, 0, 0,
+                     std::max(1, metrics.content_width - notice_pad * 2), LV_TEXT_FLAG_NONE);
+    const int notice_height = std::max<int32_t>(1, size.y) + notice_pad * 2;
+
+    lv_obj_t* notice = lv_obj_create(options.content);
+    lv_obj_set_size(notice, metrics.content_width, notice_height);
+    lv_obj_set_pos(notice, metrics.outer_margin, 0);
+    gui2_core::set_surface_style(notice, lv_color_hex(0x2A1010));
+    lv_obj_set_style_radius(notice, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(notice, notice_pad, LV_PART_MAIN);
+    lv_obj_set_style_border_width(notice, 0, LV_PART_MAIN);
+    lv_obj_add_flag(notice, LV_OBJ_FLAG_CLICKABLE);
+    gui2_core::disable_scrolling(notice);
+    if (options.press_guard_callback != nullptr)
+      lv_obj_add_event_cb(notice, options.press_guard_callback, LV_EVENT_ALL, nullptr);
+    if (options.notice_event_callback != nullptr)
+      lv_obj_add_event_cb(notice, options.notice_event_callback, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* label = lv_label_create(notice);
+    lv_label_set_text(label, options.notice_text);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(label, std::max(1, metrics.content_width - notice_pad * 2));
+    lv_obj_set_style_text_color(label, lv_color_hex(0xF0443E), LV_PART_MAIN);
+    lv_obj_set_style_text_font(label, metrics.status_font, LV_PART_MAIN);
+
+    cards_top = notice_height + metrics.card_gap;
+  }
+
   lv_obj_t* cards = lv_obj_create(options.content);
-  lv_obj_set_pos(cards, metrics.outer_margin, 0);
+  lv_obj_set_pos(cards, metrics.outer_margin, cards_top);
   lv_obj_set_width(cards, metrics.content_width);
   lv_obj_set_height(cards, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(cards, metrics.background, LV_OPA_TRANSP);

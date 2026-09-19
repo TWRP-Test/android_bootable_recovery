@@ -22,6 +22,9 @@ struct runtime_state {
   gui2_backend::console_backend* console = nullptr;
   gui2_backend::log_export_backend* log_export = nullptr;
   gui2_backend::wipe_backend* wipe = nullptr;
+  gui2_backend::decrypt_backend* decrypt = nullptr;
+  gui2_backend::backup_backend* backup = nullptr;
+  gui2_backend::mount_backend* mount = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };

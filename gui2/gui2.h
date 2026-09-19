@@ -2,6 +2,9 @@
 #define GUI2_H
 
 #include "backend/console_backend.h"
+#include "backend/backup_backend.h"
+#include "backend/decrypt_backend.h"
+#include "backend/mount_backend.h"
 #include "backend/hardware_settings.h"
 #include "backend/log_export_backend.h"
 #include "backend/wipe_backend.h"
@@ -22,6 +25,9 @@ struct gui2_context {
   gui2_backend::console_backend* console = nullptr;
   gui2_backend::log_export_backend* log_export = nullptr;
   gui2_backend::wipe_backend* wipe = nullptr;
+  gui2_backend::decrypt_backend* decrypt = nullptr;
+  gui2_backend::backup_backend* backup = nullptr;
+  gui2_backend::mount_backend* mount = nullptr;
   // Reuse an already initialized minui display when possible.
   bool display_initialized = false;
 };
