@@ -11,7 +11,7 @@
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "pages/console_page.h"
-#include "pages/wipe_progress_page.h"
+#include "pages/progress_page.h"
 #include "pages/page_router.h"
 #include "pages/reboot_page.h"
 
@@ -71,7 +71,7 @@ struct page_state {
   lv_obj_t* logcat_card = nullptr;
   lv_obj_t* export_result_label = nullptr;
   console_page_view console;
-  wipe_progress_page_view wipe_progress;
+  progress_page_view wipe_progress;
   lv_obj_t* format_data_input = nullptr;
   lv_obj_t* format_data_button = nullptr;
   lv_obj_t* format_data_keyboard = nullptr;
