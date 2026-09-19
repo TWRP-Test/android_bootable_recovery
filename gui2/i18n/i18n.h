@@ -56,7 +56,6 @@ struct language_pack {
   const char* screenshot_saved;
   const char* screenshot_failed;
   const char* screen_off;
-  const char* screen_off_failed;
   const char* screen_on;
   const char* swipe_to_unlock;
   const char* start_recording;
@@ -104,14 +103,12 @@ struct language_pack {
   const char* swipe_factory_reset;
   const char* advanced_wipe_title;
   const char* advanced_wipe_summary;
-  const char* select_partitions;
   const char* dalvik_cache;
   const char* swipe_wipe;
   const char* format_data_title;
   const char* format_data_summary;
   const char* format_data_warning;
   const char* format_data_prompt;
-  const char* format_data_action;
   const char* swipe_format_data;
   const char* wiping;
   const char* wipe_complete;
