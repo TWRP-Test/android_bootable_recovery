@@ -30,6 +30,8 @@
 #include "gui2_input.h"
 #include "gui2_svg_assets.h"
 #include "gui2_svg_cache.h"
+#include "gui/twmsg.h"
+#include "i18n/console_strings.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "pages/action_definitions.h"
@@ -144,6 +146,14 @@ static gui2_pages::page_router page_router(route_page);
 
 static const language_pack& strings(void) {
   return gui2_i18n::get_language_pack(current_language);
+}
+
+// Installed into the legacy message catalogue so console output follows the UI
+// language. Loading the legacy language XML instead walks into its font
+// overrides, which no longer have a font stack to override.
+static std::string console_translator(const std::string& name) {
+  const char* text = gui2_i18n::console_string_for(current_language, name);
+  return text == nullptr ? std::string() : std::string(text);
 }
 
 using gui2_components::create_svg_image;
@@ -1645,6 +1655,7 @@ static void shutdown_gui2(bool keep_display = false) {
   pointer_indev = nullptr;
   gui2_core::configure_click_guard(nullptr, nullptr);
   status_view = {};
+  msg::SetTranslator(nullptr);
   page_layer = nullptr;
   main_content = nullptr;
   mouse_cursor = nullptr;
@@ -1729,6 +1740,7 @@ int gui2_start(const gui2_context* context) {
   wipe = context->wipe;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
+  msg::SetTranslator(console_translator);
   switch_to_legacy = false;
   reboot_requested = false;
   screen_actions.reset();
