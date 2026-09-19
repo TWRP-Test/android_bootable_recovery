@@ -6,6 +6,7 @@
 #include "components/setting_card.h"
 #include "components/check_row.h"
 #include "components/icon.h"
+#include "components/keyboard_maps.h"
 #include "gui2_svg_assets.h"
 #include "core/ui_helpers.h"
 
@@ -184,6 +185,7 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   const int keyboard_height = format_data_keyboard_height(metrics);
   lv_obj_t* keyboard =
       lv_keyboard_create(options.overlay_layer != nullptr ? options.overlay_layer : view.body);
+  gui2_components::install_keyboard_maps(keyboard);
   lv_obj_set_size(keyboard, metrics.width, keyboard_height);
   if (options.overlay_layer != nullptr) {
     lv_obj_set_align(keyboard, LV_ALIGN_TOP_LEFT);
