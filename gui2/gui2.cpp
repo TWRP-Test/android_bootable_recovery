@@ -48,7 +48,7 @@
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
 #include "pages/wipe_page.h"
-#include "pages/wipe_progress_page.h"
+#include "pages/progress_page.h"
 #include "pages/timezone_logic.h"
 #include "pages/timezone_page.h"
 #include "shell/bottom_navigation.h"
@@ -102,6 +102,7 @@ static uint32_t lv_tick_ms(void) {
 static lv_indev_t* pointer_indev;
 static lv_obj_t* main_content;
 static lv_obj_t* page_layer;
+static lv_obj_t* page_summary;
 static gui2_shell::page_host page_host;
 static gui2_pages::page_state page_state;
 static gui2_shell::status_bar_view status_view;
@@ -181,6 +182,7 @@ static void show_wipe_page(page_transition transition);
 static void show_advanced_wipe_page(page_transition transition);
 static void show_format_data_page(page_transition transition);
 static void show_wipe_progress_page(page_transition transition);
+static void refresh_wipe_progress(void);
 static void create_gui2_shell(lv_obj_t* screen);
 static void close_quick_menu(void);
 static void refresh_recording_ui(void);
@@ -808,7 +810,9 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.export_result_label = nullptr;
   home_page_active = is_home;
   home_navigation_active = true;
-  main_content = page_host.build(title, summary, bottom_reserved, transition).content;
+  const auto scaffold = page_host.build(title, summary, bottom_reserved, transition);
+  main_content = scaffold.content;
+  page_summary = scaffold.summary;
   page_layer = page_host.current_page();
 }
 
@@ -1174,17 +1178,44 @@ static void show_wipe_progress_page(page_transition transition) {
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
 
-  gui2_pages::wipe_progress_page_options options;
+  gui2_pages::progress_page_options options;
   options.content = main_content;
   options.metrics = &ui;
   options.strings = &strings();
   options.console_font = runtime_console_fonts[page_state.console_font_index];
-  page_state.wipe_progress = gui2_pages::build_wipe_progress_page(options);
+  options.initial_text = strings().wiping;
+  options.subtitle = page_summary;
+  page_state.wipe_progress = gui2_pages::build_progress_page(options);
   page_state.wipe_console_consumed = 0;
   page_state.wipe_last_poll_ms = 0;
   poll_wipe_console();
-  if (wipe != nullptr)
-    gui2_pages::update_wipe_progress(page_state.wipe_progress, strings(), wipe->status());
+  refresh_wipe_progress();
+}
+
+static void refresh_wipe_progress(void) {
+  if (wipe == nullptr) return;
+  const auto status = wipe->status();
+
+  gui2_pages::operation_status progress;
+  progress.done = status.done;
+  progress.total = status.total;
+  switch (status.state) {
+    case gui2_backend::wipe_state::DONE:
+      progress.state = gui2_pages::operation_state::DONE;
+      break;
+    case gui2_backend::wipe_state::FAILED:
+      progress.state = gui2_pages::operation_state::FAILED;
+      break;
+    default:
+      progress.state = gui2_pages::operation_state::RUNNING;
+      break;
+  }
+
+  gui2_pages::operation_labels labels;
+  labels.running = strings().wiping;
+  labels.done = strings().wipe_complete;
+  labels.failed = strings().wipe_failed;
+  gui2_pages::update_progress(&page_state.wipe_progress, labels, progress);
 }
 
 static void start_wipe_job(bool started) {
@@ -1684,15 +1715,17 @@ static bool gui2_loop_should_exit(void*) {
 static void gui2_loop_tick(void*, uint64_t now_ms) {
   advance_wheel_scroll(now_ms);
   screen_feedback.update(now_ms);
-  if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 250) {
+  if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 100) {
     page_state.console_last_poll_ms = now_ms;
     poll_console(false);
   }
-  if (page_state.wipe_progress.body != nullptr && now_ms - page_state.wipe_last_poll_ms >= 250) {
+  if (page_state.wipe_progress.body != nullptr && now_ms - page_state.wipe_last_poll_ms >= 100) {
     page_state.wipe_last_poll_ms = now_ms;
     poll_wipe_console();
     if (wipe != nullptr)
-      gui2_pages::update_wipe_progress(page_state.wipe_progress, strings(), wipe->status());
+    refresh_wipe_progress();
+    poll_decrypt_console();
+    poll_backup_console();
   }
 }
 

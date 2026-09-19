@@ -15,6 +15,9 @@ struct console_page_options {
   const gui2_core::ui_metrics* metrics = nullptr;
   const char* empty_text = nullptr;
   const lv_font_t* font = nullptr;
+  // Embedded in a page that scrolls something else: the box has to own its own
+  // viewport and keep a fixed height instead of growing with the output.
+  bool self_scrolling = false;
 };
 
 struct console_page_view {
@@ -26,6 +29,7 @@ struct console_page_view {
   int line_gap = 0;
   int padding = 0;
   int minimum_height = 0;
+  bool self_scrolling = false;
 };
 
 console_page_view build_console_page(const console_page_options& options);
