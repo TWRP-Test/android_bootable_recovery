@@ -112,6 +112,7 @@ struct language_pack {
   const char* format_data_warning;
   const char* format_data_prompt;
   const char* format_data_action;
+  const char* swipe_format_data;
   const char* wiping;
   const char* wipe_complete;
   const char* wipe_failed;

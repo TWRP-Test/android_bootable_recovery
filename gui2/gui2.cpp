@@ -799,7 +799,8 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.wipe_progress = {};
   page_state.wipe_console_consumed = 0;
   page_state.format_data_input = nullptr;
-  page_state.format_data_button = nullptr;
+  page_state.format_data_track = nullptr;
+  page_state.format_data_confirm.detach();
   if (page_state.format_data_keyboard != nullptr) {
     lv_obj_delete(page_state.format_data_keyboard);
     page_state.format_data_keyboard = nullptr;
@@ -1315,19 +1316,19 @@ static void show_advanced_wipe_page(page_transition transition) {
                                  nullptr);
 }
 
+static bool format_data_ready(void) {
+  lv_obj_t* input = page_state.format_data_input;
+  if (input == nullptr) return false;
+  const char* text = lv_textarea_get_text(input);
+  return text != nullptr && std::string(text) == "yes";
+}
+
 static void format_data_input_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
-  lv_obj_t* input = page_state.format_data_input;
-  if (input == nullptr || page_state.format_data_button == nullptr) return;
+  lv_obj_t* track = page_state.format_data_track;
+  if (track == nullptr) return;
 
-  const char* text = lv_textarea_get_text(input);
-  const bool ready = text != nullptr && std::string(text) == "yes";
-  lv_obj_set_style_opa(page_state.format_data_button, ready ? LV_OPA_COVER : LV_OPA_40,
-                       LV_PART_MAIN);
-  if (ready)
-    lv_obj_add_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
-  else
-    lv_obj_remove_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
+  page_state.format_data_confirm.set_enabled(format_data_ready());
 }
 
 static void format_data_key_event_cb(lv_event_t* event) {
@@ -1338,6 +1339,14 @@ static void format_data_key_event_cb(lv_event_t* event) {
 static void format_data_apply_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   lv_obj_t* input = page_state.format_data_input;
+static void format_data_slide_confirmed(void*) {
+  if (!format_data_ready()) {
+    page_state.format_data_confirm.reset();
+    return;
+  }
+  format_data_confirmed(nullptr);
+}
+
   if (input == nullptr) return;
   const char* text = lv_textarea_get_text(input);
   if (text == nullptr || std::string(text) != "yes") return;
@@ -1358,17 +1367,13 @@ static void show_format_data_page(page_transition transition) {
   options.input_event_callback = format_data_input_event_cb;
   options.keyboard_event_callback = format_data_key_event_cb;
   options.overlay_layer = lv_layer_top();
+  options.confirm = &page_state.format_data_confirm;
+  options.confirm_callback = format_data_slide_confirmed;
   const auto view = gui2_pages::build_format_data_page(options);
   page_state.format_data_input = view.input;
   page_state.format_data_keyboard = view.keyboard;
-
-  page_state.format_data_button = gui2_components::create_apply_button(
-      page_layer, ui, format_data_apply_event_cb, strings().format_data_action,
-      press_cancel_guard_cb);
-  if (page_state.format_data_button != nullptr) {
-    lv_obj_set_style_opa(page_state.format_data_button, LV_OPA_40, LV_PART_MAIN);
-    lv_obj_remove_flag(page_state.format_data_button, LV_OBJ_FLAG_CLICKABLE);
-  }
+  page_state.format_data_track = view.slider_track;
+  page_state.format_data_confirm.set_enabled(false);
 }
 
 static constexpr int kKernelLogTarget = 0;

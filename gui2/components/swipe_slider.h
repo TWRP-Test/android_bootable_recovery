@@ -17,6 +17,9 @@ class swipe_slider {
                    int height, const char* text, swipe_complete_callback callback, void* user_data);
   void reset();
   void detach();
+  // A disabled track keeps its place but refuses the gesture outright, rather
+  // than letting it run and rejecting the result afterwards.
+  void set_enabled(bool enabled);
   int progress() const {
     return progress_;
   }
