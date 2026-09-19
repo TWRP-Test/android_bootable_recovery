@@ -21,6 +21,11 @@ enum class page_id {
   ADVANCED_WIPE,
   FORMAT_DATA,
   WIPE_PROGRESS,
+  DECRYPT,
+  DECRYPT_PROGRESS,
+  BACKUP,
+  BACKUP_PROGRESS,
+  MOUNT,
 };
 
 struct page_request {

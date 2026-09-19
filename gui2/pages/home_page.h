@@ -18,6 +18,8 @@ struct home_page_options {
   size_t action_count = 0;
   lv_event_cb_t action_event_callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
+  const char* notice_text = nullptr;
+  lv_event_cb_t notice_event_callback = nullptr;
 };
 
 void build_home_page(const home_page_options& options);
