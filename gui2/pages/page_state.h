@@ -73,7 +73,8 @@ struct page_state {
   console_page_view console;
   progress_page_view wipe_progress;
   lv_obj_t* format_data_input = nullptr;
-  lv_obj_t* format_data_button = nullptr;
+  lv_obj_t* format_data_track = nullptr;
+  gui2_components::swipe_slider format_data_confirm;
   lv_obj_t* format_data_keyboard = nullptr;
   size_t wipe_console_consumed = 0;
   uint64_t wipe_last_poll_ms = 0;

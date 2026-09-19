@@ -99,6 +99,7 @@ extern const language_pack kTraditionalChinese = {
   "格式化 Data 會抹掉應用程式、備份、相片、影片和媒體檔案，並移除內部儲存空間的加密。此操作無法復原。",
   "鍵入 yes 以繼續。",
   "格式化",
+  "滑動以格式化",
   "正在清除…",
   "清除完成",
   "清除失敗",

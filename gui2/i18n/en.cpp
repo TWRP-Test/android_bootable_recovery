@@ -99,6 +99,7 @@ extern const language_pack kEnglish = {
   "Formatting Data erases apps, backups, pictures, videos and media, and removes encryption from internal storage. This cannot be undone.",
   "Type yes to continue.",
   "Format",
+  "Swipe to Format",
   "Wiping...",
   "Wipe complete",
   "Wipe failed",
