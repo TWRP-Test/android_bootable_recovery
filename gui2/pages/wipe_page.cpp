@@ -5,6 +5,8 @@
 #include "components/section_label.h"
 #include "components/setting_card.h"
 #include "components/check_row.h"
+#include "components/icon.h"
+#include "gui2_svg_assets.h"
 #include "core/ui_helpers.h"
 
 namespace gui2_pages {
@@ -121,13 +123,44 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   const auto& metrics = *options.metrics;
   const auto& strings = *options.strings;
   view.body = create_body(options.content, metrics);
+  lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
 
-  lv_obj_t* warning = gui2_components::create_section_label(view.body, metrics,
-                                                            strings.format_data_warning);
+  const int warning_pad = gui2_core::card_inner_padding();
+  lv_obj_t* warning_card = lv_obj_create(view.body);
+  lv_obj_set_width(warning_card, metrics.content_width);
+  lv_obj_set_height(warning_card, LV_SIZE_CONTENT);
+  gui2_core::set_surface_style(warning_card, lv_color_hex(0x2A1010));
+  lv_obj_set_style_radius(warning_card, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(warning_card, warning_pad, LV_PART_MAIN);
+  lv_obj_set_style_border_width(warning_card, 0, LV_PART_MAIN);
+  gui2_core::disable_scrolling(warning_card);
+
+  lv_obj_t* warning = lv_label_create(warning_card);
+  lv_label_set_text(warning, strings.format_data_warning);
   lv_label_set_long_mode(warning, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(warning, std::max(1, metrics.content_width - warning_pad * 2));
   lv_obj_set_style_text_color(warning, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  lv_obj_set_style_text_font(warning, metrics.status_font, LV_PART_MAIN);
 
-  gui2_components::create_section_label(view.body, metrics, strings.format_data_prompt);
+  const int icon_box = std::clamp(metrics.content_width / 2, gui2_core::ui_px(220),
+                                  gui2_core::ui_px(340));
+  lv_obj_t* icon_holder = lv_obj_create(view.body);
+  lv_obj_set_size(icon_holder, icon_box, icon_box);
+  gui2_core::set_surface_style(icon_holder, metrics.background, LV_OPA_TRANSP);
+  lv_obj_set_style_pad_all(icon_holder, 0, LV_PART_MAIN);
+  // Keeps the triangle clear of the warning above and the prompt below.
+  lv_obj_set_style_margin_top(icon_holder, metrics.card_gap * 2, LV_PART_MAIN);
+  lv_obj_set_style_margin_bottom(icon_holder, metrics.card_gap * 2, LV_PART_MAIN);
+  gui2_core::disable_scrolling(icon_holder);
+
+  lv_obj_t* icon = gui2_components::create_svg_image(icon_holder, &kGui2IconWarning, icon_box,
+                                                     icon_box);
+  lv_obj_center(icon);
+
+  lv_obj_t* prompt =
+      gui2_components::create_section_label(view.body, metrics, strings.format_data_prompt);
+  lv_obj_set_style_text_align(prompt, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
   const int input_height = gui2_core::single_line_card_height() * 11 / 10;
   const int input_text_pad =
@@ -138,12 +171,13 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   lv_obj_set_style_pad_top(view.input, input_text_pad, LV_PART_MAIN);
   lv_obj_set_style_pad_bottom(view.input, input_text_pad, LV_PART_MAIN);
   lv_textarea_set_max_length(view.input, 8);
-  lv_textarea_set_placeholder_text(view.input, "yes");
+  lv_obj_set_scrollbar_mode(view.input, LV_SCROLLBAR_MODE_OFF);
   gui2_core::set_surface_style(view.input, metrics.card_color);
   lv_obj_set_style_radius(view.input, input_height / 4, LV_PART_MAIN);
   lv_obj_set_style_border_width(view.input, 0, LV_PART_MAIN);
   lv_obj_set_style_text_color(view.input, metrics.primary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(view.input, metrics.text_font, LV_PART_MAIN);
+  lv_obj_set_style_text_align(view.input, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   if (options.input_event_callback != nullptr)
     lv_obj_add_event_cb(view.input, options.input_event_callback, LV_EVENT_VALUE_CHANGED, nullptr);
 
@@ -167,6 +201,15 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   lv_keyboard_set_textarea(keyboard, view.input);
   lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_48, LV_PART_ITEMS);
   view.keyboard = keyboard;
+
+  if (options.confirm != nullptr && options.page_layer != nullptr) {
+    const int track_height = wipe_track_height();
+    const int page_height = metrics.height - metrics.status_height - metrics.nav_height;
+    view.slider_track = options.confirm->create(
+        options.page_layer, metrics, metrics.outer_margin,
+        page_height - track_height - metrics.cards_top_gap, metrics.content_width, track_height,
+        strings.swipe_format_data, options.confirm_callback, options.confirm_user_data);
+  }
   return view;
 }
 

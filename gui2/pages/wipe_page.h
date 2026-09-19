@@ -53,12 +53,16 @@ struct format_data_page_options {
   const gui2_i18n::language_pack* strings = nullptr;
   lv_event_cb_t input_event_callback = nullptr;
   lv_event_cb_t keyboard_event_callback = nullptr;
+  gui2_components::swipe_slider* confirm = nullptr;
+  void (*confirm_callback)(void*) = nullptr;
+  void* confirm_user_data = nullptr;
 };
 
 struct format_data_page_view {
   lv_obj_t* body = nullptr;
   lv_obj_t* input = nullptr;
   lv_obj_t* keyboard = nullptr;
+  lv_obj_t* slider_track = nullptr;
 };
 
 format_data_page_view build_format_data_page(const format_data_page_options& options);

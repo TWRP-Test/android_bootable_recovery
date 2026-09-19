@@ -99,6 +99,7 @@ extern const language_pack kSimplifiedChinese = {
   "格式化 Data 会抹掉应用、备份、照片、视频和媒体文件，并移除内部存储的加密。此操作不可撤销。",
   "键入 yes 以继续。",
   "格式化",
+  "滑动以格式化",
   "正在清除…",
   "清除完成",
   "清除失败",

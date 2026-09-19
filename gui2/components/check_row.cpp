@@ -15,7 +15,8 @@ lv_obj_t* create_check_row(lv_obj_t* parent, const gui2_core::ui_metrics& metric
   const int header_height = std::max(1, metrics.text_font->line_height);
   const int box_size =
       std::clamp(header_height * 3 / 2, gui2_core::ui_px(64), gui2_core::ui_px(88));
-  const int row_height = std::max(metrics.card_height, box_size + side_padding);
+  const int row_height = std::max(gui2_core::single_line_card_height() * 7 / 6,
+                                 box_size + side_padding);
   const int card_width = metrics.content_width;
   const int mark_inset = gui2_core::ui_px(12);
   const lv_font_t* mark_font =

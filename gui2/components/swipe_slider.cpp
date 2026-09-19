@@ -138,6 +138,19 @@ void swipe_slider::reset() {
   set_progress(0);
 }
 
+void swipe_slider::set_enabled(bool enabled) {
+  if (track_ == nullptr) return;
+  lv_obj_set_style_opa(track_, enabled ? LV_OPA_COVER : LV_OPA_40, LV_PART_MAIN);
+  if (enabled) {
+    lv_obj_add_flag(track_, LV_OBJ_FLAG_CLICKABLE);
+    if (knob_ != nullptr) lv_obj_add_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+  } else {
+    dragging_ = false;
+    lv_obj_remove_flag(track_, LV_OBJ_FLAG_CLICKABLE);
+    if (knob_ != nullptr) lv_obj_remove_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+  }
+}
+
 void swipe_slider::detach() {
   track_ = nullptr;
   fill_ = nullptr;
