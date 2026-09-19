@@ -38,6 +38,9 @@
 #include "pages/action_page.h"
 #include "pages/advanced_page.h"
 #include "pages/console_page.h"
+#include "pages/backup_page.h"
+#include "pages/decrypt_page.h"
+#include "pages/mount_page.h"
 #include "pages/export_log_page.h"
 #include "pages/hardware_page.h"
 #include "pages/home_page.h"
@@ -81,6 +84,9 @@ static gui2_backend::reboot_backend*& reboot = runtime.reboot;
 static gui2_backend::console_backend*& console = runtime.console;
 static gui2_backend::log_export_backend*& log_export = runtime.log_export;
 static gui2_backend::wipe_backend*& wipe = runtime.wipe;
+static gui2_backend::decrypt_backend*& decrypt = runtime.decrypt;
+static gui2_backend::backup_backend*& backup = runtime.backup;
+static gui2_backend::mount_backend*& mount = runtime.mount;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -183,6 +189,13 @@ static void show_advanced_wipe_page(page_transition transition);
 static void show_format_data_page(page_transition transition);
 static void show_wipe_progress_page(page_transition transition);
 static void refresh_wipe_progress(void);
+static void show_decrypt_page(page_transition transition);
+static void show_decrypt_progress_page(page_transition transition);
+static void refresh_decrypt_progress(void);
+static void show_backup_page(page_transition transition);
+static void show_backup_progress_page(page_transition transition);
+static void show_mount_page(page_transition transition);
+static void refresh_backup_progress(void);
 static void create_gui2_shell(lv_obj_t* screen);
 static void close_quick_menu(void);
 static void refresh_recording_ui(void);
@@ -349,12 +362,22 @@ static void navigate_back(void) {
              page_router.current() == page_kind::HAPTICS ||
              page_router.current() == page_kind::RECORDING ||
              page_router.current() == page_kind::CONSOLE_SETTINGS) {
+    if (page_router.current() == page_kind::LANGUAGE && page_state.language_from_decrypt) {
+      page_state.language_from_decrypt = false;
+      navigate_to(page_kind::DECRYPT, nullptr, page_transition::POP);
+      return;
+    }
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
                 page_transition::POP);
   } else if (page_router.current() == page_kind::ADVANCED_WIPE ||
              page_router.current() == page_kind::FORMAT_DATA) {
     navigate_to(page_kind::WIPE, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::BACKUP_PROGRESS) {
+    if (backup == nullptr || backup->status().state != gui2_backend::backup_state::RUNNING) {
+      if (backup != nullptr) backup->acknowledge();
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+    }
   } else if (page_router.current() == page_kind::WIPE_PROGRESS) {
     if (wipe == nullptr || wipe->status().state != gui2_backend::wipe_state::RUNNING)
       navigate_to(page_kind::HOME, nullptr, page_transition::POP);
@@ -362,6 +385,14 @@ static void navigate_back(void) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
                 page_transition::POP);
+  } else if (page_router.current() == page_kind::DECRYPT) {
+    if (decrypt != nullptr && decrypt->is_encrypted() && decrypt->start_refresh()) {
+      page_state.decrypt_refreshing = true;
+      page_state.progress_settled_ms = 0;
+      navigate_to(page_kind::DECRYPT_PROGRESS, nullptr, page_transition::PUSH);
+    } else {
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+    }
   } else if (!home_page_active) {
     navigate_to(page_kind::HOME, nullptr, page_transition::POP);
   }
@@ -437,6 +468,11 @@ static void apply_language_event_cb(lv_event_t* event) {
 
   current_language = pending_language;
   status_controller.refresh();
+  if (page_state.language_from_decrypt) {
+    page_state.language_from_decrypt = false;
+    navigate_to(page_kind::DECRYPT, nullptr, page_transition::POP);
+    return;
+  }
   navigate_to(page_kind::ACTION,
               &gui2_pages::action_definitions()[static_cast<int>(action_id::SETTINGS)],
               page_transition::POP);
@@ -798,9 +834,18 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.console_consumed = 0;
   page_state.wipe_progress = {};
   page_state.wipe_console_consumed = 0;
+  page_state.decrypt_progress = {};
+  page_state.decrypt_console_consumed = 0;
   page_state.format_data_input = nullptr;
   page_state.format_data_track = nullptr;
   page_state.format_data_confirm.detach();
+  page_state.decrypt_pattern.detach();
+  page_state.backup_tabs.detach();
+  page_state.backup_confirm.detach();
+  page_state.backup_view = {};
+  page_state.decrypt_input = nullptr;
+  page_state.decrypt_keyboard = nullptr;
+  page_state.decrypt_status = nullptr;
   if (page_state.format_data_keyboard != nullptr) {
     lv_obj_delete(page_state.format_data_keyboard);
     page_state.format_data_keyboard = nullptr;
@@ -1336,9 +1381,6 @@ static void format_data_key_event_cb(lv_event_t* event) {
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::KEYBOARD);
 }
 
-static void format_data_apply_event_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  lv_obj_t* input = page_state.format_data_input;
 static void format_data_slide_confirmed(void*) {
   if (!format_data_ready()) {
     page_state.format_data_confirm.reset();
@@ -1347,15 +1389,397 @@ static void format_data_slide_confirmed(void*) {
   format_data_confirmed(nullptr);
 }
 
+static void decrypt_attempt(const std::string& password) {
+  if (decrypt == nullptr || password.empty()) return;
+  page_state.decrypt_refreshing = false;
+  page_state.progress_settled_ms = 0;
+  if (!decrypt->start(password)) return;
+  navigate_to(page_kind::DECRYPT_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void poll_decrypt_console(void) {
+  if (console == nullptr || page_state.decrypt_progress.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  const size_t total = console->fetch(page_state.decrypt_console_consumed, &lines);
+  page_state.decrypt_console_consumed = total;
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.decrypt_progress.console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.decrypt_progress.console);
+}
+
+static void refresh_decrypt_progress(void) {
+  if (decrypt == nullptr) return;
+  const auto state = decrypt->state();
+
+  gui2_pages::operation_status progress;
+  progress.total = 0;  // the attempt cannot report how far along it is
+  switch (state) {
+    case gui2_backend::decrypt_state::DONE:
+      progress.state = gui2_pages::operation_state::DONE;
+      break;
+    case gui2_backend::decrypt_state::FAILED:
+      progress.state = gui2_pages::operation_state::FAILED;
+      break;
+    default:
+      progress.state = gui2_pages::operation_state::RUNNING;
+      break;
+  }
+
+  gui2_pages::operation_labels labels;
+  labels.running =
+      page_state.decrypt_refreshing ? strings().refreshing_sizes : strings().decrypting;
+  labels.done =
+      page_state.decrypt_refreshing ? strings().refresh_sizes_done : strings().decrypt_complete;
+  labels.failed = strings().decrypt_failed;
+  gui2_pages::update_progress(&page_state.decrypt_progress, labels, progress);
+
+  if (state == gui2_backend::decrypt_state::RUNNING) {
+    page_state.progress_settled_ms = 0;
+    return;
+  }
+
+  // Let the bar finish filling and the colour land before the page changes;
+  // jumping away the same frame reads as a flicker.
+  const uint64_t now_ms = monotonic_ms();
+  if (page_state.progress_settled_ms == 0) {
+    page_state.progress_settled_ms = now_ms;
+    if (hardware != nullptr)
+      hardware->vibrate(state == gui2_backend::decrypt_state::DONE
+                            ? gui2_backend::haptic_channel::ACTION
+                            : gui2_backend::haptic_channel::BUTTON);
+    return;
+  }
+  if (now_ms - page_state.progress_settled_ms < 900) return;
+
+  const bool refreshing = page_state.decrypt_refreshing;
+  decrypt->acknowledge();
+  page_state.progress_settled_ms = 0;
+  page_state.decrypt_refreshing = false;
+  if (refreshing || state == gui2_backend::decrypt_state::DONE) {
+    page_state.decrypt_failed = false;
+    navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
+  } else {
+    page_state.decrypt_failed = true;
+    navigate_to(page_kind::DECRYPT, nullptr, page_transition::POP);
+  }
+}
+
+static void show_decrypt_progress_page(page_transition transition) {
+  create_page_scaffold(page_kind::DECRYPT_PROGRESS, false, strings().decrypt_title,
+                       strings().decrypting, 0, transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text =
+      page_state.decrypt_refreshing ? strings().refreshing_sizes : strings().decrypting;
+  options.subtitle = page_summary;
+  page_state.decrypt_progress = gui2_pages::build_progress_page(options);
+  page_state.decrypt_console_consumed = 0;
+  page_state.decrypt_last_poll_ms = 0;
+  poll_decrypt_console();
+  refresh_decrypt_progress();
+}
+
+static void decrypt_pattern_complete(const std::string& passphrase, void*) {
+  decrypt_attempt(passphrase);
+}
+
+static void decrypt_pattern_dot(void*) {
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void decrypt_input_ready_cb(lv_event_t*) {
+  lv_obj_t* input = page_state.decrypt_input;
   if (input == nullptr) return;
   const char* text = lv_textarea_get_text(input);
-  if (text == nullptr || std::string(text) != "yes") return;
-  format_data_confirmed(nullptr);
+  decrypt_attempt(text == nullptr ? std::string() : std::string(text));
+}
+
+static void decrypt_language_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  page_state.language_from_decrypt = true;
+  navigate_to(page_kind::LANGUAGE);
+}
+
+static void home_notice_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  navigate_to(page_kind::DECRYPT);
+}
+
+static std::vector<gui2_backend::backup_target> backup_targets;
+static std::vector<gui2_backend::mount_target> mount_targets;
+static constexpr int kBackupCompressTarget = 100;
+static constexpr int kBackupSkipDigestTarget = 101;
+static constexpr int kBackupEncryptTarget = 103;
+static constexpr int kMountSystemTarget = 102;
+
+static void backup_selection_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (index == nullptr || toggle == nullptr) return;
+  if (*index < 0 || static_cast<size_t>(*index) >= std::size(page_state.backup_selected)) return;
+
+  page_state.backup_selected[*index] = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void backup_option_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const auto* target = static_cast<const int*>(lv_event_get_user_data(event));
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (target == nullptr || toggle == nullptr) return;
+
+  const bool checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (*target == kBackupCompressTarget)
+    page_state.backup_compress = checked;
+  else if (*target == kBackupSkipDigestTarget)
+    page_state.backup_skip_digest = checked;
+  else if (*target == kBackupEncryptTarget) {
+    page_state.backup_encrypt = checked;
+    gui2_pages::show_backup_password(page_state.backup_view, checked);
+  }
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void backup_tab_changed(size_t index, void*) {
+  page_state.backup_active_tab = index;
+  gui2_pages::show_backup_tab(page_state.backup_view, index);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void backup_confirmed(void*) {
+  if (backup == nullptr) return;
+
+  std::vector<std::string> selected;
+  for (size_t i = 0; i < backup_targets.size() && i < std::size(page_state.backup_selected); ++i) {
+    if (page_state.backup_selected[i]) selected.push_back(backup_targets[i].mount_point);
+  }
+  if (selected.empty()) {
+    page_state.backup_confirm.reset();
+    return;
+  }
+
+  std::string name;
+  if (page_state.backup_view.name_input != nullptr) {
+    const char* text = lv_textarea_get_text(page_state.backup_view.name_input);
+    if (text != nullptr) name = text;
+  }
+  std::string password;
+  if (page_state.backup_view.password_input != nullptr) {
+    const char* text = lv_textarea_get_text(page_state.backup_view.password_input);
+    if (text != nullptr) password = text;
+  }
+  if (!backup->start(selected, name, page_state.backup_compress, page_state.backup_skip_digest,
+                     page_state.backup_encrypt, password)) {
+    page_state.backup_confirm.reset();
+    return;
+  }
+  navigate_to(page_kind::BACKUP_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void mount_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (index == nullptr || toggle == nullptr || mount == nullptr) return;
+
+  const bool wanted = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (*index == kMountSystemTarget) {
+    if (!mount->set_system_writable(wanted)) {
+      if (wanted)
+        lv_obj_remove_state(toggle, LV_STATE_CHECKED);
+      else
+        lv_obj_add_state(toggle, LV_STATE_CHECKED);
+    }
+    if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+    return;
+  }
+
+  if (*index < 0 || static_cast<size_t>(*index) >= mount_targets.size()) return;
+  // The row only earns its new state once the partition actually moved.
+  if (!mount->set_mounted(mount_targets[*index].mount_point, wanted)) {
+    if (wanted)
+      lv_obj_remove_state(toggle, LV_STATE_CHECKED);
+    else
+      lv_obj_add_state(toggle, LV_STATE_CHECKED);
+  } else {
+    mount_targets[*index].mounted = wanted;
+  }
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void show_backup_page(page_transition transition) {
+  const int track_height = gui2_pages::wipe_track_height();
+  const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::BACKUP, false, strings().backup_title, strings().backup_summary,
+                       bottom_reserved, transition);
+
+  backup_targets = backup == nullptr ? std::vector<gui2_backend::backup_target>()
+                                     : backup->targets();
+  page_state.backup_target_count =
+      std::min(backup_targets.size(), std::size(page_state.backup_selected));
+
+  gui2_pages::action_page_options action_options;
+  action_options.content = main_content;
+  action_options.metrics = &ui;
+  action_options.strings = &strings();
+  action_options.definition =
+      &gui2_pages::action_definitions()[static_cast<int>(action_id::BACKUP)];
+  lv_obj_t* action_body = gui2_pages::build_action_page(action_options);
+  if (action_body == nullptr) return;
+
+  gui2_pages::backup_page_options options;
+  options.content = action_body;
+  options.page_layer = page_layer;
+  options.overlay_layer = lv_layer_top();
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.targets = backup_targets.data();
+  options.target_count = page_state.backup_target_count;
+  options.selected = page_state.backup_selected;
+  options.target_indices = wipe_target_indices;
+  options.selection_callback = backup_selection_event_cb;
+  options.compress = page_state.backup_compress;
+  options.skip_digest = page_state.backup_skip_digest;
+  options.compress_target = &kBackupCompressTarget;
+  options.skip_digest_target = &kBackupSkipDigestTarget;
+  options.encrypt = page_state.backup_encrypt;
+  options.encrypt_target = &kBackupEncryptTarget;
+  options.option_callback = backup_option_event_cb;
+  options.keyboard_event_callback = format_data_key_event_cb;
+  options.tabs = &page_state.backup_tabs;
+  options.tab_callback = backup_tab_changed;
+  options.active_tab = page_state.backup_active_tab;
+  options.confirm = &page_state.backup_confirm;
+  options.confirm_callback = backup_confirmed;
+  page_state.backup_view = gui2_pages::build_backup_page(options);
+}
+
+static void poll_backup_console(void) {
+  if (console == nullptr || page_state.backup_progress.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  const size_t total = console->fetch(page_state.backup_console_consumed, &lines);
+  page_state.backup_console_consumed = total;
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.backup_progress.console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.backup_progress.console);
+}
+
+static void refresh_backup_progress(void) {
+  if (backup == nullptr) return;
+  const auto status = backup->status();
+
+  gui2_pages::operation_status progress;
+  progress.total = 0;  // Run_Backup does not report step counts from outside
+  switch (status.state) {
+    case gui2_backend::backup_state::DONE:
+      progress.state = gui2_pages::operation_state::DONE;
+      break;
+    case gui2_backend::backup_state::FAILED:
+    case gui2_backend::backup_state::CANCELLED:
+      progress.state = gui2_pages::operation_state::FAILED;
+      break;
+    default:
+      progress.state = gui2_pages::operation_state::RUNNING;
+      break;
+  }
+
+  gui2_pages::operation_labels labels;
+  labels.running = status.detail.empty() ? strings().backing_up : status.detail.c_str();
+  labels.done = strings().backup_complete;
+  labels.failed = status.state == gui2_backend::backup_state::CANCELLED
+                      ? strings().backup_cancelled
+                      : strings().backup_failed;
+  gui2_pages::update_progress(&page_state.backup_progress, labels, progress);
+}
+
+static void show_backup_progress_page(page_transition transition) {
+  create_page_scaffold(page_kind::BACKUP_PROGRESS, false, strings().backup_title,
+                       strings().backing_up, 0, transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text = strings().backing_up;
+  options.subtitle = page_summary;
+  page_state.backup_progress = gui2_pages::build_progress_page(options);
+  page_state.backup_console_consumed = 0;
+  page_state.backup_last_poll_ms = 0;
+  poll_backup_console();
+  refresh_backup_progress();
+}
+
+static void show_mount_page(page_transition transition) {
+  create_page_scaffold(page_kind::MOUNT, false, strings().mount_title, strings().mount_summary, 0,
+                       transition);
+
+  mount_targets = mount == nullptr ? std::vector<gui2_backend::mount_target>() : mount->targets();
+  page_state.mount_target_count =
+      std::min(mount_targets.size(), std::size(wipe_target_indices));
+
+  gui2_pages::action_page_options action_options;
+  action_options.content = main_content;
+  action_options.metrics = &ui;
+  action_options.strings = &strings();
+  action_options.definition =
+      &gui2_pages::action_definitions()[static_cast<int>(action_id::MOUNT)];
+  lv_obj_t* action_body = gui2_pages::build_action_page(action_options);
+  if (action_body == nullptr) return;
+
+  gui2_pages::mount_page_options options;
+  options.content = action_body;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.targets = mount_targets.data();
+  options.target_count = page_state.mount_target_count;
+  options.target_indices = wipe_target_indices;
+  options.mount_callback = mount_event_cb;
+  options.has_system = mount != nullptr;
+  options.system_writable = mount != nullptr && mount->system_writable();
+  options.system_target = &kMountSystemTarget;
+  options.system_callback = mount_event_cb;
+  gui2_pages::build_mount_page(options);
+}
+
+static void show_decrypt_page(page_transition transition) {
+  const int bottom_reserved = ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::DECRYPT, false, strings().decrypt_title,
+                       strings().decrypt_summary, bottom_reserved, transition);
+
+  gui2_pages::decrypt_page_options options;
+  options.content = main_content;
+  options.page_layer = page_layer;
+  options.overlay_layer = lv_layer_top();
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.kind = decrypt == nullptr ? gui2_backend::lock_kind::PASSWORD : decrypt->kind();
+  options.failed = page_state.decrypt_failed;
+  options.pattern = &page_state.decrypt_pattern;
+  options.pattern_callback = decrypt_pattern_complete;
+  options.pattern_dot_callback = decrypt_pattern_dot;
+  options.input_ready_callback = decrypt_input_ready_cb;
+  options.keyboard_event_callback = format_data_key_event_cb;
+  options.language_callback = decrypt_language_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  const auto view = gui2_pages::build_decrypt_page(options);
+  page_state.decrypt_input = view.input;
+  page_state.decrypt_keyboard = view.keyboard;
+  page_state.decrypt_status = view.status;
 }
 
 static void show_format_data_page(page_transition transition) {
-  const int button_height = single_line_card_height();
-  const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
+  const int bottom_reserved =
+      ui.nav_height + gui2_pages::wipe_track_height() + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::FORMAT_DATA, false, strings().format_data_title,
                        strings().format_data_summary, bottom_reserved, transition);
 
@@ -1488,12 +1912,24 @@ static void show_home_page(page_transition transition) {
   options.action_count = gui2_pages::action_definition_count();
   options.action_event_callback = action_card_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
+  if (decrypt != nullptr && decrypt->is_encrypted()) {
+    options.notice_text = strings().data_encrypted_notice;
+    options.notice_event_callback = home_notice_event_cb;
+  }
   gui2_pages::build_home_page(options);
 }
 
 static void show_action_page(const action_definition& definition, page_transition transition) {
   if (definition.id == action_id::WIPE) {
     show_wipe_page(transition);
+    return;
+  }
+  if (definition.id == action_id::BACKUP) {
+    show_backup_page(transition);
+    return;
+  }
+  if (definition.id == action_id::MOUNT) {
+    show_mount_page(transition);
     return;
   }
 
@@ -1642,6 +2078,21 @@ static void route_page(const gui2_pages::page_request& request) {
     case page_kind::WIPE_PROGRESS:
       show_wipe_progress_page(request.transition);
       return;
+    case page_kind::DECRYPT:
+      show_decrypt_page(request.transition);
+      return;
+    case page_kind::DECRYPT_PROGRESS:
+      show_decrypt_progress_page(request.transition);
+      return;
+    case page_kind::BACKUP:
+      show_backup_page(request.transition);
+      return;
+    case page_kind::BACKUP_PROGRESS:
+      show_backup_progress_page(request.transition);
+      return;
+    case page_kind::MOUNT:
+      show_mount_page(request.transition);
+      return;
   }
 }
 
@@ -1727,10 +2178,19 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
   if (page_state.wipe_progress.body != nullptr && now_ms - page_state.wipe_last_poll_ms >= 100) {
     page_state.wipe_last_poll_ms = now_ms;
     poll_wipe_console();
-    if (wipe != nullptr)
     refresh_wipe_progress();
+  }
+  if (page_state.decrypt_progress.body != nullptr &&
+      now_ms - page_state.decrypt_last_poll_ms >= 100) {
+    page_state.decrypt_last_poll_ms = now_ms;
     poll_decrypt_console();
+    refresh_decrypt_progress();
+  }
+  if (page_state.backup_progress.body != nullptr &&
+      now_ms - page_state.backup_last_poll_ms >= 100) {
+    page_state.backup_last_poll_ms = now_ms;
     poll_backup_console();
+    refresh_backup_progress();
   }
 }
 
@@ -1776,6 +2236,9 @@ int gui2_start(const gui2_context* context) {
   console = context->console;
   log_export = context->log_export;
   wipe = context->wipe;
+  decrypt = context->decrypt;
+  backup = context->backup;
+  mount = context->mount;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   msg::SetTranslator(console_translator);
@@ -1799,6 +2262,9 @@ int gui2_start(const gui2_context* context) {
   screen_lock.create(ui, "", strings().swipe_to_unlock, screen_lock_unlocked, nullptr);
   screen_actions.initialize(screen, &screen_feedback, screen_lock_before_screen_off, nullptr);
   screen_actions.set_screenshot_result_callback(screenshot_result_cb);
+
+  if (decrypt != nullptr && decrypt->is_encrypted())
+    navigate_to(page_kind::DECRYPT, nullptr, page_transition::NONE);
 
   if (!status_controller.start(settings, ui, status_view, refresh_recording_ui)) {
     shutdown_gui2();

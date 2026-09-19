@@ -7,10 +7,12 @@
 #include "backend/hardware_settings.h"
 #include "backend/reboot_backend.h"
 #include "components/slider.h"
+#include "components/pattern_lock.h"
 #include "components/swipe_slider.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "pages/console_page.h"
+#include "pages/backup_page.h"
 #include "pages/progress_page.h"
 #include "pages/page_router.h"
 #include "pages/reboot_page.h"
@@ -81,6 +83,30 @@ struct page_state {
   bool wipe_selected[24] = {};
   size_t wipe_target_count = 0;
   gui2_components::swipe_slider wipe_confirm;
+  gui2_components::pattern_lock decrypt_pattern;
+  lv_obj_t* decrypt_input = nullptr;
+  lv_obj_t* decrypt_keyboard = nullptr;
+  lv_obj_t* decrypt_status = nullptr;
+  bool decrypt_failed = false;
+  bool language_from_decrypt = false;
+  progress_page_view decrypt_progress;
+  size_t decrypt_console_consumed = 0;
+  uint64_t decrypt_last_poll_ms = 0;
+  uint64_t progress_settled_ms = 0;
+  bool decrypt_refreshing = false;
+  gui2_components::tab_bar backup_tabs;
+  backup_page_view backup_view;
+  gui2_components::swipe_slider backup_confirm;
+  bool backup_selected[24] = {};
+  size_t backup_target_count = 0;
+  size_t backup_active_tab = 0;
+  bool backup_compress = true;
+  bool backup_skip_digest = false;
+  bool backup_encrypt = false;
+  progress_page_view backup_progress;
+  size_t backup_console_consumed = 0;
+  uint64_t backup_last_poll_ms = 0;
+  size_t mount_target_count = 0;
   size_t console_consumed = 0;
   uint64_t console_last_poll_ms = 0;
   reboot_page_state reboot;
