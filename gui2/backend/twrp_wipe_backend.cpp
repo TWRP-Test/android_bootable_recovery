@@ -56,6 +56,12 @@ bool twrp_wipe_backend::start_format_data() {
   return start(job::FORMAT_DATA, {});
 }
 
+bool twrp_wipe_backend::start_cache_dalvik() {
+  // The list job already treats DALVIK as its own thing; legacy wipes dalvik
+  // first and cache second.
+  return start(job::LIST, { "DALVIK", "/cache" });
+}
+
 bool twrp_wipe_backend::start_wipe(const std::vector<std::string>& mount_points) {
   return start(job::LIST, mount_points);
 }
