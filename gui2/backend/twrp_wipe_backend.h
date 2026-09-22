@@ -25,6 +25,7 @@ class twrp_wipe_backend final : public wipe_backend {
 
   bool start_factory_reset() override;
   bool start_format_data() override;
+  bool start_cache_dalvik() override;
   bool start_wipe(const std::vector<std::string>& mount_points) override;
 
   wipe_status status() override;

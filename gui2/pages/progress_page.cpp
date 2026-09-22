@@ -92,6 +92,73 @@ void animate_width(lv_obj_t* fill, int target) {
 
 }  // namespace
 
+static lv_obj_t* create_action_button(lv_obj_t* parent, const gui2_core::ui_metrics& metrics,
+                                      const progress_action& action, bool primary,
+                                      int width, int height, lv_event_cb_t press_guard) {
+  lv_obj_t* button = lv_obj_create(parent);
+  lv_obj_set_size(button, width, height);
+  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
+  lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+  const lv_color_t face = primary ? lv_color_hex(kAccent) : metrics.card_color;
+  gui2_core::set_surface_style(button, face);
+  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), face, 18),
+                            LV_STATE_PRESSED);
+  gui2_core::disable_scrolling(button);
+  if (press_guard != nullptr) lv_obj_add_event_cb(button, press_guard, LV_EVENT_ALL, nullptr);
+  if (action.callback != nullptr)
+    lv_obj_add_event_cb(button, action.callback, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t* label = lv_label_create(button);
+  lv_label_set_text(label, action.label == nullptr ? "" : action.label);
+  lv_obj_set_style_text_color(label, primary ? lv_color_hex(0xFFFFFF) : metrics.primary_text,
+                              LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, metrics.text_font, LV_PART_MAIN);
+  lv_obj_center(label);
+  return button;
+}
+
+// The row only exists when both labels are set; everything below the content
+// has to agree on that, so ask once.
+static bool has_actions(const progress_page_options& options) {
+  return options.page_layer != nullptr && options.metrics != nullptr &&
+         options.left_action.label != nullptr && options.right_action.label != nullptr;
+}
+
+static int bottom_reserved_for(const progress_page_options& options) {
+  return has_actions(options) ? progress_actions_height(*options.metrics)
+                              : gui2_core::navigation_safe_area();
+}
+
+static void build_actions(progress_page_view* view,
+                          const progress_page_options& options) {
+  if (!has_actions(options)) return;
+
+  const auto& metrics = *options.metrics;
+  const int height = gui2_core::single_line_card_height();
+  const int gap = metrics.card_gap;
+  const int width = (metrics.content_width - gap) / 2;
+
+  view->actions = lv_obj_create(options.page_layer);
+  lv_obj_set_size(view->actions, metrics.content_width, height);
+  lv_obj_set_pos(view->actions, metrics.outer_margin,
+                 metrics.height - metrics.status_height - metrics.outer_margin - height);
+  gui2_core::set_surface_style(view->actions, metrics.background, LV_OPA_TRANSP);
+  lv_obj_set_style_pad_all(view->actions, 0, LV_PART_MAIN);
+  lv_obj_set_style_border_width(view->actions, 0, LV_PART_MAIN);
+  gui2_core::disable_scrolling(view->actions);
+  lv_obj_add_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+
+  lv_obj_t* left = create_action_button(view->actions, metrics, options.left_action, false, width,
+                                        height, options.press_guard_callback);
+  lv_obj_set_pos(left, 0, 0);
+  lv_obj_t* right = create_action_button(view->actions, metrics, options.right_action, true,
+                                         metrics.content_width - width - gap, height,
+                                         options.press_guard_callback);
+  lv_obj_set_pos(right, width + gap, 0);
+}
+
 progress_page_view build_progress_page(const progress_page_options& options) {
   progress_page_view view;
   if (options.content == nullptr || options.metrics == nullptr || options.strings == nullptr)
@@ -124,11 +191,14 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   console_options.self_scrolling = true;
   view.console = build_console_page(console_options);
   if (view.console.body != nullptr) {
-    // The console page sizes itself to the whole viewport; give back only what
-    // the bar and its gap take.
+    // The console page sizes itself against the whole viewport, which knows
+    // nothing about what this page reserved at the bottom. Redo the scaffold's
+    // own arithmetic so the bar lands exactly on the bottom of the content box.
+    const int scroll_top = metrics.heading_top + metrics.heading_height + metrics.cards_top_gap;
+    const int available =
+        metrics.height - metrics.status_height - scroll_top - bottom_reserved_for(options);
     const int height =
-        std::max(gui2_core::ui_px(300),
-                 view.console.minimum_height - bar_height - metrics.cards_top_gap);
+        std::max(gui2_core::ui_px(300), available - bar_height - metrics.cards_top_gap);
     lv_obj_set_pos(view.console.body, 0, 0);
     lv_obj_set_height(view.console.body, height);
     view.console.minimum_height = height;
@@ -136,8 +206,8 @@ progress_page_view build_progress_page(const progress_page_options& options) {
 
   view.bar = lv_obj_create(view.body);
   lv_obj_set_size(view.bar, metrics.content_width, bar_height);
-  gui2_core::set_surface_style(view.bar,
-                               lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 38));
+  view.track_color = lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 38);
+  gui2_core::set_surface_style(view.bar, view.track_color);
   lv_obj_set_style_radius(view.bar, bar_height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.bar, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(view.bar, border, LV_PART_MAIN);
@@ -158,6 +228,7 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   lv_obj_set_style_radius(view.bar_fill, bar_height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.bar_fill, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.bar_fill);
+  build_actions(&view, options);
   return view;
 }
 
@@ -175,7 +246,20 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
     if (text != nullptr) lv_label_set_text(view->subtitle, text);
   }
 
+  // Whatever happens to the bar, the user decides when to leave.
+  if (view->actions != nullptr) {
+    if (status.state == operation_state::RUNNING)
+      lv_obj_add_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+    else
+      lv_obj_remove_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+  }
+
   if (view->bar == nullptr || view->bar_fill == nullptr || view->track_width <= 0) return;
+
+  if (status.state == operation_state::RUNNING) {
+    lv_obj_set_style_bg_color(view->bar, view->track_color, LV_PART_MAIN);
+    lv_obj_set_style_border_color(view->bar, lv_color_hex(kAccent), LV_PART_MAIN);
+  }
 
   if (status.state == operation_state::RUNNING && status.total <= 0) {
     start_running_animation(view);
@@ -187,16 +271,17 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
   stop_running_animation(view);
   const int width = view->track_width;
   if (width <= 0) return;
-  if (status.state == operation_state::FAILED) {
-    lv_obj_set_style_bg_color(view->bar_fill, lv_color_hex(kFailed), LV_PART_MAIN);
-    lv_obj_set_style_border_color(view->bar, lv_color_hex(kFailed), LV_PART_MAIN);
-    animate_width(view->bar_fill, width);
-    return;
-  }
-  if (status.state == operation_state::DONE) {
-    lv_obj_set_style_bg_color(view->bar_fill, lv_color_hex(kDone), LV_PART_MAIN);
-    lv_obj_set_style_border_color(view->bar, lv_color_hex(kDone), LV_PART_MAIN);
-    animate_width(view->bar_fill, width);
+  // A finished bar is one solid rounded rect and nothing else. Leaving the
+  // fill on top of it puts a second rounded edge inside the first, and the two
+  // antialiased arcs show up as a hairline along both caps.
+  if (status.state != operation_state::RUNNING) {
+    const lv_color_t color =
+        lv_color_hex(status.state == operation_state::FAILED ? kFailed : kDone);
+    lv_obj_set_style_bg_color(view->bar, color, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(view->bar_fill, color, LV_PART_MAIN);
+    lv_obj_set_style_border_color(view->bar, color, LV_PART_MAIN);
+    lv_obj_set_width(view->bar_fill, width);
+    lv_obj_add_flag(view->bar_fill, LV_OBJ_FLAG_HIDDEN);
     return;
   }
 
@@ -206,3 +291,9 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
 }
 
 }  // namespace gui2_pages
+
+int gui2_pages::progress_actions_height(const gui2_core::ui_metrics& metrics) {
+  // Gap above matches the one inside the page; the inset below matches the
+  // one on either side.
+  return metrics.cards_top_gap + gui2_core::single_line_card_height() + metrics.outer_margin;
+}
