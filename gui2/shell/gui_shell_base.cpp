@@ -58,6 +58,7 @@ gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options)
     options.text_font,
     options.status_font,
     options.brand_font,
+    options.keyboard_font,
     background,
     card_color,
     nav_color,

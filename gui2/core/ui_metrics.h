@@ -23,6 +23,7 @@ struct ui_metrics {
   const lv_font_t* text_font = nullptr;
   const lv_font_t* status_font = nullptr;
   const lv_font_t* brand_font = nullptr;
+  const lv_font_t* keyboard_font = nullptr;
   lv_color_t background{};
   lv_color_t card_color{};
   lv_color_t nav_color{};
