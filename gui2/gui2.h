@@ -13,6 +13,7 @@
 #include "backend/file_manager_backend.h"
 #include "backend/install_backend.h"
 #include "backend/terminal_backend.h"
+#include "backend/wifi_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
 
@@ -34,6 +35,9 @@ struct gui2_context {
   gui2_backend::mount_backend* mount = nullptr;
   gui2_backend::restore_backend* restore = nullptr;
   gui2_backend::terminal_backend* terminal = nullptr;
+  // Left null when Wi-Fi is not part of the build; every page that would
+  // show it checks the pointer instead of a build flag.
+  gui2_backend::wifi_backend* wifi = nullptr;
   gui2_backend::file_manager_backend* file_manager = nullptr;
   gui2_backend::install_backend* install = nullptr;
   // Reuse an already initialized minui display when possible.

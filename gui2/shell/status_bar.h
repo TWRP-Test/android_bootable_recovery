@@ -13,6 +13,8 @@ struct status_bar_view {
   lv_obj_t* battery_value = nullptr;
   lv_obj_t* battery_icon = nullptr;
   lv_obj_t* recording_indicator = nullptr;
+  // Only ever shown when a Wi-Fi backend says it is associated.
+  lv_obj_t* wifi_icon = nullptr;
 };
 
 status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics& metrics,
@@ -20,6 +22,10 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
 void layout_status_bar(const status_bar_view& view, const gui2_core::ui_metrics& metrics);
 void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics& metrics,
                        const gui2_backend::status_snapshot& snapshot);
+
+// Separate from the snapshot: the Wi-Fi state is polled by the page loop, not
+// by the status backend.
+void set_status_bar_wifi(const status_bar_view& view, bool connected);
 
 }  // namespace gui2_shell
 

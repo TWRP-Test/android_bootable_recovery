@@ -55,6 +55,7 @@
 #include "pages/install_confirm_page.h"
 #include "pages/select_storage_page.h"
 #include "pages/terminal_page.h"
+#include "pages/wifi_page.h"
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
 #include "pages/wipe_page.h"
@@ -98,6 +99,7 @@ static gui2_backend::backup_backend*& backup = runtime.backup;
 static gui2_backend::mount_backend*& mount = runtime.mount;
 static gui2_backend::restore_backend*& restore = runtime.restore;
 static gui2_backend::terminal_backend*& terminal = runtime.terminal;
+static gui2_backend::wifi_backend*& wifi = runtime.wifi;
 static gui2_backend::file_manager_backend*& file_manager = runtime.file_manager;
 static gui2_backend::install_backend*& install = runtime.install;
 static gui2_shell::status_bar_controller status_controller;
@@ -230,6 +232,8 @@ static void show_console_settings_page(page_transition transition);
 static void show_file_manager_page(page_transition transition);
 static void show_file_actions_page(page_transition transition);
 static void show_file_input_page(page_transition transition);
+static void show_wifi_page(page_transition transition);
+static void show_wifi_password_page(page_transition transition);
 static void show_install_page(page_transition transition);
 static void progress_reboot_system_cb(lv_event_t* event);
 static void progress_back_cb(lv_event_t* event);
@@ -382,6 +386,7 @@ enum class settings_target {
   KEYBOARD_SETTINGS,
   ADVANCED_WIPE,
   FILE_MANAGER,
+  WIFI,
   FORMAT_DATA,
 };
 
@@ -397,6 +402,7 @@ static constexpr settings_target general_settings_target = settings_target::GENE
 static constexpr settings_target keyboard_settings_target = settings_target::KEYBOARD_SETTINGS;
 static constexpr settings_target advanced_wipe_target = settings_target::ADVANCED_WIPE;
 static constexpr settings_target file_manager_target = settings_target::FILE_MANAGER;
+static constexpr settings_target wifi_target = settings_target::WIFI;
 static constexpr settings_target format_data_target = settings_target::FORMAT_DATA;
 static constexpr int wipe_target_indices[24] = {
   0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
@@ -482,6 +488,12 @@ static void navigate_back(void) {
     navigate_to(page_kind::FILE_ACTIONS, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::FILE_ACTIONS) {
     navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::WIFI_PASSWORD) {
+    navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::WIFI) {
+    navigate_to(page_kind::ACTION,
+                &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
+                page_transition::POP);
   } else if (page_router.current() == page_kind::FILE_MANAGER) {
     // Back leaves the page; the first row of the list is the way up a level.
     navigate_to(page_kind::ACTION,
@@ -1077,6 +1089,8 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::RECORDING);
   else if (*target == settings_target::FILE_MANAGER)
     navigate_to(page_kind::FILE_MANAGER);
+  else if (*target == settings_target::WIFI)
+    navigate_to(page_kind::WIFI);
   else if (*target == settings_target::EXPORT_LOG)
     navigate_to(page_kind::EXPORT_LOG);
   else if (*target == settings_target::CONSOLE_SETTINGS)
@@ -1542,6 +1556,217 @@ static void show_file_input_page(page_transition transition) {
   options.key_callback = keyboard_feedback_cb;
   const auto view = gui2_pages::build_file_input_page(options);
   page_state.file_input = view.input;
+}
+
+// ---- WLAN ----------------------------------------------------------------
+// The page only draws what the backend reports; the backend runs the same
+// wpa_cli steps the legacy wlan* actions do.
+static std::vector<gui2_backend::wifi_network> wifi_networks;
+static constexpr int wifi_network_indices[32] = { 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                                                  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                                                  22, 23, 24, 25, 26, 27, 28, 29, 30, 31 };
+static std::string wifi_selected_ssid;
+static gui2_backend::wifi_security wifi_selected_security = gui2_backend::wifi_security::OPEN;
+static std::string wifi_connected_text;
+static bool wifi_last_failed = false;
+// Which job the page started, so a status report does not show "Scanning" in
+// place of the list the way a scan does.
+enum class wifi_job { NONE, SCAN, CONNECT, REPORT };
+static wifi_job wifi_running_job = wifi_job::NONE;
+static bool wifi_seen_service = false;
+static uint64_t wifi_last_poll_ms = 0;
+static uint64_t wifi_last_status_ms = 0;
+static lv_obj_t* wifi_password_input = nullptr;
+static gui2_pages::wifi_page_view wifi_view;
+static size_t wifi_log_rendered = 0;
+
+static bool wifi_page_showing(void) {
+  return page_router.current() == page_kind::WIFI && wifi_view.log.body != nullptr;
+}
+
+static void wifi_refresh_page(void) {
+  if (page_router.current() == page_kind::WIFI)
+    navigate_to(page_kind::WIFI, nullptr, page_transition::REPLACE);
+}
+
+static void wifi_start(wifi_job job, bool started) {
+  if (!started) return;
+  wifi_running_job = job;
+  // A report only adds log lines; nothing else on the page changes.
+  if (job == wifi_job::REPORT) return;
+  wifi_last_failed = false;
+  wifi_refresh_page();
+}
+
+static void wifi_service_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED || wifi == nullptr) return;
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  const bool wanted = toggle != nullptr && lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  // init takes a moment; the loop redraws once the service state follows.
+  if (!wifi->set_service(wanted) && toggle != nullptr) {
+    if (wanted)
+      lv_obj_remove_state(toggle, LV_STATE_CHECKED);
+    else
+      lv_obj_add_state(toggle, LV_STATE_CHECKED);
+  }
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void wifi_scan_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (wifi != nullptr) wifi_start(wifi_job::SCAN, wifi->start_scan());
+}
+
+static void wifi_status_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (wifi != nullptr) wifi_start(wifi_job::REPORT, wifi->start_status());
+}
+
+static void wifi_test_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (wifi != nullptr) wifi_start(wifi_job::REPORT, wifi->start_test());
+}
+
+static void wifi_network_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  if (wifi == nullptr || index == nullptr || *index < 0 ||
+      static_cast<size_t>(*index) >= wifi_networks.size())
+    return;
+
+  const auto& network = wifi_networks[*index];
+  wifi_selected_ssid = network.ssid;
+  wifi_selected_security = network.security;
+  // Legacy skips the password page for an open network.
+  if (network.security == gui2_backend::wifi_security::OPEN) {
+    wifi_start(wifi_job::CONNECT,
+               wifi->start_connect(network.ssid, network.security, std::string()));
+    return;
+  }
+  navigate_to(page_kind::WIFI_PASSWORD);
+}
+
+static void wifi_password_accept_cb(void*) {
+  if (wifi == nullptr || wifi_password_input == nullptr) return;
+  const char* text = lv_textarea_get_text(wifi_password_input);
+  const std::string password = text == nullptr ? std::string() : text;
+  if (password.empty()) return;
+  if (!wifi->start_connect(wifi_selected_ssid, wifi_selected_security, password)) return;
+  wifi_running_job = wifi_job::CONNECT;
+  wifi_last_failed = false;
+  navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
+}
+
+// Everything the backend logged since the box last caught up.
+static void wifi_append_log(void) {
+  if (wifi == nullptr || !wifi_page_showing()) return;
+  const size_t count = wifi->log_count();
+  if (count == wifi_log_rendered) return;
+
+  std::vector<gui2_backend::console_line> lines;
+  for (size_t i = wifi_log_rendered; i < count; ++i) {
+    std::string line = wifi->log_line(i);
+    // Empty means the backend has already dropped it.
+    if (!line.empty()) lines.push_back({ std::move(line), gui2_backend::console_severity::NORMAL });
+  }
+  wifi_log_rendered = count;
+  gui2_pages::append_console_lines(&wifi_view.log, ui, lines);
+  gui2_pages::scroll_console_to_end(wifi_view.log);
+}
+
+static void show_wifi_page(page_transition transition) {
+  create_page_scaffold(page_kind::WIFI, false, strings().wifi_title, strings().wifi_summary, 0,
+                       transition);
+  wifi_view = {};
+  wifi_log_rendered = 0;
+  if (wifi == nullptr) return;
+
+  const auto state = wifi->state();
+  const bool busy =
+      state == gui2_backend::wifi_state::SCANNING || state == gui2_backend::wifi_state::CONNECTING;
+  wifi_seen_service = wifi->service_running();
+  wifi_networks = wifi->networks();
+  if (wifi_networks.size() > std::size(wifi_network_indices))
+    wifi_networks.resize(std::size(wifi_network_indices));
+
+  gui2_pages::wifi_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.log_font = runtime_console_fonts[page_state.console_font_index];
+  options.service_running = wifi_seen_service;
+  options.service_callback = wifi_service_cb;
+  options.networks = wifi_networks.data();
+  options.network_count = wifi_networks.size();
+  options.network_indices = wifi_network_indices;
+  options.network_callback = wifi_network_cb;
+  options.connected_ssid = wifi_connected_text.c_str();
+  if (busy && wifi_running_job == wifi_job::SCAN)
+    options.busy_text = strings().wifi_scanning;
+  else if (busy && wifi_running_job == wifi_job::CONNECT)
+    options.busy_text = strings().wifi_connecting;
+  options.failed_text = wifi_last_failed ? strings().wifi_failed : nullptr;
+  options.scan_callback = wifi_scan_cb;
+  options.status_callback = wifi_status_cb;
+  options.test_callback = wifi_test_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  wifi_view = gui2_pages::build_wifi_page(options);
+  wifi_append_log();
+}
+
+static void show_wifi_password_page(page_transition transition) {
+  create_page_scaffold(page_kind::WIFI_PASSWORD, false, strings().wifi_password_title,
+                       wifi_selected_ssid.c_str(),
+                       gui2_pages::file_input_bottom_reserved(ui, false), transition);
+
+  // The same field-and-keyboard page rename uses; only the words differ.
+  gui2_pages::file_input_page_options options;
+  options.content = main_content;
+  options.overlay_layer = lv_layer_top();
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.hint = strings().wifi_password_hint;
+  options.initial_text = "";
+  options.numeric = false;
+  options.keyboard = &page_state.file_input_keyboard;
+  options.accept_callback = wifi_password_accept_cb;
+  options.key_callback = keyboard_feedback_cb;
+  const auto view = gui2_pages::build_file_input_page(options);
+  wifi_password_input = view.input;
+}
+
+// Called from the loop. The log follows the jobs as they report; the page is
+// rebuilt only when something it draws changes.
+static void poll_wifi(uint64_t now_ms) {
+  if (wifi == nullptr || !wifi->available()) return;
+
+  // Cheap: the backend answers from a cache it refreshes in the background.
+  if (now_ms - wifi_last_status_ms >= 500) {
+    wifi_last_status_ms = now_ms;
+    const std::string connected = wifi->connected_ssid();
+    if (connected != wifi_connected_text) {
+      wifi_connected_text = connected;
+      gui2_shell::set_status_bar_wifi(status_view, !wifi_connected_text.empty());
+      if (wifi_running_job == wifi_job::NONE) wifi_refresh_page();
+    }
+    if (page_router.current() == page_kind::WIFI && wifi->service_running() != wifi_seen_service)
+      wifi_refresh_page();
+  }
+
+  if (now_ms - wifi_last_poll_ms < 200) return;
+  wifi_last_poll_ms = now_ms;
+  wifi_append_log();
+
+  const auto state = wifi->state();
+  if (state != gui2_backend::wifi_state::DONE && state != gui2_backend::wifi_state::FAILED)
+    return;
+
+  const wifi_job finished = wifi_running_job;
+  wifi->acknowledge();
+  wifi_running_job = wifi_job::NONE;
+  if (finished == wifi_job::CONNECT) wifi_last_failed = state == gui2_backend::wifi_state::FAILED;
+  // A report only adds log lines, which are already on screen.
+  if (finished != wifi_job::REPORT) wifi_refresh_page();
 }
 
 static std::string file_actions_name;
@@ -3459,6 +3684,9 @@ static void show_action_page(const action_definition& definition, page_transitio
     advanced_options.metrics = &ui;
     advanced_options.strings = &strings();
     advanced_options.file_manager_target = &file_manager_target;
+    // Absent from the build, or switched off for this device: no row at all.
+    advanced_options.wifi_target = wifi != nullptr && wifi->available() ? &wifi_target
+                                                                     : nullptr;
     advanced_options.option_event_callback = settings_option_event_cb;
     advanced_options.press_guard_callback = press_cancel_guard_cb;
     advanced_options.export_log_target = &export_log_target;
@@ -3556,6 +3784,12 @@ static void build_page(const gui2_pages::page_request& request) {
     case page_kind::RECORDING:
       show_recording_page(request.transition);
       return;
+    case page_kind::WIFI:
+      show_wifi_page(request.transition);
+      break;
+    case page_kind::WIFI_PASSWORD:
+      show_wifi_password_page(request.transition);
+      break;
     case page_kind::CONSOLE:
       show_console_page(request.transition);
       return;
@@ -3721,6 +3955,7 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     poll_install_console();
     refresh_install_progress();
   }
+  poll_wifi(now_ms);
   if (page_state.terminal_view.output.body != nullptr &&
       now_ms - page_state.terminal_last_poll_ms >= 100) {
     page_state.terminal_last_poll_ms = now_ms;
@@ -3797,6 +4032,7 @@ int gui2_start(const gui2_context* context) {
   backup = context->backup;
   mount = context->mount;
   terminal = context->terminal;
+  wifi = context->wifi;
   file_manager = context->file_manager;
   install = context->install;
   restore = context->restore;

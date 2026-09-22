@@ -37,6 +37,9 @@
 #include "gui2/backend/twrp_file_manager_backend.h"
 #include "gui2/backend/twrp_install_backend.h"
 #include "gui2/backend/twrp_terminal_backend.h"
+#ifdef TW_INCLUDE_WIFI
+#include "gui2/backend/twrp_wifi_backend.h"
+#endif
 #include "gui2/backend/twrp_hardware_settings.h"
 #include "gui2/backend/twrp_log_export_backend.h"
 #include "gui2/backend/twrp_reboot_backend.h"
@@ -542,6 +545,9 @@ int main(int argc, char **argv) {
 	gui2_backend::twrp_mount_backend mount_backend;
 	gui2_backend::twrp_restore_backend restore_backend;
 	gui2_backend::twrp_terminal_backend terminal_backend;
+#ifdef TW_INCLUDE_WIFI
+	gui2_backend::twrp_wifi_backend wifi_backend;
+#endif
 	gui2_backend::twrp_file_manager_backend file_manager_backend;
 	gui2_backend::twrp_install_backend install_backend;
 	gui2_context gui2_context_value;
@@ -557,6 +563,9 @@ int main(int argc, char **argv) {
 	gui2_context_value.mount = &mount_backend;
 	gui2_context_value.restore = &restore_backend;
 	gui2_context_value.terminal = &terminal_backend;
+#ifdef TW_INCLUDE_WIFI
+	gui2_context_value.wifi = &wifi_backend;
+#endif
 	gui2_context_value.file_manager = &file_manager_backend;
 	gui2_context_value.install = &install_backend;
 	gui2_context_value.display_initialized = true;

@@ -30,6 +30,7 @@ struct runtime_state {
   gui2_backend::mount_backend* mount = nullptr;
   gui2_backend::restore_backend* restore = nullptr;
   gui2_backend::terminal_backend* terminal = nullptr;
+  gui2_backend::wifi_backend* wifi = nullptr;
   gui2_backend::file_manager_backend* file_manager = nullptr;
   gui2_backend::install_backend* install = nullptr;
   bool switch_to_legacy = false;
