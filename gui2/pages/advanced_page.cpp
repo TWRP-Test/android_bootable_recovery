@@ -12,6 +12,12 @@ void build_advanced_page(const advanced_page_options& options) {
       options.content, *options.metrics, options.strings->file_manager_title,
       options.strings->file_manager_summary, options.option_event_callback,
       options.file_manager_target, options.press_guard_callback);
+  if (options.wifi_target != nullptr)
+    gui2_components::create_setting_card(options.content, *options.metrics,
+                                         options.strings->wifi_title,
+                                         options.strings->wifi_summary,
+                                         options.option_event_callback, options.wifi_target,
+                                         options.press_guard_callback);
   gui2_components::create_setting_card(options.content, *options.metrics,
                                        options.strings->export_log_title,
                                        options.strings->export_log_summary,

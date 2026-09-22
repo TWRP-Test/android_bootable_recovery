@@ -71,6 +71,15 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
   view.battery_icon = gui2_components::create_svg_image(view.root, &kGui2IconBattery100,
                                                         gui2_core::ui_px(72), gui2_core::ui_px(48));
 
+  // The icon art is drawn in black; tint it like the text beside it.
+  view.wifi_icon = gui2_components::create_svg_image(view.root, &kGui2IconWifi,
+                                                     gui2_core::ui_px(48), gui2_core::ui_px(48));
+  if (view.wifi_icon != nullptr) {
+    lv_obj_set_style_image_recolor(view.wifi_icon, metrics.primary_text, LV_PART_MAIN);
+    lv_obj_set_style_image_recolor_opa(view.wifi_icon, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_add_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
+  }
+
   view.recording_indicator = lv_label_create(view.root);
   lv_label_set_text(view.recording_indicator, recording_text == nullptr ? "" : recording_text);
   lv_obj_set_style_text_color(view.recording_indicator, lv_color_hex(0xF0443E), LV_PART_MAIN);
@@ -95,7 +104,18 @@ void layout_status_bar(const status_bar_view& view, const gui2_core::ui_metrics&
     if (view.battery_icon != nullptr)
       lv_obj_align_to(view.battery_icon, view.battery_value, LV_ALIGN_OUT_LEFT_MID,
                       -gui2_core::ui_px(12), 0);
+    if (view.wifi_icon != nullptr && view.battery_icon != nullptr)
+      lv_obj_align_to(view.wifi_icon, view.battery_icon, LV_ALIGN_OUT_LEFT_MID,
+                      -gui2_core::ui_px(12), 0);
   }
+}
+
+void set_status_bar_wifi(const status_bar_view& view, bool connected) {
+  if (view.wifi_icon == nullptr) return;
+  if (connected)
+    lv_obj_clear_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
+  else
+    lv_obj_add_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
 }
 
 void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics& metrics,

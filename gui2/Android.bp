@@ -81,6 +81,7 @@ cc_library_static {
         "pages/install_confirm_page.cpp",
         "pages/file_manager_page.cpp",
         "pages/terminal_page.cpp",
+        "pages/wifi_page.cpp",
         "pages/settings_page.cpp",
         "pages/backup_page.cpp",
         "pages/decrypt_page.cpp",
