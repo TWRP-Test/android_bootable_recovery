@@ -1,13 +1,14 @@
 #ifndef GUI2_BACKEND_TERMINAL_BACKEND_H
 #define GUI2_BACKEND_TERMINAL_BACKEND_H
 
+#include <cstddef>
 #include <string>
 
 namespace gui2_backend {
 
-// A shell on a pseudoterminal, the way the legacy terminal page runs one. The
-// page types whole lines rather than single keys, so this interface deals in
-// lines and in the raw bytes the control keys send.
+// The shell the legacy terminal runs, driven through the engine that already
+// owns it. The engine keeps the text buffer and does the escape handling, so
+// this deals in lines of finished text rather than a byte stream.
 class terminal_backend {
  public:
   virtual ~terminal_backend() = default;
@@ -17,16 +18,20 @@ class terminal_backend {
   virtual bool running() = 0;
   virtual void stop() = 0;
 
-  // The directory the shell is in, for the prompt.
-  virtual std::string working_directory() = 0;
+  // How wide and tall the buffer should wrap, in characters.
+  virtual void set_size(int columns, int rows) = 0;
 
-  virtual bool send_line(const std::string& line) = 0;
+  // Reads whatever the shell produced. The page calls this from its own loop.
+  virtual void pump() = 0;
+
+  // Changes whenever the buffer changed, so the page can skip a redraw.
+  virtual int update_counter() = 0;
+  virtual size_t line_count() = 0;
+  virtual std::string line(size_t index) = 0;
+
+  virtual void send_line(const std::string& text) = 0;
   // Control keys: 0x03 interrupts, 0x04 ends input.
-  virtual bool send_byte(char byte) = 0;
-
-  // Whatever the shell has written since the last call, with the escape
-  // sequences already taken out. Empty when there is nothing new.
-  virtual std::string take_output() = 0;
+  virtual void send_byte(char byte) = 0;
 };
 
 }  // namespace gui2_backend

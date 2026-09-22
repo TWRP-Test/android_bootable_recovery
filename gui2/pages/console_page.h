@@ -39,6 +39,11 @@ void append_console_lines(console_page_view* view, const gui2_core::ui_metrics& 
 
 void scroll_console_to_end(const console_page_view& view);
 
+// For a view fed from a buffer rather than a stream: the terminal rewrites its
+// last line as output arrives, and the shell may clear the screen outright.
+void drop_last_console_line(console_page_view* view);
+void clear_console_lines(console_page_view* view);
+
 }  // namespace gui2_pages
 
 #endif

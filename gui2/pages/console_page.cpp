@@ -111,6 +111,25 @@ void append_console_lines(console_page_view* view, const gui2_core::ui_metrics& 
   lv_obj_set_height(view->body, height);
 }
 
+void drop_last_console_line(console_page_view* view) {
+  if (view == nullptr || view->body == nullptr) return;
+  const uint32_t count = lv_obj_get_child_count(view->body);
+  if (count == 0) return;
+
+  lv_obj_t* last = lv_obj_get_child(view->body, count - 1);
+  if (last == nullptr) return;
+  view->next_y -= lv_obj_get_height(last) + view->line_gap;
+  if (view->next_y < 0) view->next_y = 0;
+  lv_obj_delete(last);
+}
+
+void clear_console_lines(console_page_view* view) {
+  if (view == nullptr || view->body == nullptr) return;
+  lv_obj_clean(view->body);
+  view->empty_label = nullptr;
+  view->next_y = 0;
+}
+
 void scroll_console_to_end(const console_page_view& view) {
   if (view.content == nullptr) return;
   lv_obj_scroll_to_y(view.content, lv_obj_get_scroll_bottom(view.content) +
