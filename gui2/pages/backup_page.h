@@ -4,6 +4,7 @@
 #include <cstddef>
 
 #include "backend/backup_backend.h"
+#include "components/keyboard.h"
 #include "components/swipe_slider.h"
 #include "components/tab_bar.h"
 #include "core/ui_metrics.h"
@@ -32,7 +33,9 @@ struct backup_page_options {
   const int* skip_digest_target = nullptr;
   const int* encrypt_target = nullptr;
   lv_event_cb_t option_callback = nullptr;
-  lv_event_cb_t keyboard_event_callback = nullptr;
+  gui2_components::keyboard* keyboard = nullptr;
+  gui2_components::keyboard_callback key_callback = nullptr;
+  void* keyboard_user_data = nullptr;
 
   gui2_components::tab_bar* tabs = nullptr;
   gui2_components::tab_bar::change_callback tab_callback = nullptr;

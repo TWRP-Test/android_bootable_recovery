@@ -4,6 +4,7 @@
 #include <cstddef>
 
 #include "backend/wipe_backend.h"
+#include "components/keyboard.h"
 #include "components/swipe_slider.h"
 #include "core/ui_metrics.h"
 #include "i18n/i18n.h"
@@ -52,7 +53,9 @@ struct format_data_page_options {
   const gui2_core::ui_metrics* metrics = nullptr;
   const gui2_i18n::language_pack* strings = nullptr;
   lv_event_cb_t input_event_callback = nullptr;
-  lv_event_cb_t keyboard_event_callback = nullptr;
+  gui2_components::keyboard* keyboard = nullptr;
+  gui2_components::keyboard_callback key_callback = nullptr;
+  void* keyboard_user_data = nullptr;
   gui2_components::swipe_slider* confirm = nullptr;
   void (*confirm_callback)(void*) = nullptr;
   void* confirm_user_data = nullptr;
