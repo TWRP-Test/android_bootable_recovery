@@ -2,6 +2,7 @@
 #define GUI2_PAGES_DECRYPT_PAGE_H
 
 #include "backend/decrypt_backend.h"
+#include "components/keyboard.h"
 #include "components/pattern_lock.h"
 #include "core/ui_metrics.h"
 #include "i18n/i18n.h"
@@ -21,8 +22,10 @@ struct decrypt_page_options {
   gui2_components::pattern_complete_callback pattern_callback = nullptr;
   gui2_components::pattern_dot_callback pattern_dot_callback = nullptr;
   void* pattern_user_data = nullptr;
-  lv_event_cb_t input_ready_callback = nullptr;
-  lv_event_cb_t keyboard_event_callback = nullptr;
+  gui2_components::keyboard* keyboard = nullptr;
+  gui2_components::keyboard_callback accept_callback = nullptr;
+  gui2_components::keyboard_callback key_callback = nullptr;
+  void* keyboard_user_data = nullptr;
   lv_event_cb_t language_callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
 };

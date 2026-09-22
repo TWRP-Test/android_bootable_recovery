@@ -118,27 +118,25 @@ backup_page_view build_backup_page(const backup_page_options& options) {
     lv_obj_set_style_text_font(view.password_input, metrics.text_font, LV_PART_MAIN);
   }
 
-  const int keyboard_height = std::min(metrics.height / 3, metrics.width * 2 / 3);
-  lv_obj_t* parent = options.overlay_layer != nullptr ? options.overlay_layer : view.options_pane;
-  view.keyboard = lv_keyboard_create(parent);
-  lv_obj_set_size(view.keyboard, metrics.width, keyboard_height);
-  lv_keyboard_set_mode(view.keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
-  if (options.overlay_layer != nullptr) {
-    lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
-    lv_obj_set_pos(view.keyboard, 0, metrics.height - keyboard_height);
-    lv_obj_add_flag(view.keyboard, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_event_cb(view.name_input, show_keyboard_cb, LV_EVENT_CLICKED, view.keyboard);
-    if (view.password_input != nullptr)
-      lv_obj_add_event_cb(view.password_input, show_keyboard_cb, LV_EVENT_CLICKED, view.keyboard);
-    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_READY, nullptr);
-    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_CANCEL, nullptr);
+  if (options.keyboard != nullptr) {
+    gui2_components::keyboard_options keyboard;
+    keyboard.parent = options.overlay_layer != nullptr ? options.overlay_layer : view.options_pane;
+    keyboard.metrics = &metrics;
+    keyboard.strings = &strings;
+    keyboard.textarea = view.name_input;
+    keyboard.start_hidden = options.overlay_layer != nullptr;
+    keyboard.key_callback = options.key_callback;
+    keyboard.user_data = options.keyboard_user_data;
+    view.keyboard = options.keyboard->create(keyboard);
+    if (view.keyboard != nullptr && options.overlay_layer != nullptr) {
+      lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
+      lv_obj_set_pos(view.keyboard, 0,
+                     metrics.height - gui2_components::keyboard_height(
+                                          metrics, gui2_components::keyboard_layout::LETTERS));
+      options.keyboard->bind(view.name_input);
+      options.keyboard->bind(view.password_input);
+    }
   }
-  lv_obj_set_style_radius(view.keyboard, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(view.keyboard, gui2_core::ui_px(72), LV_PART_MAIN);
-  lv_keyboard_set_textarea(view.keyboard, view.name_input);
-  lv_obj_set_style_text_font(view.keyboard, &lv_font_montserrat_48, LV_PART_ITEMS);
-  if (options.keyboard_event_callback != nullptr)
-    lv_obj_add_event_cb(view.keyboard, options.keyboard_event_callback, LV_EVENT_PRESSED, nullptr);
 
   show_backup_password(view, options.encrypt);
   show_backup_tab(view, options.active_tab);

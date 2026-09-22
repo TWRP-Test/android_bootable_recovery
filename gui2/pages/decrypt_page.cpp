@@ -4,7 +4,7 @@
 
 #include "components/apply_button.h"
 #include "components/icon.h"
-#include "components/keyboard_maps.h"
+#include "components/keyboard.h"
 #include "core/ui_helpers.h"
 #include "gui2_svg_assets.h"
 
@@ -13,16 +13,6 @@ namespace gui2_pages {
 namespace {
 
 constexpr uint32_t kAccent = 0x347FF1;
-
-void show_keyboard_cb(lv_event_t* event) {
-  auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_user_data(event));
-  if (keyboard != nullptr) lv_obj_remove_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-}
-
-void hide_keyboard_cb(lv_event_t* event) {
-  auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_target(event));
-  if (keyboard != nullptr) lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-}
 
 }  // namespace
 
@@ -111,31 +101,27 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
     lv_obj_set_style_text_font(view.input, metrics.text_font, LV_PART_MAIN);
     lv_obj_set_style_text_align(view.input, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
-    const int keyboard_height =
-        std::min(metrics.height / 3, metrics.width * 2 / 3);
-    lv_obj_t* parent = options.overlay_layer != nullptr ? options.overlay_layer : view.body;
-    view.keyboard = lv_keyboard_create(parent);
-    gui2_components::install_keyboard_maps(view.keyboard);
-    lv_obj_set_size(view.keyboard, metrics.width, keyboard_height);
-    lv_keyboard_set_mode(view.keyboard, options.kind == gui2_backend::lock_kind::PIN
-                                            ? LV_KEYBOARD_MODE_NUMBER
-                                            : LV_KEYBOARD_MODE_TEXT_LOWER);
-    if (options.overlay_layer != nullptr) {
-      lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
-      lv_obj_set_pos(view.keyboard, 0, metrics.height - keyboard_height);
-      lv_obj_add_event_cb(view.input, show_keyboard_cb, LV_EVENT_CLICKED, view.keyboard);
+    if (options.keyboard != nullptr) {
+      const gui2_components::keyboard_layout layout =
+          options.kind == gui2_backend::lock_kind::PIN ? gui2_components::keyboard_layout::NUMBER
+                                                       : gui2_components::keyboard_layout::LETTERS;
+      gui2_components::keyboard_options keyboard;
+      keyboard.parent = options.overlay_layer != nullptr ? options.overlay_layer : view.body;
+      keyboard.metrics = &metrics;
+      keyboard.strings = &strings;
+      keyboard.textarea = view.input;
+      keyboard.layout = layout;
+      keyboard.accept_callback = options.accept_callback;
+      keyboard.key_callback = options.key_callback;
+      keyboard.user_data = options.keyboard_user_data;
+      view.keyboard = options.keyboard->create(keyboard);
+      if (view.keyboard != nullptr && options.overlay_layer != nullptr) {
+        lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
+        lv_obj_set_pos(view.keyboard, 0,
+                       metrics.height - gui2_components::keyboard_height(metrics, layout));
+        options.keyboard->bind(view.input);
+      }
     }
-    lv_obj_set_style_radius(view.keyboard, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(view.keyboard, gui2_core::ui_px(72), LV_PART_MAIN);
-    lv_keyboard_set_textarea(view.keyboard, view.input);
-    lv_obj_set_style_text_font(view.keyboard, &lv_font_montserrat_48, LV_PART_ITEMS);
-    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_CANCEL, nullptr);
-    lv_obj_add_event_cb(view.keyboard, hide_keyboard_cb, LV_EVENT_READY, nullptr);
-    if (options.input_ready_callback != nullptr)
-      lv_obj_add_event_cb(view.keyboard, options.input_ready_callback, LV_EVENT_READY, nullptr);
-    if (options.keyboard_event_callback != nullptr)
-      lv_obj_add_event_cb(view.keyboard, options.keyboard_event_callback, LV_EVENT_PRESSED,
-                          nullptr);
   }
 
   if (options.language_callback != nullptr && options.page_layer != nullptr) {

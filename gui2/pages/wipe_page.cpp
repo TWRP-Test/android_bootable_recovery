@@ -6,7 +6,6 @@
 #include "components/setting_card.h"
 #include "components/check_row.h"
 #include "components/icon.h"
-#include "components/keyboard_maps.h"
 #include "gui2_svg_assets.h"
 #include "core/ui_helpers.h"
 
@@ -21,7 +20,6 @@ lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_set_height(body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
@@ -29,16 +27,6 @@ lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_add_flag(body, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
   gui2_core::disable_scrolling(body);
   return body;
-}
-
-void show_keyboard_cb(lv_event_t* event) {
-  auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_user_data(event));
-  if (keyboard != nullptr) lv_obj_remove_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-}
-
-void hide_keyboard_cb(lv_event_t* event) {
-  auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_target(event));
-  if (keyboard != nullptr) lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace
@@ -55,7 +43,7 @@ int wipe_hint_height(const gui2_core::ui_metrics& metrics, const char* text) {
 }
 
 int format_data_keyboard_height(const gui2_core::ui_metrics& metrics) {
-  return std::min(metrics.height / 3, metrics.width * 2 / 3);
+  return gui2_components::keyboard_height(metrics, gui2_components::keyboard_layout::LETTERS);
 }
 
 void build_wipe_page(const wipe_page_options& options) {
@@ -182,27 +170,22 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   if (options.input_event_callback != nullptr)
     lv_obj_add_event_cb(view.input, options.input_event_callback, LV_EVENT_VALUE_CHANGED, nullptr);
 
-  const int keyboard_height = format_data_keyboard_height(metrics);
-  lv_obj_t* keyboard =
-      lv_keyboard_create(options.overlay_layer != nullptr ? options.overlay_layer : view.body);
-  gui2_components::install_keyboard_maps(keyboard);
-  lv_obj_set_size(keyboard, metrics.width, keyboard_height);
-  if (options.overlay_layer != nullptr) {
-    lv_obj_set_align(keyboard, LV_ALIGN_TOP_LEFT);
-    lv_obj_set_pos(keyboard, 0, metrics.height - keyboard_height);
-    lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_event_cb(view.input, show_keyboard_cb, LV_EVENT_CLICKED, keyboard);
-    lv_obj_add_event_cb(keyboard, hide_keyboard_cb, LV_EVENT_READY, nullptr);
-    lv_obj_add_event_cb(keyboard, hide_keyboard_cb, LV_EVENT_CANCEL, nullptr);
+  if (options.keyboard != nullptr) {
+    gui2_components::keyboard_options keyboard;
+    keyboard.parent = options.overlay_layer != nullptr ? options.overlay_layer : view.body;
+    keyboard.metrics = &metrics;
+    keyboard.strings = &strings;
+    keyboard.textarea = view.input;
+    keyboard.start_hidden = options.overlay_layer != nullptr;
+    keyboard.key_callback = options.key_callback;
+    keyboard.user_data = options.keyboard_user_data;
+    view.keyboard = options.keyboard->create(keyboard);
+    if (view.keyboard != nullptr && options.overlay_layer != nullptr) {
+      lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
+      lv_obj_set_pos(view.keyboard, 0, metrics.height - format_data_keyboard_height(metrics));
+      options.keyboard->bind(view.input);
+    }
   }
-  if (options.keyboard_event_callback != nullptr)
-    lv_obj_add_event_cb(keyboard, options.keyboard_event_callback, LV_EVENT_PRESSED, nullptr);
-  lv_obj_set_style_radius(keyboard, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(keyboard, gui2_core::ui_px(72), LV_PART_MAIN);
-  lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
-  lv_keyboard_set_textarea(keyboard, view.input);
-  lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_48, LV_PART_ITEMS);
-  view.keyboard = keyboard;
 
   if (options.confirm != nullptr && options.page_layer != nullptr) {
     const int track_height = wipe_track_height();
