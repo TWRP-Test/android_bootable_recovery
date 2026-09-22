@@ -2298,6 +2298,9 @@ static void show_console_page(page_transition transition) {
     options.metrics = &ui;
     options.empty_text = strings().console_empty;
     options.font = runtime_console_fonts[page_state.console_font_index];
+    // The box fills what the tabs leave and scrolls inside, the way the
+    // terminal pane does, rather than growing the page past the screen.
+    options.self_scrolling = true;
     page_state.console = gui2_pages::build_console_page(options);
     if (page_state.console.body != nullptr) {
       lv_obj_set_pos(page_state.console.body, ui.outer_margin, tabs_offset);
