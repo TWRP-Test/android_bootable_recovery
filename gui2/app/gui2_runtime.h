@@ -2,6 +2,9 @@
 #define GUI2_APP_GUI2_RUNTIME_H
 
 #include "backend/console_backend.h"
+#include "backend/file_manager_backend.h"
+#include "backend/install_backend.h"
+#include "backend/terminal_backend.h"
 #include "backend/hardware_settings.h"
 #include "backend/log_export_backend.h"
 #include "backend/wipe_backend.h"
@@ -25,6 +28,10 @@ struct runtime_state {
   gui2_backend::decrypt_backend* decrypt = nullptr;
   gui2_backend::backup_backend* backup = nullptr;
   gui2_backend::mount_backend* mount = nullptr;
+  gui2_backend::restore_backend* restore = nullptr;
+  gui2_backend::terminal_backend* terminal = nullptr;
+  gui2_backend::file_manager_backend* file_manager = nullptr;
+  gui2_backend::install_backend* install = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };

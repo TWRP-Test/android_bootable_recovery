@@ -7,13 +7,21 @@
 #include "backend/hardware_settings.h"
 #include "backend/reboot_backend.h"
 #include "components/slider.h"
+#include "components/keyboard.h"
 #include "components/pattern_lock.h"
 #include "components/swipe_slider.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
+#include <string>
+#include <vector>
+
+#include "components/tab_bar.h"
 #include "pages/console_page.h"
+#include "components/keyboard.h"
+#include "pages/terminal_page.h"
 #include "pages/backup_page.h"
 #include "pages/progress_page.h"
+#include "pages/restore_page.h"
 #include "pages/page_router.h"
 #include "pages/reboot_page.h"
 
@@ -26,6 +34,7 @@ struct hardware_slider_binding {
   bool recording_fps = false;
   bool screen_timeout = false;
   bool console_font = false;
+  bool keyboard_lift = false;
   gui2_components::slider visual;
 };
 
@@ -61,12 +70,43 @@ struct page_state {
   hardware_slider_binding brightness_binding;
   hardware_slider_binding screen_timeout_binding;
   hardware_slider_binding console_font_binding;
+  hardware_slider_binding keyboard_lift_binding;
   hardware_slider_binding quick_brightness_binding;
   hardware_slider_binding haptic_bindings[3];
   hardware_slider_binding recording_binding;
   bool quick_brightness_dirty = false;
   int screen_timeout_index = 3;
   int console_font_index = 1;
+  // The console page has two tabs: recovery output and a shell.
+  size_t console_tab = 0;
+  gui2_components::tab_bar console_tabs;
+  terminal_page_view terminal_view;
+  gui2_components::keyboard terminal_keyboard_widget;
+  uint64_t terminal_last_poll_ms = 0;
+  // The file manager is one page at many depths; this is the depth.
+  std::string file_manager_path;
+  // What the options page is acting on, and what is waiting to be pasted.
+  std::string file_selection;
+  bool file_selection_is_folder = false;
+  std::string file_clipboard;
+  // The rename/chmod field: which of the two, and the mode to prefill.
+  bool file_input_is_mode = false;
+  std::string file_selection_mode;
+  gui2_components::keyboard file_input_keyboard;
+  lv_obj_t* file_input = nullptr;
+  // Install browses the same way the file manager does, with its own path.
+  std::string install_path;
+  std::string install_selection;
+  // Zips queue up the way legacy queues them; images never do.
+  std::vector<std::string> install_queue;
+  bool install_image = false;
+  size_t install_target_index = 0;
+  bool install_both_slots = false;
+  gui2_components::swipe_slider install_confirm;
+  progress_page_view install_progress;
+  size_t install_console_consumed = 0;
+  uint64_t install_last_poll_ms = 0;
+  bool file_clipboard_move = false;
   bool include_kernel_log = false;
   bool include_logcat = true;
   lv_obj_t* kernel_log_card = nullptr;
@@ -86,6 +126,9 @@ struct page_state {
   gui2_components::pattern_lock decrypt_pattern;
   lv_obj_t* decrypt_input = nullptr;
   lv_obj_t* decrypt_keyboard = nullptr;
+  gui2_components::keyboard decrypt_keyboard_widget;
+  gui2_components::keyboard format_data_keyboard_widget;
+  gui2_components::keyboard backup_keyboard_widget;
   lv_obj_t* decrypt_status = nullptr;
   bool decrypt_failed = false;
   bool language_from_decrypt = false;
@@ -106,6 +149,20 @@ struct page_state {
   progress_page_view backup_progress;
   size_t backup_console_consumed = 0;
   uint64_t backup_last_poll_ms = 0;
+  restore_page_view restore_view;
+  gui2_components::tab_bar restore_tabs;
+  gui2_components::swipe_slider restore_confirm;
+  gui2_components::keyboard restore_keyboard_widget;
+  bool restore_selected[24] = {};
+  size_t restore_target_count = 0;
+  size_t restore_active_tab = 0;
+  bool restore_check_digest = true;
+  bool restore_wrong_password = false;
+  std::string restore_path;
+  std::string restore_name;
+  progress_page_view restore_progress;
+  size_t restore_console_consumed = 0;
+  uint64_t restore_last_poll_ms = 0;
   size_t mount_target_count = 0;
   size_t console_consumed = 0;
   uint64_t console_last_poll_ms = 0;
