@@ -31,6 +31,7 @@ bool initialize_graphics(const gui2_context* context, graphics_state* state,
   state->text_font = state->fonts.text();
   state->status_font = state->fonts.status();
   state->brand_font = state->fonts.brand();
+  state->keyboard_font = state->fonts.keyboard();
   for (int i = 0; i < gui2_theme::font_manager::console_count(); ++i)
     state->console_fonts[i] = state->fonts.console(i);
 
@@ -63,6 +64,7 @@ void shutdown_graphics(graphics_state* state, bool keep_display) {
   state->text_font = nullptr;
   state->status_font = nullptr;
   state->brand_font = nullptr;
+  state->keyboard_font = nullptr;
   for (lv_font_t*& font : state->console_fonts) font = nullptr;
   state->pointer_indev = nullptr;
   if (state->events_initialized) {

@@ -33,6 +33,10 @@
 #include "gui2/backend/twrp_backup_backend.h"
 #include "gui2/backend/twrp_decrypt_backend.h"
 #include "gui2/backend/twrp_mount_backend.h"
+#include "gui2/backend/twrp_restore_backend.h"
+#include "gui2/backend/twrp_file_manager_backend.h"
+#include "gui2/backend/twrp_install_backend.h"
+#include "gui2/backend/twrp_terminal_backend.h"
 #include "gui2/backend/twrp_hardware_settings.h"
 #include "gui2/backend/twrp_log_export_backend.h"
 #include "gui2/backend/twrp_reboot_backend.h"
@@ -536,6 +540,10 @@ int main(int argc, char **argv) {
 	gui2_backend::twrp_decrypt_backend decrypt_backend;
 	gui2_backend::twrp_backup_backend backup_backend;
 	gui2_backend::twrp_mount_backend mount_backend;
+	gui2_backend::twrp_restore_backend restore_backend;
+	gui2_backend::twrp_terminal_backend terminal_backend;
+	gui2_backend::twrp_file_manager_backend file_manager_backend;
+	gui2_backend::twrp_install_backend install_backend;
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
@@ -547,6 +555,10 @@ int main(int argc, char **argv) {
 	gui2_context_value.decrypt = &decrypt_backend;
 	gui2_context_value.backup = &backup_backend;
 	gui2_context_value.mount = &mount_backend;
+	gui2_context_value.restore = &restore_backend;
+	gui2_context_value.terminal = &terminal_backend;
+	gui2_context_value.file_manager = &file_manager_backend;
+	gui2_context_value.install = &install_backend;
 	gui2_context_value.display_initialized = true;
 	const int gui2_result = gui2_start(&gui2_context_value);
 

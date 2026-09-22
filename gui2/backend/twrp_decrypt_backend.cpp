@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "data.hpp"
+#include "twrpinstall/include/set_metadata.h"
 #include "partitions.hpp"
 #include "variables.h"
 
@@ -77,7 +78,13 @@ void twrp_decrypt_backend::run(std::string password) {
     DataManager::SetBackupFolder();
     // Startup already ran this while /data was still locked.
     DataManager::LoadTWRPFolderInfo();
-    PartitionManager.Update_System_Details();
+    // Deliberately no Update_System_Details() here. It walks /data to size a
+    // backup, and it only skips that walk while /data is locked, so running it
+    // the moment the unlock succeeds stalls on the partition that was just
+    // opened. The legacy flow does not do it either; whatever needs the sizes
+    // asks for them itself.
+    if (DataManager::GetIntValue(TW_HAS_DATA_MEDIA) != 0)
+      tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str());
   }
 
   {
