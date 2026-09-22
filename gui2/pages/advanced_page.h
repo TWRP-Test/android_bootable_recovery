@@ -13,6 +13,7 @@ struct advanced_page_options {
   const gui2_i18n::language_pack* strings = nullptr;
   lv_event_cb_t option_event_callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
+  const void* file_manager_target = nullptr;
   const void* export_log_target = nullptr;
 };
 

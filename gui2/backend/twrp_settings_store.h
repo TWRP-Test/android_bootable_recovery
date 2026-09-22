@@ -12,6 +12,7 @@ class twrp_settings_store final : public settings_store {
   bool set_persistent(const std::string& key, const std::string& value) override;
   bool flush() override;
   void update_timezone() override;
+  bool restore_defaults() override;
 };
 
 }  // namespace gui2_backend

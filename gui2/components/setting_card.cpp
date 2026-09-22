@@ -63,12 +63,16 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
   lv_obj_set_style_text_color(title_label, metrics.primary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(title_label, metrics.text_font, LV_PART_MAIN);
 
-  lv_obj_t* detail_label = lv_label_create(text_block);
-  lv_label_set_text(detail_label, detail);
-  lv_label_set_long_mode(detail_label, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(detail_label, text_width);
-  lv_obj_set_style_text_color(detail_label, metrics.secondary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(detail_label, metrics.status_font, LV_PART_MAIN);
+  // A card with nothing more to say gets one line. Passing a null pointer to
+  // lv_label_set_text would leave LVGL's own placeholder behind instead.
+  if (detail != nullptr && detail[0] != '\0') {
+    lv_obj_t* detail_label = lv_label_create(text_block);
+    lv_label_set_text(detail_label, detail);
+    lv_label_set_long_mode(detail_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(detail_label, text_width);
+    lv_obj_set_style_text_color(detail_label, metrics.secondary_text, LV_PART_MAIN);
+    lv_obj_set_style_text_font(detail_label, metrics.status_font, LV_PART_MAIN);
+  }
 
   lv_obj_update_layout(text_block);
   card_height = std::max(card_height, lv_obj_get_height(text_block) + gui2_core::ui_px(32));

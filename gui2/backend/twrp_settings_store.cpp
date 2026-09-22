@@ -1,6 +1,7 @@
 #include "twrp_settings_store.h"
 
 #include "data.hpp"
+#include "partitions.hpp"
 
 namespace gui2_backend {
 
@@ -25,6 +26,13 @@ bool twrp_settings_store::flush() {
 
 void twrp_settings_store::update_timezone() {
   DataManager::update_tz_environment_variables();
+}
+
+bool twrp_settings_store::restore_defaults() {
+  if (DataManager::ResetDefaults() != 0) return false;
+  PartitionManager.Update_System_Details();
+  PartitionManager.Mount_Current_Storage(true);
+  return true;
 }
 
 }  // namespace gui2_backend

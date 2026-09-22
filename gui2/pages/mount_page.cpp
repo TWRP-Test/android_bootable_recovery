@@ -1,7 +1,10 @@
 #include "pages/mount_page.h"
 
+#include <cstdio>
+
 #include "components/check_row.h"
 #include "components/section_label.h"
+#include "components/setting_card.h"
 #include "core/ui_helpers.h"
 
 namespace gui2_pages {
@@ -25,6 +28,14 @@ void build_mount_page(const mount_page_options& options) {
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   gui2_core::disable_scrolling(body);
 
+  if (options.storage_name != nullptr && options.storage_name[0] != '\0') {
+    gui2_components::create_section_label(body, metrics, strings.mount_storage_section);
+    gui2_components::create_setting_card(body, metrics, options.storage_name, options.storage_free,
+                                         options.storage_callback, options.storage_target,
+                                         options.press_guard_callback);
+  }
+
+  gui2_components::create_section_label(body, metrics, strings.mount_partitions_section);
   for (size_t i = 0; i < options.target_count; ++i) {
     gui2_components::create_check_row(
         body, metrics, options.targets[i].name.c_str(), options.targets[i].mounted,
@@ -38,6 +49,25 @@ void build_mount_page(const mount_page_options& options) {
         body, metrics, strings.mount_system_writable, options.system_writable,
         options.system_callback,
         const_cast<void*>(static_cast<const void*>(options.system_target)));
+  }
+
+  gui2_components::create_section_label(body, metrics, strings.mount_other_section);
+  if (options.mtp_target != nullptr) {
+    gui2_components::create_check_row(
+        body, metrics, strings.mount_mtp, options.mtp_enabled, options.toggle_callback,
+        const_cast<void*>(static_cast<const void*>(options.mtp_target)));
+  }
+  if (options.has_usb_storage && options.usb_storage_target != nullptr) {
+    gui2_components::create_check_row(
+        body, metrics, strings.mount_usb_storage, options.usb_storage_enabled,
+        options.toggle_callback,
+        const_cast<void*>(static_cast<const void*>(options.usb_storage_target)));
+  }
+  if (options.has_decrypt) {
+    gui2_components::create_setting_card(body, metrics, strings.mount_decrypt_data,
+                                         strings.mount_decrypt_data_detail,
+                                         options.decrypt_callback, options.decrypt_target,
+                                         options.press_guard_callback);
   }
 }
 
