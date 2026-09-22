@@ -2190,15 +2190,41 @@ static void append_terminal_text(const std::string& text) {
   gui2_pages::scroll_console_to_end(page_state.terminal_view.output);
 }
 
-static void poll_terminal(void) {
+// The engine keeps the text; the page only mirrors it. Only the lines that are
+// new get built, plus the last one again, because the shell keeps writing into
+// it until it ends.
+static void render_terminal_buffer(void) {
   if (terminal == nullptr || page_state.terminal_view.output.body == nullptr) return;
-  append_terminal_text(terminal->take_output());
+
+  const int counter = terminal->update_counter();
+  if (counter == page_state.terminal_update_counter) return;
+  page_state.terminal_update_counter = counter;
+
+  const size_t count = terminal->line_count();
+  if (count < page_state.terminal_rendered) {
+    // The shell cleared the screen.
+    gui2_pages::clear_console_lines(&page_state.terminal_view.output);
+    page_state.terminal_rendered = 0;
+  } else if (page_state.terminal_rendered > 0) {
+    gui2_pages::drop_last_console_line(&page_state.terminal_view.output);
+    --page_state.terminal_rendered;
+  }
+
+  std::vector<gui2_backend::console_line> lines;
+  for (size_t i = page_state.terminal_rendered; i < count; ++i)
+    lines.push_back({ terminal->line(i), gui2_backend::console_severity::NORMAL });
+  if (!lines.empty()) {
+    gui2_pages::append_console_lines(&page_state.terminal_view.output, ui, lines);
+    gui2_pages::scroll_console_to_end(page_state.terminal_view.output);
+  }
+  page_state.terminal_rendered = count;
 }
 
-static void refresh_terminal_prompt(void) {
-  if (terminal == nullptr || page_state.terminal_view.prompt == nullptr) return;
-  const std::string where = terminal->working_directory();
-  lv_label_set_text(page_state.terminal_view.prompt, (where + " #").c_str());
+static void poll_terminal(void) {
+  if (terminal == nullptr) return;
+  // gui2 does not run the legacy loop that would otherwise do this.
+  terminal->pump();
+  render_terminal_buffer();
 }
 
 static void terminal_run_cb(void*) {
@@ -2207,15 +2233,16 @@ static void terminal_run_cb(void*) {
   const std::string command = text == nullptr ? std::string() : text;
   lv_textarea_set_text(page_state.terminal_view.input, "");
   if (command.empty()) return;
-  // Echo it the way a terminal does, so the output has something to hang off.
-  append_terminal_text(terminal->working_directory() + " # " + command + "\n");
-  if (!terminal->send_line(command)) append_terminal_text(strings().terminal_unavailable);
+  // No echo here: the shell writes the prompt and the command into the buffer
+  // itself, and the buffer is what the page shows.
+  terminal->send_line(command);
 }
 
 static void terminal_interrupt_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   if (terminal == nullptr) return;
   terminal->send_byte('\x03');
+  poll_terminal();
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
@@ -2302,9 +2329,18 @@ static void show_console_page(page_transition transition) {
   options.hidden_callback = terminal_keyboard_hidden_cb;
   page_state.terminal_view = gui2_pages::build_terminal_page(options);
   page_state.terminal_last_poll_ms = 0;
-  if (terminal != nullptr && !terminal->start())
-    append_terminal_text(strings().terminal_unavailable);
-  refresh_terminal_prompt();
+  // The view is new, so nothing of the buffer is on it yet.
+  page_state.terminal_rendered = 0;
+  page_state.terminal_update_counter = -1;
+  if (terminal != nullptr) {
+    if (!terminal->start()) {
+      append_terminal_text(strings().terminal_unavailable);
+    } else {
+      // How wide the engine should wrap. The page wraps long lines itself, so
+      // this only has to be wide enough that the shell does not wrap first.
+      terminal->set_size(160, 40);
+    }
+  }
   poll_terminal();
 }
 

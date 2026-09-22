@@ -83,6 +83,10 @@ struct page_state {
   terminal_page_view terminal_view;
   gui2_components::keyboard terminal_keyboard_widget;
   uint64_t terminal_last_poll_ms = 0;
+  // How much of the engine's buffer is on screen, and the counter that says
+  // whether it changed at all.
+  size_t terminal_rendered = 0;
+  int terminal_update_counter = -1;
   // The file manager is one page at many depths; this is the depth.
   std::string file_manager_path;
   // What the options page is acting on, and what is waiting to be pasted.
