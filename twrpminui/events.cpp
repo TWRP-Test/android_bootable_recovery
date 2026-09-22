@@ -159,9 +159,22 @@ static struct timeval lastInputStat;
 static time_t lastInputMTime;
 static int has_mouse = 0;
 
-static TWRPTouchPoint pending_touch_events[TWRP_MAX_TOUCH_EVENTS];
-static int pending_touch_event_count = 0;
-static bool pending_touch_frame = false;
+// Frames were kept one at a time, so a press and the release after it landing
+// inside the same UI tick overwrote each other and the tap was never seen.
+// Keep a short queue instead. A frame is folded into the previous one only when
+// the same contacts are still down, so dragging stays on the finger while taps
+// survive.
+#define TWRP_TOUCH_FRAME_SLOTS 16
+
+struct TWRPTouchFrame {
+    TWRPTouchPoint points[TWRP_MAX_TOUCH_EVENTS];
+    int count;
+};
+
+static TWRPTouchFrame pending_touch_frames[TWRP_TOUCH_FRAME_SLOTS];
+static int pending_touch_head = 0;
+static int pending_touch_tail = 0;
+static int pending_touch_queued = 0;
 
 #define BITS_PER_LONG (sizeof(long) * 8)
 #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
@@ -469,8 +482,9 @@ int ev_init(void)
     int fd;
 
     has_mouse = 0;
-    pending_touch_event_count = 0;
-    pending_touch_frame = false;
+    pending_touch_head = 0;
+    pending_touch_tail = 0;
+    pending_touch_queued = 0;
 
 	dir = opendir("/dev/input");
     if(dir != 0) {
@@ -522,8 +536,9 @@ void ev_exit(void)
 		close(ev_fds[ev_count].fd);
 	}
 	ev_count = 0;
-    pending_touch_event_count = 0;
-    pending_touch_frame = false;
+    pending_touch_head = 0;
+    pending_touch_tail = 0;
+    pending_touch_queued = 0;
 }
 
 /*static int vk_inside_display(__s32 value, struct input_absinfo *info, int screen_size)
@@ -598,6 +613,17 @@ static bool mt_point_to_screen(const struct ev *e, int raw_x, int raw_y, int *x,
     return true;
 }
 
+static bool mt_same_contacts(const TWRPTouchFrame *frame, const TWRPTouchPoint *points, int count)
+{
+    if (frame->count != count)
+        return false;
+    for (int i = 0; i < count; ++i) {
+        if (frame->points[i].id != points[i].id || frame->points[i].pressed != points[i].pressed)
+            return false;
+    }
+    return true;
+}
+
 static void mt_publish_frame(const TWRPTouchPoint *points, int count)
 {
     if (count < 0)
@@ -605,10 +631,26 @@ static void mt_publish_frame(const TWRPTouchPoint *points, int count)
     if (count > TWRP_MAX_TOUCH_EVENTS)
         count = TWRP_MAX_TOUCH_EVENTS;
 
+    if (pending_touch_queued > 0) {
+        const int last = (pending_touch_head + TWRP_TOUCH_FRAME_SLOTS - 1) % TWRP_TOUCH_FRAME_SLOTS;
+        if (mt_same_contacts(&pending_touch_frames[last], points, count)) {
+            for (int i = 0; i < count; ++i)
+                pending_touch_frames[last].points[i] = points[i];
+            return;
+        }
+    }
+
+    if (pending_touch_queued == TWRP_TOUCH_FRAME_SLOTS) {
+        pending_touch_tail = (pending_touch_tail + 1) % TWRP_TOUCH_FRAME_SLOTS;
+        --pending_touch_queued;
+    }
+
+    TWRPTouchFrame *slot = &pending_touch_frames[pending_touch_head];
     for (int i = 0; i < count; ++i)
-        pending_touch_events[i] = points[i];
-    pending_touch_event_count = count;
-    pending_touch_frame = true;
+        slot->points[i] = points[i];
+    slot->count = count;
+    pending_touch_head = (pending_touch_head + 1) % TWRP_TOUCH_FRAME_SLOTS;
+    ++pending_touch_queued;
 }
 
 static void mt_add_release(struct ev *e, int id, int raw_x, int raw_y)
@@ -1235,18 +1277,19 @@ int ev_get(struct input_event *ev, int timeout_ms)
 
 int twrp_input_take_touch_events(TWRPTouchPoint* points, int max_points)
 {
-    if (!pending_touch_frame)
+    if (pending_touch_queued <= 0)
         return -1;
 
-    const int count = pending_touch_event_count;
+    const TWRPTouchFrame *frame = &pending_touch_frames[pending_touch_tail];
+    const int count = frame->count;
     if (points != nullptr && max_points > 0) {
         const int copy_count = count < max_points ? count : max_points;
         for (int i = 0; i < copy_count; ++i)
-            points[i] = pending_touch_events[i];
+            points[i] = frame->points[i];
     }
 
-    pending_touch_event_count = 0;
-    pending_touch_frame = false;
+    pending_touch_tail = (pending_touch_tail + 1) % TWRP_TOUCH_FRAME_SLOTS;
+    --pending_touch_queued;
     return count;
 }
 
