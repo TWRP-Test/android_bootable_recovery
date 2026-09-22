@@ -15,7 +15,9 @@ lv_obj_t* create_navigation_fade(lv_obj_t* page_layer, const gui2_core::ui_metri
 // sliding under the navigation, so a page that does not scroll, and a page
 // already scrolled to its end, must not show one.
 void bind_navigation_fade(lv_obj_t* fade, lv_obj_t* content);
-void update_navigation_fade(lv_obj_t* fade, lv_obj_t* content);
+// animate is off for a page's first state: a rebuilt page would otherwise
+// drop the gradient the old one was showing and fade it back in.
+void update_navigation_fade(lv_obj_t* fade, lv_obj_t* content, bool animate = true);
 
 }  // namespace gui2_shell
 

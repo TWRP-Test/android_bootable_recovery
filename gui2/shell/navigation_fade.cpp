@@ -21,11 +21,18 @@ void scroll_event_cb(lv_event_t* event) {
 
 }  // namespace
 
-void update_navigation_fade(lv_obj_t* fade, lv_obj_t* content) {
+void update_navigation_fade(lv_obj_t* fade, lv_obj_t* content, bool animate) {
   if (fade == nullptr || content == nullptr) return;
   // A couple of pixels of slack: elastic scrolling overshoots, and a list that
   // ends exactly at the edge should not flicker.
   const bool wanted = lv_obj_get_scroll_bottom(content) > gui2_core::ui_px(4);
+  if (!animate) {
+    // Also overrides a fade a scroll event started while the page was built.
+    lv_anim_delete(fade, nullptr);
+    lv_obj_set_style_opa(fade, wanted ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_user_data(fade, wanted ? fade : nullptr);
+    return;
+  }
   if (wanted == fade_is_shown(fade)) return;
   lv_obj_set_user_data(fade, wanted ? fade : nullptr);
   if (wanted)

@@ -123,7 +123,7 @@ void page_host::settle() {
     lv_obj_remove_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
   }
 
-  update_navigation_fade(fade_, content_);
+  update_navigation_fade(fade_, content_, false);
   start_transition();
 }
 
