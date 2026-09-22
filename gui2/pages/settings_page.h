@@ -13,6 +13,8 @@ struct settings_page_options {
   const gui2_i18n::language_pack* strings = nullptr;
   lv_event_cb_t option_event_callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
+  const void* general_target = nullptr;
+  const void* keyboard_target = nullptr;
   const void* language_target = nullptr;
   const void* timezone_target = nullptr;
   const void* screen_target = nullptr;

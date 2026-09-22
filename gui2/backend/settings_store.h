@@ -14,6 +14,9 @@ class settings_store {
   virtual bool set_persistent(const std::string& key, const std::string& value) = 0;
   virtual bool flush() = 0;
   virtual void update_timezone() = 0;
+  // Puts every recovery variable back to its built-in value and
+  // remounts storage, the way the legacy Restore Defaults button does.
+  virtual bool restore_defaults() = 0;
 };
 
 }  // namespace gui2_backend

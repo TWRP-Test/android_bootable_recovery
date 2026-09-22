@@ -18,6 +18,7 @@ struct reboot_option {
 
 struct reboot_page_options {
   lv_obj_t* content = nullptr;
+  lv_obj_t* page_layer = nullptr;
   const gui2_core::ui_metrics* metrics = nullptr;
   const gui2_i18n::language_pack* strings = nullptr;
 
@@ -43,7 +44,11 @@ struct reboot_page_options {
 
 struct reboot_page_view {
   lv_obj_t* body = nullptr;
+  lv_obj_t* slider_track = nullptr;
 };
+
+// The height the confirmation slider takes at the bottom of the page.
+int reboot_track_height();
 
 reboot_page_view build_reboot_page(const reboot_page_options& options);
 

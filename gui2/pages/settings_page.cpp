@@ -10,6 +10,16 @@ void build_settings_page(const settings_page_options& options) {
 
   const auto& metrics = *options.metrics;
   const auto& strings = *options.strings;
+  gui2_components::create_setting_card(options.content, metrics,
+                                       strings.general_settings_title,
+                                       strings.general_settings_summary,
+                                       options.option_event_callback, options.general_target,
+                                       options.press_guard_callback);
+  gui2_components::create_setting_card(options.content, metrics,
+                                       strings.keyboard_settings_title,
+                                       strings.keyboard_settings_summary,
+                                       options.option_event_callback, options.keyboard_target,
+                                       options.press_guard_callback);
   gui2_components::create_setting_card(options.content, metrics, strings.language_title,
                                        strings.current_language_detail,
                                        options.option_event_callback, options.language_target,

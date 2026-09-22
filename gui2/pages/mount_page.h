@@ -18,6 +18,22 @@ struct mount_page_options {
   size_t target_count = 0;
   const int* target_indices = nullptr;
   lv_event_cb_t mount_callback = nullptr;
+  // Current storage, shown the way the legacy header shows it.
+  const char* storage_name = nullptr;
+  const char* storage_free = nullptr;
+  lv_event_cb_t storage_callback = nullptr;
+  const void* storage_target = nullptr;
+  lv_event_cb_t press_guard_callback = nullptr;
+  // Only offered while data is still locked.
+  bool has_decrypt = false;
+  lv_event_cb_t decrypt_callback = nullptr;
+  const void* decrypt_target = nullptr;
+  bool mtp_enabled = false;
+  const int* mtp_target = nullptr;
+  bool has_usb_storage = false;
+  bool usb_storage_enabled = false;
+  const int* usb_storage_target = nullptr;
+  lv_event_cb_t toggle_callback = nullptr;
   bool has_system = false;
   bool system_writable = false;
   const int* system_target = nullptr;
