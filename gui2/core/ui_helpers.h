@@ -13,6 +13,10 @@ void set_surface_style(lv_obj_t* object, lv_color_t color,
 // explicit exception and enables scrolling at its call site.
 void disable_scrolling(lv_obj_t* object);
 
+// A thin bar on the right edge of anything that scrolls, so a long page shows
+// how much of it is left.
+void style_scrollbar(lv_obj_t* object, lv_color_t color);
+
 }  // namespace gui2_core
 
 #endif

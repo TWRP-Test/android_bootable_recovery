@@ -31,7 +31,6 @@ lv_obj_t* build_action_page(const action_page_options& options) {
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(body);
-  lv_obj_set_style_pad_bottom(body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);

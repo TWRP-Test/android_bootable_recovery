@@ -12,6 +12,7 @@ struct gui_shell_base_options {
   const lv_font_t* text_font = nullptr;
   const lv_font_t* status_font = nullptr;
   const lv_font_t* brand_font = nullptr;
+  const lv_font_t* keyboard_font = nullptr;
   const char* recording_text = nullptr;
   lv_event_cb_t status_gesture_callback = nullptr;
 };

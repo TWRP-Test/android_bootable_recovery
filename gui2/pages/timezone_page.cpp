@@ -56,7 +56,6 @@ timezone_page_view build_timezone_page(const timezone_page_options& options) {
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(view.body, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.body);
-  lv_obj_set_style_pad_bottom(view.body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(view.body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(view.body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);

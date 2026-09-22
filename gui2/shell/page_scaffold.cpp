@@ -61,15 +61,23 @@ page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::
   const int scroll_top = metrics.heading_top + metrics.heading_height + metrics.cards_top_gap;
   result.content = lv_obj_create(page_layer);
   lv_obj_set_pos(result.content, 0, scroll_top);
-  lv_obj_set_size(
-      result.content, metrics.width,
-      std::max(1, metrics.height - metrics.status_height - scroll_top - bottom_reserved));
+  // The reserve used to shorten the box, which cut the list off in a hard line
+  // above whatever floats at the bottom. Keep the box full height and spend the
+  // reserve as scroll room instead, so the content slides under the control and
+  // fades out behind the gradient.
+  lv_obj_set_size(result.content, metrics.width,
+                  std::max(1, metrics.height - metrics.status_height - scroll_top));
   gui2_core::set_surface_style(result.content, metrics.background);
   lv_obj_add_flag(result.content, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(result.content, LV_DIR_VER);
-  lv_obj_set_scrollbar_mode(result.content, LV_SCROLLBAR_MODE_OFF);
+  gui2_core::style_scrollbar(result.content, metrics.secondary_text);
   lv_obj_add_flag(result.content, LV_OBJ_FLAG_SCROLL_ELASTIC);
   lv_obj_set_style_pad_all(result.content, 0, LV_PART_MAIN);
+  // After pad_all, which would otherwise wipe it. One card gap past the
+  // control, or the last row stops flush against it and still reads as cut off.
+  lv_obj_set_style_pad_bottom(result.content,
+                              bottom_reserved > 0 ? bottom_reserved + metrics.cards_top_gap : 0,
+                              LV_PART_MAIN);
   return result;
 }
 

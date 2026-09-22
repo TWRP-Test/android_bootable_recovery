@@ -14,12 +14,15 @@ void page_host::initialize(lv_obj_t* layer, const gui2_core::ui_metrics& metrics
   current_page_ = nullptr;
   previous_page_ = nullptr;
   input_blocker_ = nullptr;
+  fade_ = nullptr;
+  reserved_ = 0;
   transition_ = gui2_core::page_transition::NONE;
   transition_active_ = false;
+  transition_pending_ = false;
 }
 
 page_scaffold_result page_host::build(const char* title, const char* summary, int bottom_reserved,
-                                      gui2_core::page_transition transition) {
+                                      gui2_core::page_transition transition, bool with_fade) {
   page_scaffold_result result;
   if (layer_ == nullptr || metrics_ == nullptr) return result;
 
@@ -36,8 +39,10 @@ page_scaffold_result page_host::build(const char* title, const char* summary, in
   gui2_core::disable_scrolling(new_page);
 
   result = build_page_scaffold(new_page, *metrics_, title, summary, bottom_reserved);
-  create_navigation_fade(new_page, *metrics_);
+  fade_ = with_fade ? create_navigation_fade(new_page, *metrics_, bottom_reserved) : nullptr;
+  reserved_ = bottom_reserved;
   content_ = result.content;
+  bind_navigation_fade(fade_, content_);
 
   if (current_page_ == nullptr) {
     current_page_ = new_page;
@@ -61,6 +66,15 @@ page_scaffold_result page_host::build(const char* title, const char* summary, in
     lv_obj_set_x(new_page, width);
   }
 
+  transition_pending_ = true;
+  return result;
+}
+
+void page_host::start_transition() {
+  if (!transition_pending_) return;
+  transition_pending_ = false;
+  if (current_page_ == nullptr || previous_page_ == nullptr || metrics_ == nullptr) return;
+
   // Keep both pages non-interactive until the new page is settled. The
   // blocker is inside page_layer, so the persistent navigation remains usable.
   input_blocker_ = lv_obj_create(layer_);
@@ -77,14 +91,40 @@ page_scaffold_result page_host::build(const char* title, const char* summary, in
   lv_anim_set_var(&animation, this);
   lv_anim_set_user_data(&animation, this);
   lv_anim_set_values(&animation, 0, 1000);
-  lv_anim_set_duration(
-      &animation, std::clamp(gui2_core::ui_px(220), gui2_core::ui_px(160), gui2_core::ui_px(280)));
+  lv_anim_set_duration(&animation, 220);
   lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
   lv_anim_set_exec_cb(&animation, animation_exec);
   lv_anim_set_completed_cb(&animation, animation_ready);
   transition_active_ = true;
   lv_anim_start(&animation);
-  return result;
+}
+
+void page_host::settle() {
+  if (content_ == nullptr || metrics_ == nullptr) return;
+
+  // Measure without the reserve first: what matters is whether the content
+  // reaches into the strip the floating control owns, not whether it fills the
+  // screen.
+  lv_obj_set_style_pad_bottom(content_, 0, LV_PART_MAIN);
+  lv_obj_update_layout(content_);
+  const int overflow = lv_obj_get_scroll_bottom(content_);
+  const int room = reserved_ > 0 ? reserved_ + metrics_->cards_top_gap : 0;
+  // Decide on the reserve alone. Counting the breathing gap as well makes a page
+  // that ends exactly at the control look like it overflows by that gap.
+  lv_obj_set_style_pad_bottom(content_, overflow + reserved_ > 0 ? room : 0, LV_PART_MAIN);
+  lv_obj_update_layout(content_);
+
+  // Elastic scrolling bounces even when there is nothing below, which reads as
+  // a page that scrolls when it should not. Take the flag off instead.
+  if (lv_obj_get_scroll_bottom(content_) > 0) {
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
+  } else {
+    lv_obj_scroll_to_y(content_, 0, LV_ANIM_OFF);
+    lv_obj_remove_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
+  }
+
+  update_navigation_fade(fade_, content_);
+  start_transition();
 }
 
 void page_host::clear() {

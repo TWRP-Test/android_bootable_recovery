@@ -37,7 +37,6 @@ hardware_page_view build_hardware_page(const hardware_page_options& options) {
   lv_obj_set_style_pad_left(view.body, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_right(view.body, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_top(view.body, gui2_core::ui_px(8), LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(view.body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(view.body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(view.body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);
