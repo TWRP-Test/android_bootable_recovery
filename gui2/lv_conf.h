@@ -1,4 +1,4 @@
-/* Minimal LVGL 9.5.0 configuration for the TWRP minui proof of concept. */
+/* Minimal LVGL 9.6.0 configuration for the TWRP minui proof of concept. */
 #ifndef LV_CONF_H
 #define LV_CONF_H
 
@@ -56,7 +56,7 @@
 /* Enable LVGL's vector/SVG renderer for GUI2-owned artwork. */
 #define LV_USE_MATRIX 1
 #define LV_USE_VECTOR_GRAPHIC 1
-#define LV_USE_THORVG_INTERNAL 1
+#define LV_USE_THORVG 1
 #define LV_USE_SVG 1
 #define LV_USE_SVG_ANIMATION 0
 #define LV_USE_SVG_DEBUG 0
