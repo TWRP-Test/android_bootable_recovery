@@ -25,7 +25,7 @@ void style_scrollbar(lv_obj_t* object, lv_color_t color) {
 
 void disable_scrolling(lv_obj_t* object) {
   if (object == nullptr) return;
-  lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable(object, false);
   lv_obj_set_scrollbar_mode(object, LV_SCROLLBAR_MODE_OFF);
 }
 

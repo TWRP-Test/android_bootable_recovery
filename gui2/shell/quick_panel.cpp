@@ -31,8 +31,8 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   lv_obj_set_pos(view.dismiss, 0, 0);
   gui2_core::set_surface_style(view.dismiss, lv_color_hex(0x000000), LV_OPA_30);
   lv_obj_set_style_pad_all(view.dismiss, 0, LV_PART_MAIN);
-  lv_obj_add_flag(view.dismiss, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(view.dismiss, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_clickable(view.dismiss, true);
+  lv_obj_set_press_lock(view.dismiss, true);
   gui2_core::disable_scrolling(view.dismiss);
   if (options.press_guard_callback != nullptr)
     lv_obj_add_event_cb(view.dismiss, options.press_guard_callback, LV_EVENT_ALL, nullptr);
@@ -47,9 +47,9 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   lv_obj_set_style_shadow_width(view.menu, gui2_core::ui_px(12), LV_PART_MAIN);
   lv_obj_set_style_shadow_opa(view.menu, 48, LV_PART_MAIN);
   lv_obj_set_style_shadow_offset_y(view.menu, gui2_core::ui_px(4), LV_PART_MAIN);
-  lv_obj_add_flag(view.menu, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-  lv_obj_add_flag(view.menu, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(view.menu, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_overflow_visible(view.menu, true);
+  lv_obj_set_clickable(view.menu, true);
+  lv_obj_set_press_lock(view.menu, true);
   gui2_core::disable_scrolling(view.menu);
   if (options.panel_gesture_callback != nullptr) {
     lv_obj_add_event_cb(view.menu, options.panel_gesture_callback, LV_EVENT_PRESSED, nullptr);
@@ -153,7 +153,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   lv_obj_set_style_text_align(view.feedback, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
   lv_obj_set_style_text_color(view.feedback, metrics.secondary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(view.feedback, metrics.status_font, LV_PART_MAIN);
-  lv_obj_add_flag(view.feedback, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.feedback, true);
   gui2_core::disable_scrolling(view.feedback);
 
   view.menu_open_y = metrics.status_height + std::max(gui2_core::ui_px(8), metrics.card_gap / 2);
@@ -165,9 +165,9 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   lv_obj_set_pos(view.screenshot_flash, 0, 0);
   gui2_core::set_surface_style(view.screenshot_flash, lv_color_hex(0xFFFFFF), LV_OPA_30);
   lv_obj_set_style_pad_all(view.screenshot_flash, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(view.screenshot_flash, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(view.screenshot_flash, false);
   gui2_core::disable_scrolling(view.screenshot_flash);
-  lv_obj_add_flag(view.screenshot_flash, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.screenshot_flash, true);
   return view;
 }
 
@@ -176,9 +176,9 @@ void set_quick_panel_feedback_visible(quick_panel_view* view, bool visible) {
 
   const int height = visible ? view->menu_expanded_height : view->menu_collapsed_height;
   if (visible)
-    lv_obj_clear_flag(view->feedback, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view->feedback, false);
   else
-    lv_obj_add_flag(view->feedback, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view->feedback, true);
 
   if (height == view->menu_height) return;
   view->menu_height = height;

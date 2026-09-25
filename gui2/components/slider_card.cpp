@@ -40,7 +40,7 @@ lv_obj_t* create_slider_card(lv_obj_t* parent, const gui2_core::ui_metrics& metr
   lv_obj_set_style_shadow_width(card, gui2_core::ui_px(10), LV_PART_MAIN);
   lv_obj_set_style_shadow_opa(card, 45, LV_PART_MAIN);
   lv_obj_set_style_shadow_offset_y(card, gui2_core::ui_px(3), LV_PART_MAIN);
-  lv_obj_add_flag(card, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(card, true);
   gui2_core::disable_scrolling(card);
 
   if (label != nullptr && label[0] != '\0') {

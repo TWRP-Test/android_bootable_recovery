@@ -113,7 +113,7 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   // Ctrl-C has nowhere else to live on a keyboard built from letters.
   lv_obj_t* interrupt = lv_obj_create(row);
   lv_obj_set_size(interrupt, interrupt_width, interrupt_width);
-  lv_obj_add_flag(interrupt, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(interrupt, true);
   gui2_core::set_surface_style(interrupt, lv_color_hex(kDanger));
   lv_obj_set_style_radius(interrupt, interrupt_width / 3, LV_PART_MAIN);
   lv_obj_set_style_border_width(interrupt, 0, LV_PART_MAIN);

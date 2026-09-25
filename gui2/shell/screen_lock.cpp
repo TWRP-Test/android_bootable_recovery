@@ -17,7 +17,7 @@ void screen_lock::create(const gui2_core::ui_metrics& metrics, const char* lock_
   gui2_core::set_surface_style(root_, lv_color_black(), LV_OPA_70);
   lv_obj_set_style_pad_all(root_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(root_);
-  lv_obj_add_flag(root_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(root_, true);
 
   const int lock_size =
       std::clamp(gui2_core::ui_px(880), gui2_core::ui_px(560),
@@ -44,16 +44,16 @@ void screen_lock::create(const gui2_core::ui_metrics& metrics, const char* lock_
 void screen_lock::show() {
   if (root_ != nullptr) {
     slider_.reset();
-    lv_obj_clear_flag(root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(root_, false);
   }
 }
 
 void screen_lock::hide() {
-  if (root_ != nullptr) lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
+  if (root_ != nullptr) lv_obj_set_hidden(root_, true);
 }
 
 bool screen_lock::visible() const {
-  return root_ != nullptr && !lv_obj_has_flag(root_, LV_OBJ_FLAG_HIDDEN);
+  return root_ != nullptr && !lv_obj_is_hidden(root_);
 }
 
 void screen_lock::reset() {

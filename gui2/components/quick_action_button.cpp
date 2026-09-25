@@ -22,8 +22,8 @@ lv_obj_t* create_quick_action_button(lv_obj_t* parent, const gui2_core::ui_metri
   lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.background, 18),
                             LV_STATE_PRESSED);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
-  if (gesture_callback != nullptr) lv_obj_add_flag(button, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_clickable(button, true);
+  if (gesture_callback != nullptr) lv_obj_set_press_lock(button, true);
   gui2_core::disable_scrolling(button);
   if (press_guard_callback != nullptr)
     lv_obj_add_event_cb(button, press_guard_callback, LV_EVENT_ALL, nullptr);

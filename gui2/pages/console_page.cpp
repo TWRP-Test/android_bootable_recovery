@@ -56,7 +56,7 @@ console_page_view build_console_page(const console_page_options& options) {
   lv_obj_set_style_pad_bottom(view.body, view.padding, LV_PART_MAIN);
   view.self_scrolling = options.self_scrolling;
   if (view.self_scrolling) {
-    lv_obj_add_flag(view.body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable(view.body, true);
     lv_obj_set_scroll_dir(view.body, LV_DIR_VER);
     gui2_core::style_scrollbar(view.body, metrics.secondary_text);
     view.content = view.body;

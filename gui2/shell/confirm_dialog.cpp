@@ -52,7 +52,7 @@ lv_obj_t* create_confirm_dialog(const confirm_dialog_options& options) {
     gui2_core::set_surface_style(button, color);
     lv_obj_set_style_radius(button, gui2_core::ui_px(24), LV_PART_MAIN);
     gui2_core::disable_scrolling(button);
-    lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(button, true);
     if (options.press_guard_callback != nullptr)
       lv_obj_add_event_cb(button, options.press_guard_callback, LV_EVENT_ALL, nullptr);
     if (callback != nullptr) lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, overlay);

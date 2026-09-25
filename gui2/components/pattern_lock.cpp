@@ -39,8 +39,8 @@ lv_obj_t* pattern_lock::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   gui2_core::set_surface_style(root_, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(root_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(root_);
-  lv_obj_add_flag(root_, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(root_, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_clickable(root_, true);
+  lv_obj_set_press_lock(root_, true);
   lv_obj_add_event_cb(root_, event_callback, LV_EVENT_ALL, this);
 
   path_ = lv_line_create(root_);
@@ -49,7 +49,7 @@ lv_obj_t* pattern_lock::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_obj_set_style_line_color(path_, lv_color_hex(kAccent), LV_PART_MAIN);
   lv_obj_set_style_line_width(path_, std::max(2, dot_size_ / 3), LV_PART_MAIN);
   lv_obj_set_style_line_rounded(path_, true, LV_PART_MAIN);
-  lv_obj_remove_flag(path_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(path_, false);
 
   for (int i = 0; i < kDots; ++i) {
     const lv_point_t center = center_of(i);
@@ -61,7 +61,7 @@ lv_obj_t* pattern_lock::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
     lv_obj_set_style_pad_all(dots_[i], 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(dots_[i], lv_color_hex(kIdle), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(dots_[i], LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_remove_flag(dots_[i], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(dots_[i], false);
     gui2_core::disable_scrolling(dots_[i]);
   }
   return root_;

@@ -804,9 +804,9 @@ static void refresh_recording_ui(void) {
   if (status_view.recording_indicator != nullptr) {
     lv_label_set_text(status_view.recording_indicator, strings().recording_indicator);
     if (recording)
-      lv_obj_clear_flag(status_view.recording_indicator, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(status_view.recording_indicator, false);
     else
-      lv_obj_add_flag(status_view.recording_indicator, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(status_view.recording_indicator, true);
   }
   if (quick_record_label != nullptr)
     lv_label_set_text(quick_record_label,
@@ -1000,9 +1000,9 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   const bool keeps_navigation = page_keeps_navigation(page);
   if (navigation_view.root != nullptr) {
     if (keeps_navigation)
-      lv_obj_remove_flag(navigation_view.root, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(navigation_view.root, false);
     else
-      lv_obj_add_flag(navigation_view.root, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(navigation_view.root, true);
   }
   // A page that keeps the navigation has to clear it, whether or not it asked
   // for room of its own.
@@ -1125,11 +1125,11 @@ static void refresh_language_options(void) {
 static void show_hardware_error(const char* text) {
   if (hardware_error_label == nullptr) return;
   lv_label_set_text(hardware_error_label, text);
-  lv_obj_clear_flag(hardware_error_label, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(hardware_error_label, false);
 }
 
 static void clear_hardware_error(void) {
-  if (hardware_error_label != nullptr) lv_obj_add_flag(hardware_error_label, LV_OBJ_FLAG_HIDDEN);
+  if (hardware_error_label != nullptr) lv_obj_set_hidden(hardware_error_label, true);
 }
 
 // The keys sit this far off the bottom edge. Stored as a percentage of the
@@ -3530,7 +3530,7 @@ static void export_log_event_cb(lv_event_t* event) {
     lv_label_set_text(page_state.export_result_label, strings().export_log_failed);
     lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
                                 LV_PART_MAIN);
-    lv_obj_clear_flag(page_state.export_result_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(page_state.export_result_label, false);
     return;
   }
 
@@ -3545,7 +3545,7 @@ static void export_log_event_cb(lv_event_t* event) {
     lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
                                 LV_PART_MAIN);
   }
-  lv_obj_clear_flag(page_state.export_result_label, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(page_state.export_result_label, false);
 }
 
 static void show_timezone_page(page_transition transition) {

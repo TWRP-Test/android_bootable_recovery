@@ -56,7 +56,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, 
   const lv_color_t fill = primary ? lv_color_hex(kAccent) : metrics.card_color;
   lv_obj_t* button = lv_obj_create(parent);
   lv_obj_set_size(button, width, height);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(button, true);
   gui2_core::set_surface_style(button, fill);
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);

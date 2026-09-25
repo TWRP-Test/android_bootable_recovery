@@ -84,7 +84,7 @@ void page_host::start_transition() {
   gui2_core::set_surface_style(input_blocker_, metrics_->background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(input_blocker_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(input_blocker_);
-  lv_obj_add_flag(input_blocker_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(input_blocker_, true);
 
   lv_anim_t animation;
   lv_anim_init(&animation);
@@ -117,10 +117,10 @@ void page_host::settle() {
   // Elastic scrolling bounces even when there is nothing below, which reads as
   // a page that scrolls when it should not. Take the flag off instead.
   if (lv_obj_get_scroll_bottom(content_) > 0) {
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable(content_, true);
   } else {
     lv_obj_scroll_to_y(content_, 0, LV_ANIM_OFF);
-    lv_obj_remove_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable(content_, false);
   }
 
   update_navigation_fade(fade_, content_, false);

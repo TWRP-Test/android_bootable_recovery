@@ -68,10 +68,10 @@ page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::
   lv_obj_set_size(result.content, metrics.width,
                   std::max(1, metrics.height - metrics.status_height - scroll_top));
   gui2_core::set_surface_style(result.content, metrics.background);
-  lv_obj_add_flag(result.content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable(result.content, true);
   lv_obj_set_scroll_dir(result.content, LV_DIR_VER);
   gui2_core::style_scrollbar(result.content, metrics.secondary_text);
-  lv_obj_add_flag(result.content, LV_OBJ_FLAG_SCROLL_ELASTIC);
+  lv_obj_set_scroll_elastic(result.content, true);
   lv_obj_set_style_pad_all(result.content, 0, LV_PART_MAIN);
   // After pad_all, which would otherwise wipe it. One card gap past the
   // control, or the last row stops flush against it and still reads as cut off.

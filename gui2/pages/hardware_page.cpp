@@ -42,12 +42,12 @@ hardware_page_view build_hardware_page(const hardware_page_options& options) {
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START);
-  lv_obj_add_flag(view.body, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(view.body, true);
   gui2_core::disable_scrolling(view.body);
 
   view.error_label = create_section_label(view.body, metrics, options.error_text);
   lv_obj_set_style_text_color(view.error_label, lv_color_hex(0xF0443E), LV_PART_MAIN);
-  lv_obj_add_flag(view.error_label, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.error_label, true);
 
   for (size_t i = 0; i < options.slider_count; ++i) {
     const auto& spec = options.sliders[i];

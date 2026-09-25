@@ -24,7 +24,7 @@ lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-  lv_obj_add_flag(body, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(body, true);
   gui2_core::disable_scrolling(body);
   return body;
 }

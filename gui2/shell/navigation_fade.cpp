@@ -85,7 +85,7 @@ lv_obj_t* create_navigation_fade(lv_obj_t* page_layer, const gui2_core::ui_metri
   lv_obj_set_style_bg_grad_stop(
       fade, static_cast<int32_t>(fade_height > 0 ? 255 * solid_from / fade_height : 255),
       LV_PART_MAIN);
-  lv_obj_clear_flag(fade, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(fade, false);
   gui2_core::disable_scrolling(fade);
   // Starts invisible; settle() turns it on once the page has been measured.
   lv_obj_set_style_opa(fade, LV_OPA_TRANSP, LV_PART_MAIN);

@@ -12,7 +12,7 @@ lv_obj_t* gui2_components::create_apply_button(lv_obj_t* page_layer,
   lv_obj_t* button = lv_obj_create(page_layer);
   lv_obj_set_size(button, metrics.content_width, height);
   lv_obj_set_pos(button, metrics.outer_margin, page_height - height - padding);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(button, true);
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_bg_color(button, lv_color_hex(0x347FF1), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);

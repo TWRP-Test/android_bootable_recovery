@@ -25,7 +25,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
   const int button_height = height > 0 ? height : size;
   lv_obj_set_size(button, button_width, button_height);
   gui2_core::disable_scrolling(button);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(button, true);
   if (embedded) {
     lv_obj_set_style_radius(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);

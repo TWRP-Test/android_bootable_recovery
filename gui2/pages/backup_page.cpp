@@ -27,12 +27,12 @@ lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) 
 
 void show_keyboard_cb(lv_event_t* event) {
   auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_user_data(event));
-  if (keyboard != nullptr) lv_obj_remove_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+  if (keyboard != nullptr) lv_obj_set_hidden(keyboard, false);
 }
 
 void hide_keyboard_cb(lv_event_t* event) {
   auto* keyboard = static_cast<lv_obj_t*>(lv_event_get_target(event));
-  if (keyboard != nullptr) lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+  if (keyboard != nullptr) lv_obj_set_hidden(keyboard, true);
 }
 
 }  // namespace
@@ -155,9 +155,9 @@ backup_page_view build_backup_page(const backup_page_options& options) {
 void show_backup_password(const backup_page_view& view, bool visible) {
   if (view.password_block == nullptr) return;
   if (visible)
-    lv_obj_remove_flag(view.password_block, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.password_block, false);
   else
-    lv_obj_add_flag(view.password_block, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.password_block, true);
 }
 
 void show_backup_tab(const backup_page_view& view, size_t index) {
@@ -165,11 +165,11 @@ void show_backup_tab(const backup_page_view& view, size_t index) {
   for (size_t i = 0; i < 2; ++i) {
     if (panes[i] == nullptr) continue;
     if (i == index)
-      lv_obj_remove_flag(panes[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(panes[i], false);
     else
-      lv_obj_add_flag(panes[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(panes[i], true);
   }
-  if (index != 1 && view.keyboard != nullptr) lv_obj_add_flag(view.keyboard, LV_OBJ_FLAG_HIDDEN);
+  if (index != 1 && view.keyboard != nullptr) lv_obj_set_hidden(view.keyboard, true);
 }
 
 }  // namespace gui2_pages

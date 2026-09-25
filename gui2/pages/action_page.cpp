@@ -74,7 +74,7 @@ lv_obj_t* build_action_page(const action_page_options& options) {
   lv_obj_set_flex_flow(text_block, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(text_block, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START);
-  lv_obj_clear_flag(text_block, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(text_block, false);
   gui2_core::disable_scrolling(text_block);
 
   lv_obj_t* title = lv_label_create(text_block);

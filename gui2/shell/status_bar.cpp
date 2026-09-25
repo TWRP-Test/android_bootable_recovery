@@ -52,8 +52,8 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
   lv_obj_set_size(view.root, metrics.width, metrics.status_height);
   gui2_core::set_surface_style(view.root, metrics.background);
   lv_obj_set_style_pad_all(view.root, 0, LV_PART_MAIN);
-  lv_obj_add_flag(view.root, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(view.root, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_clickable(view.root, true);
+  lv_obj_set_press_lock(view.root, true);
   if (gesture_callback != nullptr)
     lv_obj_add_event_cb(view.root, gesture_callback, LV_EVENT_ALL, nullptr);
   gui2_core::disable_scrolling(view.root);
@@ -77,14 +77,14 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
   if (view.wifi_icon != nullptr) {
     lv_obj_set_style_image_recolor(view.wifi_icon, metrics.primary_text, LV_PART_MAIN);
     lv_obj_set_style_image_recolor_opa(view.wifi_icon, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_add_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.wifi_icon, true);
   }
 
   view.recording_indicator = lv_label_create(view.root);
   lv_label_set_text(view.recording_indicator, recording_text == nullptr ? "" : recording_text);
   lv_obj_set_style_text_color(view.recording_indicator, lv_color_hex(0xF0443E), LV_PART_MAIN);
   lv_obj_set_style_text_font(view.recording_indicator, metrics.status_font, LV_PART_MAIN);
-  lv_obj_add_flag(view.recording_indicator, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.recording_indicator, true);
 
   layout_status_bar(view, metrics);
   return view;
@@ -113,9 +113,9 @@ void layout_status_bar(const status_bar_view& view, const gui2_core::ui_metrics&
 void set_status_bar_wifi(const status_bar_view& view, bool connected) {
   if (view.wifi_icon == nullptr) return;
   if (connected)
-    lv_obj_clear_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.wifi_icon, false);
   else
-    lv_obj_add_flag(view.wifi_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.wifi_icon, true);
 }
 
 void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics& metrics,
@@ -123,8 +123,8 @@ void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics&
   if (view.time_label != nullptr) lv_label_set_text(view.time_label, snapshot.time_text.c_str());
   if (view.battery_value == nullptr || view.battery_icon == nullptr) return;
   if (!snapshot.battery_valid) {
-    lv_obj_add_flag(view.battery_value, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(view.battery_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view.battery_value, true);
+    lv_obj_set_hidden(view.battery_icon, true);
     return;
   }
 
@@ -137,8 +137,8 @@ void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics&
                        battery_icon_for(snapshot.battery_percentage, snapshot.charging),
                        lv_obj_get_width(view.battery_icon), lv_obj_get_height(view.battery_icon)));
   layout_status_bar(view, metrics);
-  lv_obj_clear_flag(view.battery_value, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_clear_flag(view.battery_icon, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.battery_value, false);
+  lv_obj_set_hidden(view.battery_icon, false);
 }
 
 }  // namespace gui2_shell

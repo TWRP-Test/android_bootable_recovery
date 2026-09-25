@@ -22,7 +22,7 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
   int card_height = std::max(metrics.card_height, gui2_core::ui_px(132));
   lv_obj_t* card = lv_obj_create(parent);
   lv_obj_set_size(card, metrics.content_width, card_height);
-  lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(card, true);
   lv_obj_set_style_radius(card, card_height / 4, LV_PART_MAIN);
   lv_obj_set_style_bg_color(card, metrics.card_color, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
@@ -53,7 +53,7 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
   lv_obj_set_layout(text_block, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(text_block, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(text_block, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-  lv_obj_clear_flag(text_block, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(text_block, false);
   gui2_core::disable_scrolling(text_block);
 
   lv_obj_t* title_label = lv_label_create(text_block);
