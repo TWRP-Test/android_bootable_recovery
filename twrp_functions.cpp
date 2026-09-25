@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/klog.h>
+#include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -50,31 +51,26 @@
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_reboot.h>
+#include <cutils/properties.h>
 #include <selinux/label.h>
 
+#ifdef TW_INCLUDE_LIBRESETPROP
+#include <resetprop.hpp>
+#endif
+
 #include "abx.hpp"
+#include "bootloader_message/bootloader_message.h"
+#include "data.hpp"
+#include "gui/pages.hpp"
+#include "gui/rapidxml.hpp"
+#include "partitions.hpp"
 #include "set_metadata.h"
 #include "twcommon.h"
 #include "gui/gui.hpp"
 #include "oaes/oaes.hpp"
 #include "twinstall/install.h"
-
-#ifndef BUILD_TWRPTAR_MAIN
-#include <cutils/android_reboot.h>
-#include <cutils/properties.h>
-#include <sys/reboot.h>
-
-#include "data.hpp"
-#include "partitions.hpp"
 #include "variables.h"
-#include "bootloader_message/bootloader_message.h"
-#include "gui/pages.hpp"
-#include "gui/rapidxml.hpp"
-#endif // ndef BUILD_TWRPTAR_MAIN
-
-#ifdef TW_INCLUDE_LIBRESETPROP
-#include <resetprop.hpp>
-#endif
 
 selabel_handle* selinux_handle;
 
@@ -359,8 +355,6 @@ bool TWFunc::WaitForFile(const std::string& path, const std::chrono::nanoseconds
   }
   return false;
 }
-
-#ifndef BUILD_TWRPTAR_MAIN
 
 // Returns "/path" from a full /path/to/file.name
 std::string TWFunc::GetRootPath(const std::string& path) {
@@ -1427,5 +1421,3 @@ bool TWFunc::GetServiceFromManifest(const std::string& basepath, const std::stri
   }
   return ret;
 }
-
-#endif // ndef BUILD_TWRPTAR_MAIN

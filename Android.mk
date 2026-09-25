@@ -14,5 +14,4 @@
 
 LOCAL_PATH := $(call my-dir)
 
-include $(LOCAL_PATH)/prebuilt/Android.mk \
-        $(LOCAL_PATH)/twrpTarMain/Android.mk
+include $(LOCAL_PATH)/prebuilt/Android.mk

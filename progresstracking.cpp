@@ -21,10 +21,8 @@
 
 #include "progresstracking.hpp"
 #include "twcommon.h"
-#ifndef BUILD_TWRPTAR_MAIN
 #include "gui/gui.hpp"
 #include "data.hpp"
-#endif
 #include "twrp_functions.hpp"
 #include <time.h>
 #include <format>
@@ -74,7 +72,6 @@ void ProgressTracking::DisplayFileCount(const bool display) {
 }
 
 void ProgressTracking::UpdateDisplayDetails(const bool force) {
-#ifndef BUILD_TWRPTAR_MAIN
 	if (!force) {
 		// Do something to check the time frame and only update periodically to reduce the total number of GUI updates
 		timespec now;
@@ -109,5 +106,4 @@ void ProgressTracking::UpdateDisplayDetails(const bool force) {
 		sprintf(file_progress, file_prog.c_str(), current_count, file_count, (int)(display_percent));
 		DataManager::SetValue("tw_file_progress", file_progress);
 	}
-#endif
 }

@@ -27,9 +27,7 @@
 #include <string>
 #include <vector>
 
-#ifndef BUILD_TWRPTAR_MAIN
 #include "partitions.hpp"
-#endif
 
 namespace fs = std::filesystem;
 
@@ -124,7 +122,6 @@ public:
   // Kills processes using the given path so it can be unmounted
   static void KillForUseTargetProcess(const std::string& target);
 
-#ifndef BUILD_TWRPTAR_MAIN
   // Recursively makes the entire path, creating each level with default metadata (ownership
   // and SELinux contexts). Returns false with a GUI error when a level cannot be created
   static bool RecursiveMkdir(const std::string& path);
@@ -280,8 +277,5 @@ private:
 };
 
 extern int Log_Offset;
-#else
-};
-#endif // ndef BUILD_TWRPTAR_MAIN
 
 #endif // TWRP_FUNCTIONS_HPP

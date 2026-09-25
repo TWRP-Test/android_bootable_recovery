@@ -48,11 +48,9 @@ extern "C" {
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"
 
-#ifndef BUILD_TWRPTAR_MAIN
 #include "data.hpp"
 #include "infomanager.hpp"
 #include "set_metadata.h"
-#endif //ndef BUILD_TWRPTAR_MAIN
 
 #ifdef TW_INCLUDE_FBE
 #ifdef USE_FSCRYPT
@@ -128,13 +126,11 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 		return -1;
 	}
 
-#ifndef BUILD_TWRPTAR_MAIN
 	if (part_settings->adbbackup) {
 		std::string Backup_FileName(tarfn);
 		if (!twadbbu::Write_TWFN(Backup_FileName, Total_Backup_Size, use_compression))
 			return -1;
 	}
-#endif
 
 	if (pipe(progress_pipe) < 0) {
 		LOGINFO("Error creating progress tracking pipe\n");
@@ -460,7 +456,6 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			}
 		}
 		close(progress_pipe[0]);
-#ifndef BUILD_TWRPTAR_MAIN
 		DataManager::SetValue("tw_file_progress", "");
 		DataManager::SetValue("tw_size_progress", "");
 		part_settings->progress->DisplayFileCount(false);
@@ -480,7 +475,6 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			backup_info["file_count"] = files_backup;
 			backup_info.SaveValues();
 		}
-#endif //ndef BUILD_TWRPTAR_MAIN
 		if (TWFunc::WaitForChild(*tar_fork_pid, &status, "createTarFork()") != 0)
 			return -1;
 	}
@@ -719,12 +713,10 @@ int twrpTar::extractTar() {
 		gui_err("restore_error=Error during restore process.");
 		return -1;
 	}
-#ifndef BUILD_TWRPTAR_MAIN
 	if (part_settings->adbbackup) {
 		if (!twadbbu::Write_TWEOF())
 			return -1;
 	}
-#endif
 	return 0;
 }
 
@@ -1354,15 +1346,11 @@ int twrpTar::closeTar() {
 			gui_msg(Msg(msg::kError, "backup_size=Backup file size for '{1}' is 0 bytes.")(tarfn));
 			return -1;
 		}
-#ifndef BUILD_TWRPTAR_MAIN
 		tw_set_default_metadata(tarfn.c_str());
-#endif
 	}
 	else {
-#ifndef BUILD_TWRPTAR_MAIN
 		if (!twadbbu::Write_TWEOF())
 			return -1;
-#endif
 	}
 	if (input_fd >= 0)
 		close(input_fd);
@@ -1433,14 +1421,12 @@ uint64_t twrpTar::get_size() {
 					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
 				}
 			}
-	#ifndef BUILD_TWRPTAR_MAIN
 	        if (!part_settings->adbbackup) {
-			InfoManager backup_info(tarfn + ".info");
-			backup_info.SetValue("backup_size", total_restore_size);
-			backup_info.SetValue("backup_type", current_archive_type);
-			backup_info.SaveValues();
+				InfoManager backup_info(tarfn + ".info");
+				backup_info.SetValue("backup_size", total_restore_size);
+				backup_info.SetValue("backup_type", current_archive_type);
+				backup_info.SaveValues();
 	        }
-	#endif //ndef BUILD_TWRPTAR_MAIN
 		}
 		return total_restore_size;
 	}
