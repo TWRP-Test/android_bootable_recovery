@@ -24,7 +24,7 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
   lv_obj_set_layout(view.body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-  lv_obj_add_flag(view.body, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(view.body, true);
   gui2_core::disable_scrolling(view.body);
 
   view.kernel_log_card = gui2_components::create_check_row(
@@ -38,7 +38,7 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
   }
 
   view.result_label = gui2_components::create_section_label(view.body, metrics, "");
-  lv_obj_add_flag(view.result_label, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.result_label, true);
   return view;
 }
 

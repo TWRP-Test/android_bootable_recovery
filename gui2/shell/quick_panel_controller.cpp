@@ -21,7 +21,7 @@ void quick_panel_controller::initialize(const gui2_core::ui_metrics& metrics,
 
 bool quick_panel_controller::input_active() const {
   return view_.dismiss != nullptr &&
-         (!lv_obj_has_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN) || gesture_tracking_);
+         (!lv_obj_is_hidden(view_.dismiss) || gesture_tracking_);
 }
 
 uint64_t quick_panel_controller::monotonic_ms() {
@@ -53,9 +53,9 @@ void quick_panel_controller::animation_ready(lv_anim_t* animation) {
   auto* controller = static_cast<quick_panel_controller*>(lv_anim_get_user_data(animation));
   if (controller == nullptr || controller->animation_target_open_) return;
   if (controller->view_.menu != nullptr)
-    lv_obj_add_flag(controller->view_.menu, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(controller->view_.menu, true);
   if (controller->view_.dismiss != nullptr)
-    lv_obj_add_flag(controller->view_.dismiss, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(controller->view_.dismiss, true);
 }
 
 void quick_panel_controller::animate(bool open) {
@@ -64,15 +64,15 @@ void quick_panel_controller::animate(bool open) {
   lv_anim_del(this, animation_exec);
   if (open) {
     if (progress_ == 0 && on_open_ != nullptr) on_open_();
-    lv_obj_clear_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(view_.menu, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view_.dismiss, false);
+    lv_obj_set_hidden(view_.menu, false);
   }
 
   const int distance = std::abs((open ? 1000 : 0) - progress_);
   if (distance == 0) {
     if (!open) {
-      lv_obj_add_flag(view_.menu, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(view_.menu, true);
+      lv_obj_set_hidden(view_.dismiss, true);
     }
     return;
   }
@@ -105,8 +105,8 @@ void quick_panel_controller::close() {
   if (view_.menu != nullptr) lv_anim_del(this, animation_exec);
   animation_target_open_ = false;
   set_progress(0);
-  if (view_.menu != nullptr) lv_obj_add_flag(view_.menu, LV_OBJ_FLAG_HIDDEN);
-  if (view_.dismiss != nullptr) lv_obj_add_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN);
+  if (view_.menu != nullptr) lv_obj_set_hidden(view_.menu, true);
+  if (view_.dismiss != nullptr) lv_obj_set_hidden(view_.dismiss, true);
   reset_drag();
 }
 
@@ -122,8 +122,8 @@ void quick_panel_controller::begin_drag(lv_event_t* event, bool from_dismiss) {
   lv_point_t point;
   lv_indev_get_point(indev, &point);
   lv_anim_del(this, animation_exec);
-  lv_obj_clear_flag(view_.dismiss, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_clear_flag(view_.menu, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view_.dismiss, false);
+  lv_obj_set_hidden(view_.menu, false);
   gesture_start_y_ = point.y;
   gesture_last_y_ = point.y;
   gesture_last_ms_ = monotonic_ms();

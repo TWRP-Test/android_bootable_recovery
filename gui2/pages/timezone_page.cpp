@@ -30,7 +30,7 @@ void configure_row(lv_obj_t* row, const gui2_core::ui_metrics& metrics, int heig
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   if (wrap) lv_obj_set_style_pad_row(row, metrics.card_gap, LV_PART_MAIN);
   gui2_core::disable_scrolling(row);
-  lv_obj_add_flag(row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(row, true);
 }
 
 }  // namespace

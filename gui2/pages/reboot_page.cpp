@@ -86,7 +86,7 @@ lv_obj_t* create_slot_row(lv_obj_t* body, const gui2_core::ui_metrics& metrics,
   lv_obj_set_layout(row, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_add_flag(row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(row, true);
   gui2_core::disable_scrolling(row);
 
   const int first_width = (row_width - metrics.card_gap) / 2;

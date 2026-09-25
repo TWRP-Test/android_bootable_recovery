@@ -55,7 +55,7 @@ void build_home_page(const home_page_options& options) {
     lv_obj_set_style_radius(notice, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
     lv_obj_set_style_pad_all(notice, notice_pad, LV_PART_MAIN);
     lv_obj_set_style_border_width(notice, 0, LV_PART_MAIN);
-    lv_obj_add_flag(notice, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(notice, true);
     gui2_core::disable_scrolling(notice);
     if (options.press_guard_callback != nullptr)
       lv_obj_add_event_cb(notice, options.press_guard_callback, LV_EVENT_ALL, nullptr);

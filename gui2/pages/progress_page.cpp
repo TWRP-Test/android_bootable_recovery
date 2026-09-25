@@ -97,7 +97,7 @@ static lv_obj_t* create_action_button(lv_obj_t* parent, const gui2_core::ui_metr
                                       int width, int height, lv_event_cb_t press_guard) {
   lv_obj_t* button = lv_obj_create(parent);
   lv_obj_set_size(button, width, height);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(button, true);
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
@@ -148,7 +148,7 @@ static void build_actions(progress_page_view* view,
   lv_obj_set_style_pad_all(view->actions, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(view->actions, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view->actions);
-  lv_obj_add_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view->actions, true);
 
   lv_obj_t* left = create_action_button(view->actions, metrics, options.left_action, false, width,
                                         height, options.press_guard_callback);
@@ -222,7 +222,7 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   lv_obj_set_size(view.bar_fill, 1, bar_height - border * 2);
   // A one pixel fill pokes out of the rounded end; stay hidden until there is
   // something real to draw.
-  lv_obj_add_flag(view.bar_fill, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view.bar_fill, true);
   lv_obj_set_pos(view.bar_fill, 0, 0);
   gui2_core::set_surface_style(view.bar_fill, lv_color_hex(kAccent));
   lv_obj_set_style_radius(view.bar_fill, bar_height / 2, LV_PART_MAIN);
@@ -249,9 +249,9 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
   // Whatever happens to the bar, the user decides when to leave.
   if (view->actions != nullptr) {
     if (status.state == operation_state::RUNNING)
-      lv_obj_add_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(view->actions, true);
     else
-      lv_obj_remove_flag(view->actions, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(view->actions, false);
   }
 
   if (view->bar == nullptr || view->bar_fill == nullptr || view->track_width <= 0) return;
@@ -263,10 +263,10 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
 
   if (status.state == operation_state::RUNNING && status.total <= 0) {
     start_running_animation(view);
-    lv_obj_remove_flag(view->bar_fill, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view->bar_fill, false);
     return;
   }
-  lv_obj_remove_flag(view->bar_fill, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(view->bar_fill, false);
 
   stop_running_animation(view);
   const int width = view->track_width;
@@ -281,7 +281,7 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
     lv_obj_set_style_bg_color(view->bar_fill, color, LV_PART_MAIN);
     lv_obj_set_style_border_color(view->bar, color, LV_PART_MAIN);
     lv_obj_set_width(view->bar_fill, width);
-    lv_obj_add_flag(view->bar_fill, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden(view->bar_fill, true);
     return;
   }
 

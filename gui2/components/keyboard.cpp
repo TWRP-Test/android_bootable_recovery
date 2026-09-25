@@ -64,7 +64,7 @@ void prepare_field(lv_obj_t* textarea, lv_color_t caret) {
   lv_textarea_set_text_selection(textarea, true);
   // Without this the page underneath takes the drag and scrolls instead of
   // letting the field select.
-  lv_obj_remove_flag(textarea, LV_OBJ_FLAG_SCROLL_CHAIN);
+  lv_obj_set_scroll_chain(textarea, false);
 }
 
 // LVGL blinks the cursor from an animation it only starts when the field takes
@@ -304,7 +304,7 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
 
   rows_ = root_;
   build_rows();
-  if (options.start_hidden) lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
+  if (options.start_hidden) lv_obj_set_hidden(root_, true);
   return root_;
 }
 
@@ -356,7 +356,7 @@ lv_obj_t* keyboard::add_key(lv_obj_t* parent, const key& definition, int width, 
   }
   if (definition.kind == key_kind::CARET) {
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_remove_flag(button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(button, false);
   }
 
   lv_obj_t* label = lv_label_create(button);
@@ -573,7 +573,7 @@ void keyboard::slide_y_cb(void* target, int32_t value) {
 void keyboard::hidden_anim_done(lv_anim_t* anim) {
   auto* self = static_cast<keyboard*>(lv_anim_get_user_data(anim));
   if (self == nullptr || self->root_ == nullptr) return;
-  lv_obj_add_flag(self->root_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden(self->root_, true);
   // Straight back to the stored resting place, not derived from where the
   // slide happened to stop. Leaving it parked off-screen makes the next show()
   // read that as the resting place and slide to nowhere.
@@ -586,8 +586,8 @@ void keyboard::show() {
   // that resting place while a slide is running.
   if (lv_anim_get(root_, slide_y_cb) == nullptr) resting_y_ = lv_obj_get_y(root_);
   lv_anim_delete(root_, slide_y_cb);
-  const bool was_hidden = lv_obj_has_flag(root_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_remove_flag(root_, LV_OBJ_FLAG_HIDDEN);
+  const bool was_hidden = lv_obj_is_hidden(root_);
+  lv_obj_set_hidden(root_, false);
 
   // Off-screen when it was hidden, otherwise wherever an interrupted slide left
   // it. Returning early here is what used to strand the keyboard halfway when
@@ -609,7 +609,7 @@ void keyboard::show() {
 }
 
 void keyboard::hide() {
-  if (root_ != nullptr && !lv_obj_has_flag(root_, LV_OBJ_FLAG_HIDDEN)) {
+  if (root_ != nullptr && !lv_obj_is_hidden(root_)) {
     if (lv_anim_get(root_, slide_y_cb) == nullptr) resting_y_ = lv_obj_get_y(root_);
     lv_anim_delete(root_, slide_y_cb);
     lv_anim_t anim;
@@ -640,7 +640,7 @@ void keyboard::dismiss() {
 }
 
 bool keyboard::visible() const {
-  return root_ != nullptr && !lv_obj_has_flag(root_, LV_OBJ_FLAG_HIDDEN);
+  return root_ != nullptr && !lv_obj_is_hidden(root_);
 }
 
 }  // namespace gui2_components

@@ -19,7 +19,7 @@ lv_obj_t* create_choice_card(lv_obj_t* parent, const gui2_core::ui_metrics& metr
                              const void* user_data, lv_event_cb_t press_guard_callback) {
   lv_obj_t* card = lv_obj_create(parent);
   lv_obj_set_size(card, width, height);
-  lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(card, true);
   lv_obj_set_style_radius(card, height / 4, LV_PART_MAIN);
   lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(card, 0, LV_PART_MAIN);

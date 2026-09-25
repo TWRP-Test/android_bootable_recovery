@@ -19,7 +19,7 @@ lv_obj_t* add_crumb(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, cons
   lv_obj_t* pill = lv_obj_create(parent);
   lv_obj_set_height(pill, height);
   lv_obj_set_width(pill, LV_SIZE_CONTENT);
-  lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(pill, true);
   lv_obj_set_style_radius(pill, height / 2, LV_PART_MAIN);
   lv_obj_set_style_border_width(pill, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_hor(pill, gui2_core::card_inner_padding() * 3 / 4, LV_PART_MAIN);
@@ -135,7 +135,7 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
                            lv_event_cb_t callback, const void* target) {
     lv_obj_t* row = lv_obj_create(view.list);
     lv_obj_set_size(row, metrics.content_width, row_height);
-    lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(row, true);
     gui2_core::set_surface_style(row, metrics.card_color, LV_OPA_TRANSP);
     lv_obj_set_style_bg_color(row, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 24),
                               LV_STATE_PRESSED);

@@ -55,7 +55,7 @@ lv_obj_t* tab_bar::create(lv_obj_t* parent, const gui2_core::ui_metrics& metrics
     lv_obj_set_style_radius(pills_[i], inner_height / 3, LV_PART_MAIN);
     lv_obj_set_style_border_width(pills_[i], 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(pills_[i], 0, LV_PART_MAIN);
-    lv_obj_add_flag(pills_[i], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(pills_[i], true);
     lv_obj_add_event_cb(pills_[i], event_callback, LV_EVENT_CLICKED, &bindings[i]);
     gui2_core::disable_scrolling(pills_[i]);
 

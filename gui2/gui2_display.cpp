@@ -8,7 +8,6 @@
 
 #include <android-base/properties.h>
 
-#include "src/themes/default/lv_theme_default.h"
 #include "twrpminui/minui.h"
 
 static bool frame_dirty;

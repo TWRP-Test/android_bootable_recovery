@@ -173,9 +173,9 @@ void show_restore_tab(const restore_page_view& view, size_t index) {
   lv_obj_t* panes[2] = { view.partitions_pane, view.options_pane };
   for (size_t i = 0; i < 2; ++i) {
     if (i == index)
-      lv_obj_remove_flag(panes[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(panes[i], false);
     else
-      lv_obj_add_flag(panes[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden(panes[i], true);
   }
 }
 

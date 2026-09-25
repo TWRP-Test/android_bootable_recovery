@@ -41,7 +41,7 @@ language_page_view build_language_page(const language_page_options& options) {
     const int height = std::max(metrics.card_height, gui2_core::ui_px(118));
     lv_obj_t* option = lv_obj_create(view.body);
     lv_obj_set_size(option, metrics.content_width, height);
-    lv_obj_add_flag(option, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(option, true);
     lv_obj_set_style_radius(option, height / 4, LV_PART_MAIN);
     lv_obj_set_style_border_width(option, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(option, 0, LV_PART_MAIN);

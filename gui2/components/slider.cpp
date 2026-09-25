@@ -163,11 +163,11 @@ static void slider_constructor(const lv_obj_class_t* class_p, lv_obj_t* object) 
   slider->dragging = false;
   slider->enabled = true;
   slider->grab_offset = 0;
-  lv_obj_remove_flag(object, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_remove_flag(object, LV_OBJ_FLAG_SCROLL_ELASTIC);
-  lv_obj_remove_flag(object, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-  lv_obj_remove_flag(object, LV_OBJ_FLAG_SCROLL_CHAIN);
-  lv_obj_add_flag(object, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_scrollable(object, false);
+  lv_obj_set_scroll_elastic(object, false);
+  lv_obj_set_scroll_momentum(object, false);
+  lv_obj_set_scroll_chain(object, false);
+  lv_obj_set_press_lock(object, true);
   lv_obj_set_ext_click_area(object, 8);
   (void)class_p;
 }

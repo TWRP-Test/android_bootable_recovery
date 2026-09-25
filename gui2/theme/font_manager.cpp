@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "src/libs/tiny_ttf/lv_tiny_ttf.h"
-
 namespace gui2_theme {
 
 namespace {

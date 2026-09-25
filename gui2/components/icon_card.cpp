@@ -20,7 +20,7 @@ lv_obj_t* create_icon_card(lv_obj_t* parent, const icon_card_options& options) {
   lv_obj_t* card = lv_obj_create(parent);
   lv_obj_set_size(card, options.width, card_height);
   gui2_core::disable_scrolling(card);
-  lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(card, true);
   lv_obj_set_style_radius(card, card_height / 4, LV_PART_MAIN);
   lv_obj_set_style_bg_color(card, metrics.card_color, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
@@ -45,7 +45,7 @@ lv_obj_t* create_icon_card(lv_obj_t* parent, const icon_card_options& options) {
   lv_obj_align(icon, LV_ALIGN_LEFT_MID, side_padding, 0);
   lv_obj_set_style_radius(icon, options.icon_size / 4, LV_PART_MAIN);
   gui2_core::set_surface_style(icon, lv_color_hex(options.icon_color));
-  lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(icon, false);
   gui2_core::disable_scrolling(icon);
 
   if (options.icon != nullptr) {

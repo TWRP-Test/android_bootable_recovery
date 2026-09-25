@@ -21,7 +21,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_obj_set_style_radius(track_, height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(track_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(track_);
-  lv_obj_add_flag(track_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(track_, true);
 
   inner_margin_ = std::clamp(height / 10, gui2_core::ui_px(10), gui2_core::ui_px(22));
   const int inner_height = height - inner_margin_ * 2;
@@ -39,7 +39,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_obj_update_layout(prompt_);
   lv_obj_set_pos(prompt_, inner_margin_ + knob_width_ - prompt_inset_,
                  (height - lv_obj_get_height(prompt_)) / 2);
-  lv_obj_clear_flag(prompt_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(prompt_, false);
   gui2_core::disable_scrolling(prompt_);
 
   fill_ = lv_obj_create(track_);
@@ -47,7 +47,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_obj_set_pos(fill_, inner_margin_, inner_margin_);
   gui2_core::set_surface_style(fill_, lv_color_hex(0x9BC5E9));
   lv_obj_set_style_radius(fill_, inner_height / 2, LV_PART_MAIN);
-  lv_obj_clear_flag(fill_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(fill_, false);
   gui2_core::disable_scrolling(fill_);
 
   knob_ = lv_obj_create(track_);
@@ -55,8 +55,8 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_obj_set_pos(knob_, inner_margin_, inner_margin_);
   gui2_core::set_surface_style(knob_, lv_color_hex(0x347FF1));
   lv_obj_set_style_radius(knob_, inner_height / 2, LV_PART_MAIN);
-  lv_obj_add_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(knob_, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_set_clickable(knob_, true);
+  lv_obj_set_press_lock(knob_, true);
   gui2_core::disable_scrolling(knob_);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSED, this);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSING, this);
@@ -144,12 +144,12 @@ void swipe_slider::set_enabled(bool enabled) {
   if (track_ == nullptr) return;
   lv_obj_set_style_opa(track_, enabled ? LV_OPA_COVER : LV_OPA_40, LV_PART_MAIN);
   if (enabled) {
-    lv_obj_add_flag(track_, LV_OBJ_FLAG_CLICKABLE);
-    if (knob_ != nullptr) lv_obj_add_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(track_, true);
+    if (knob_ != nullptr) lv_obj_set_clickable(knob_, true);
   } else {
     dragging_ = false;
-    lv_obj_remove_flag(track_, LV_OBJ_FLAG_CLICKABLE);
-    if (knob_ != nullptr) lv_obj_remove_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(track_, false);
+    if (knob_ != nullptr) lv_obj_set_clickable(knob_, false);
   }
 }
 

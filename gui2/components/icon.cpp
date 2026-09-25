@@ -14,7 +14,7 @@ lv_obj_t* create_svg_image(lv_obj_t* parent, const lv_image_dsc_t* source, int w
   lv_image_set_src(image, gui2_svg_get_raster(source, width, height));
   lv_obj_set_size(image, std::max(1, width), std::max(1, height));
   lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CONTAIN);
-  lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(image, false);
   return image;
 }
 
