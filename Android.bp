@@ -446,13 +446,13 @@ cc_binary {
         "exclude.cpp",
         "infomanager.cpp",
         "data.cpp",
+        "digest/twrp_digest_driver.cpp",
         "partition.cpp",
         "partitionmanager.cpp",
         "progresstracking.cpp",
         "startup/startup_args.cpp",
         "startup/get_args.cpp",
         "twrp_functions.cpp",
-        "twrpDigestDriver.cpp",
         "openrecoveryscript.cpp",
         "tarWrite.c",
         "twrpAdbBuFifo.cpp",
@@ -474,6 +474,7 @@ cc_binary {
     ],
     local_include_dirs: [
         "gui/include",
+        "digest",
     ],
 
     header_libs: [

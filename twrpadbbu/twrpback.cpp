@@ -37,7 +37,7 @@
 #include "twrpadbstream.h"
 #include "twrpback.hpp"
 #include "libtwrpadbbu.hpp"
-#include "../twrpdigest/twrpMD5.hpp"
+#include "../digest/twrp_digest.hpp"
 #include "../twrpAdbBuFifo.hpp"
 
 twrpback::twrpback(void) {
@@ -136,7 +136,7 @@ void twrpback::close_restore_fds() {
 }
 
 bool twrpback::backup(std::string command) {
-	twrpMD5 digest;
+	TwrpDigest digest(TwrpDigest::Algorithm::kMd5);
 	int bytes = 0, errctr = 0;
 	char adbReadStream[MAX_ADB_READ];
 	uint64_t totalbytes = 0, dataChunkBytes = 0, fileBytes = 0;
@@ -248,7 +248,7 @@ bool twrpback::backup(std::string command) {
 				struct twfilehdr twimghdr;
 
 				adblogwrite("writing TWIMG\n");
-				digest.init();
+				digest.Reset();
 				memset(&twimghdr, 0, sizeof(twimghdr));
 				memcpy(&twimghdr, cmd, sizeof(cmd));
 				md5fnsize = twimghdr.size;
@@ -275,7 +275,7 @@ bool twrpback::backup(std::string command) {
 				struct twfilehdr twfilehdr;
 
 				adblogwrite("writing TWFN\n");
-				digest.init();
+				digest.Reset();
 
 				//ADBSTRUCT_STATIC_ASSERT(sizeof(twfilehdr) == MAX_ADB_READ);
 
@@ -311,7 +311,7 @@ bool twrpback::backup(std::string command) {
 			*/
 			else if (cmdtype == TWEOF) {
 				adblogwrite("received TWEOF\n");
-				while ((bytes = read(adb_read_fd, &adbReadStream, sizeof(adbReadStream)) != 0)) {
+				while ((bytes = read(adb_read_fd, &adbReadStream, sizeof(adbReadStream))) > 0) {
 					totalbytes += bytes;
 					fileBytes += bytes;
 					dataChunkBytes += bytes;
@@ -319,7 +319,7 @@ bool twrpback::backup(std::string command) {
 					char *writeAdbReadStream = new char [bytes];
 					memcpy(writeAdbReadStream, adbReadStream, bytes);
 
-					digest.update((unsigned char *) writeAdbReadStream, bytes);
+					digest.Update(writeAdbReadStream, bytes);
 					if (fwrite(writeAdbReadStream, 1, bytes, adbd_fp) < 0) {
 						std::string msg = "Cannot write to adbd stream: ";
 						printErrMsg(msg, errno);
@@ -360,7 +360,7 @@ bool twrpback::backup(std::string command) {
 					}
 					#endif
 					totalbytes += paddingBytes;
-					digest.update((unsigned char *) padding, paddingBytes);
+					digest.Update(padding, paddingBytes);
 					fflush(adbd_fp);
 				}
 
@@ -368,7 +368,7 @@ bool twrpback::backup(std::string command) {
 
 				memset(&md5trailer, 0, sizeof(md5trailer));
 
-				std::string md5string = digest.return_digest_string();
+				std::string md5string = digest.HexDigest();
 
 				strncpy(md5trailer.start_of_trailer, TWRP, sizeof(md5trailer.start_of_trailer));
 				strncpy(md5trailer.type, MD5TRAILER, sizeof(md5trailer.type));
@@ -413,7 +413,7 @@ bool twrpback::backup(std::string command) {
 				char *writeAdbReadStream = new char [bytes];
 				memcpy(writeAdbReadStream, adbReadStream, bytes);
 
-				digest.update((unsigned char *) writeAdbReadStream, bytes);
+				digest.Update(writeAdbReadStream, bytes);
 
 				totalbytes += bytes;
 				fileBytes += bytes;
@@ -456,7 +456,7 @@ bool twrpback::backup(std::string command) {
 							char *writeAdbReadStream = new char [bytes];
 							memcpy(writeAdbReadStream, extraData, bytes);
 
-							digest.update((unsigned char *) writeAdbReadStream, bytes);
+							digest.Update(writeAdbReadStream, bytes);
 							if (fwrite(writeAdbReadStream, 1, bytes, adbd_fp) < 0) {
 								std::string msg = "Cannot write to adbd stream: ";
 								printErrMsg(msg, errno);
@@ -500,7 +500,7 @@ bool twrpback::backup(std::string command) {
 }
 
 bool twrpback::restore(void) {
-	twrpMD5 digest;
+	TwrpDigest digest(TwrpDigest::Algorithm::kMd5);
 	char cmd[MAX_ADB_READ];
 	char readAdbStream[MAX_ADB_READ];
 	struct AdbBackupControlType structcmd;
@@ -683,7 +683,7 @@ bool twrpback::restore(void) {
 					dataChunkBytes = 0;
 					extraData = false;
 
-					digest.init();
+					digest.Reset();
 					adblogwrite("Restoring TWIMG\n");
 					memset(&twimghdr, 0, sizeof(twimghdr));
 					memcpy(&twimghdr, readAdbStream, sizeof(readAdbStream));
@@ -729,7 +729,7 @@ bool twrpback::restore(void) {
 					dataChunkBytes = 0;
 					extraData = false;
 
-					digest.init();
+					digest.Reset();
 					adblogwrite("Restoring TWFN\n");
 					memset(&twfilehdr, 0, sizeof(twfilehdr));
 					memcpy(&twfilehdr, readAdbStream, sizeof(readAdbStream));
@@ -814,7 +814,7 @@ bool twrpback::restore(void) {
 							break;
 						}
 
-						digest.update((unsigned char*)readAdbStream, readbytes);
+						digest.Update(readAdbStream, readbytes);
 
 						read_from_adb = true;
 
@@ -843,7 +843,7 @@ bool twrpback::restore(void) {
 					}
 				}
 				else if (md5sumdata) {
-					digest.update((unsigned char*)readAdbStream, sizeof(readAdbStream));
+					digest.Update(readAdbStream, sizeof(readAdbStream));
 					md5sumdata = true;
 				}
 			}
@@ -879,7 +879,7 @@ void twrpback::threadStream(void) {
 	pthread_join(thread, NULL);
 }
 
-bool twrpback::checkMD5Trailer(char readAdbStream[], uint64_t md5fnsize, twrpMD5 *digest) {
+bool twrpback::checkMD5Trailer(char readAdbStream[], uint64_t md5fnsize, TwrpDigest* digest) {
 	struct AdbBackupFileTrailer md5tr;
 	uint32_t crc, md5trcrc, md5ident, md5identmatch;
 
@@ -918,7 +918,7 @@ bool twrpback::checkMD5Trailer(char readAdbStream[], uint64_t md5fnsize, twrpMD5
 		memset(&md5, 0, sizeof(md5));
 		strncpy(md5.start_of_trailer, TWRP, sizeof(md5.start_of_trailer));
 		strncpy(md5.type, TWMD5, sizeof(md5.type));
-		std::string md5string = digest->return_digest_string();
+		std::string md5string = digest->HexDigest();
 		strncpy(md5.md5, md5string.c_str(), sizeof(md5.md5));
 
 		adblogwrite("sending MD5 verification: " + md5string + "\n");

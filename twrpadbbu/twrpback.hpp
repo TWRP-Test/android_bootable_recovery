@@ -20,7 +20,7 @@
 #include <fstream>
 #include <string>
 
-class twrpMD5;
+class TwrpDigest;
 
 class twrpback {
 public:
@@ -56,7 +56,7 @@ private:
 	void adbloginit(void);                                                   // setup adb log stream file
 	void close_backup_fds();                                                 // close backup resources
 	void close_restore_fds();                                                // close restore resources
-	bool checkMD5Trailer(char adbReadStream[], uint64_t md5fnsize, twrpMD5* digest); // Check MD5 Trailer
+	bool checkMD5Trailer(char adbReadStream[], uint64_t md5fnsize, TwrpDigest* digest); // Check MD5 Trailer
 	void printErrMsg(std::string msg, int errNum);                          // print error msg to adb log
 };
 

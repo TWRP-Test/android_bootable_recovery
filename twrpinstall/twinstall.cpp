@@ -47,7 +47,7 @@
 #include "variables.h"
 #include "data.hpp"
 #include "partitions.hpp"
-#include "twrpDigestDriver.hpp"
+#include "twrp_digest_driver.hpp"
 #include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "gui/pages.hpp"
@@ -255,7 +255,7 @@ int TWinstall_zip(const char* path, int* wipe_cache, bool check_for_digest) {
 
 		if (check_for_digest) {
 			gui_msg("check_for_digest=Checking for Digest file...");
-			if (*path != '@' && !twrpDigestDriver::Check_File_Digest(Full_Filename)) {
+			if (*path != '@' && !TwrpDigestDriver::CheckFileDigest(Full_Filename)) {
 				LOGERR("Aborting zip install: Digest verification failed\n");
 				return INSTALL_CORRUPT;
 			}

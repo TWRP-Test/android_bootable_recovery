@@ -66,7 +66,7 @@
 #include "set_metadata.h"
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"
-#include "twrpDigestDriver.hpp"
+#include "twrp_digest_driver.hpp"
 #include "twrpRepacker.hpp"
 #include "twrpadbbu/libtwrpadbbu.hpp"
 #include "unit_conversion.hpp"
@@ -929,7 +929,7 @@ bool TWPartitionManager::Backup_Partition(PartitionSettings *part_settings) {
         sync();
         std::string full = part_settings->Backup_Folder + "/" + part->Backup_FileName;
         if (!part_settings->adbbackup && part_settings->generate_digest) {
-            if (!twrpDigestDriver::Make_Digest(full))
+            if (!TwrpDigestDriver::MakeDigest(full))
                 return false;
         }
         return true;
@@ -1354,7 +1354,7 @@ int TWPartitionManager::Run_Restore(const std::string &Restore_Name) {
                         Get_Android_Root_Path()));
                 }
 
-                if (check_digest > 0 && !twrpDigestDriver::Check_Digest(Full_Filename))
+                if (check_digest > 0 && !TwrpDigestDriver::CheckDigest(Full_Filename))
                     return false;
                 part_settings.partition_count++;
                 part_settings.total_restore_size += part_settings.Part->Get_Restore_Size(&part_settings);
@@ -1364,7 +1364,7 @@ int TWPartitionManager::Run_Restore(const std::string &Restore_Name) {
                     for (TWPartition *subpart: Partitions) {
                         part_settings.Part = subpart;
                         if (subpart->Is_SubPartition && subpart->SubPartition_Of == parentPart->Mount_Point) {
-                            if (check_digest > 0 && !twrpDigestDriver::Check_Digest(Full_Filename))
+                            if (check_digest > 0 && !TwrpDigestDriver::CheckDigest(Full_Filename))
                                 return false;
                             part_settings.total_restore_size += subpart->Get_Restore_Size(&part_settings);
                         }
