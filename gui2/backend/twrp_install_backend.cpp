@@ -2,6 +2,9 @@
 
 #include <sys/stat.h>
 
+#include <algorithm>
+#include <cstdlib>
+
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twcommon.h"
@@ -28,6 +31,9 @@ bool twrp_install_backend::start_zip(const std::vector<std::string>& paths, bool
     detail_.clear();
     cache_wipe_ = false;
   }
+  DataManager::SetValue("ui_progress", 0);
+  DataManager::SetValue("ui_portion_size", 0);
+  DataManager::SetValue("ui_portion_start", 0);
   running_.store(true);
   worker_ = std::thread(&twrp_install_backend::run_zip, this, paths, verify_digest);
   return true;
@@ -89,6 +95,7 @@ bool twrp_install_backend::start_image(const std::string& path, const std::strin
     detail_.clear();
     cache_wipe_ = false;
   }
+  DataManager::SetValue("ui_progress", 0);
   running_.store(true);
   worker_ = std::thread(&twrp_install_backend::run_image, this, path, mount_point, both_slots);
   return true;
@@ -129,6 +136,10 @@ install_status twrp_install_backend::status() {
   result.state = state_;
   result.detail = detail_;
   result.cache_wipe_requested = cache_wipe_;
+  if (state_ == install_state::RUNNING) {
+    const int progress = std::atoi(DataManager::GetStrValue("ui_progress").c_str());
+    if (progress > 0) result.progress = std::min(progress, 100);
+  }
   return result;
 }
 

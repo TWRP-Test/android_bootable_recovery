@@ -18,6 +18,8 @@ struct install_status {
   std::string detail;
   // Set when a zip asked for it; the page offers the wipe afterwards.
   bool cache_wipe_requested = false;
+  // 0-100 as the zip reports it; -1 when it reports nothing.
+  int progress = -1;
 };
 
 // A partition an image can be written to, as the legacy flash image page
