@@ -13,6 +13,8 @@ class twrp_reboot_backend final : public reboot_backend {
   std::string active_slot() const override;
   bool set_active_slot(boot_slot slot) override;
   bool request_reboot(reboot_target target) override;
+  bool usb_fastboot() const override;
+  void set_usb_fastboot(bool fastboot) override;
 
  private:
   bool is_supported(reboot_target target) const;

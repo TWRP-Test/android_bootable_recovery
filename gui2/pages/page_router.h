@@ -43,6 +43,7 @@ enum class page_id {
   STARTUP_SCRIPT,
   SIDELOAD,
   SIDELOAD_PROGRESS,
+  FASTBOOTD,
   SYSTEM_READ_ONLY,
 };
 

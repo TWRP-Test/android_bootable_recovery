@@ -61,7 +61,8 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
 bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
                                                 const gui2_core::ui_metrics& metrics,
                                                 bool home_active, lv_event_cb_t event_callback,
-                                                lv_event_cb_t press_guard_callback) {
+                                                lv_event_cb_t press_guard_callback,
+                                                bool show_console) {
   bottom_navigation_view view;
   if (screen == nullptr) return view;
 
@@ -110,19 +111,22 @@ bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
   lv_obj_set_style_pad_column(pill, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(pill);
 
-  const int item_width = pill_width / 3;
+  const int item_width = pill_width / (show_console ? 3 : 2);
   const int icon_size = std::min(pill_height - gui2_core::ui_px(12), gui2_core::ui_px(108));
   lv_obj_t* home = create_button(pill, home_active ? &kGui2IconHomeFilled : &kGui2IconHomeOutlined,
                                  icon_size, metrics, kHomeAction, event_callback,
                                  press_guard_callback, item_width, pill_height, true);
   lv_obj_t* console =
-      create_button(pill, &kGui2IconConsoleOutline, icon_size, metrics, kLogAction, event_callback,
-                    press_guard_callback, item_width, pill_height, true);
-  lv_obj_t* power =
-      create_button(pill, &kGui2IconPower, icon_size, metrics, kPowerAction, event_callback,
-                    press_guard_callback, pill_width - item_width * 2, pill_height, true);
+      show_console ? create_button(pill, &kGui2IconConsoleOutline, icon_size, metrics, kLogAction,
+                                   event_callback, press_guard_callback, item_width, pill_height,
+                                   true)
+                   : nullptr;
+  lv_obj_t* power = create_button(pill, &kGui2IconPower, icon_size, metrics, kPowerAction,
+                                  event_callback, press_guard_callback,
+                                  pill_width - item_width * (show_console ? 2 : 1), pill_height,
+                                  true);
   view.home_icon = lv_obj_get_child(home, 0);
-  view.console_icon = lv_obj_get_child(console, 0);
+  view.console_icon = console == nullptr ? nullptr : lv_obj_get_child(console, 0);
   view.power_icon = lv_obj_get_child(power, 0);
   return view;
 }

@@ -46,6 +46,8 @@ struct gui2_context {
   gui2_backend::sideload_backend* sideload = nullptr;
   // Set: show the splash while startup runs, build the pages after.
   gui2_backend::startup_backend* startup = nullptr;
+  // fastbootd: the pages are the fastboot page and reboot, nothing else.
+  bool fastboot_mode = false;
   // Reuse an already initialized minui display when possible.
   bool display_initialized = false;
 };

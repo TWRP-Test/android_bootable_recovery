@@ -251,6 +251,9 @@ struct language_pack {
   const char* sideload_complete;
   const char* sideload_failed;
   const char* sideload_cancelled;
+  const char* fastbootd_title;
+  const char* fastbootd_summary;
+  const char* usb_mode;
   const char* keyboard_settings_title;
   const char* keyboard_settings_summary;
   const char* keyboard_lift_label;
