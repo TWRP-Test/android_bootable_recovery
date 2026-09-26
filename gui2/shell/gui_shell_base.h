@@ -22,6 +22,9 @@ struct gui_shell_base_view {
   lv_obj_t* page_layer = nullptr;
 };
 
+// Fills gui2_core::ui from the panel size and fonts; the splash needs it
+// before the shell exists.
+bool init_ui_metrics(const gui_shell_base_options& options);
 gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options);
 
 }  // namespace gui2_shell

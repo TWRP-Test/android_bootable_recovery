@@ -107,6 +107,7 @@ struct page_state {
   size_t install_target_index = 0;
   bool install_both_slots = false;
   gui2_components::swipe_slider install_confirm;
+  gui2_components::swipe_slider system_ro_confirm;
   progress_page_view install_progress;
   size_t install_console_consumed = 0;
   uint64_t install_last_poll_ms = 0;

@@ -16,10 +16,12 @@
 #include "backend/wifi_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
+#include "backend/startup_backend.h"
 
 enum gui2_exit_reason {
   GUI2_EXIT_INITIALIZATION_FAILED = 1,
   GUI2_EXIT_TO_LEGACY = 2,
+  GUI2_EXIT_STARTUP_FAILED = 3,
 };
 
 struct gui2_context {
@@ -40,6 +42,8 @@ struct gui2_context {
   gui2_backend::wifi_backend* wifi = nullptr;
   gui2_backend::file_manager_backend* file_manager = nullptr;
   gui2_backend::install_backend* install = nullptr;
+  // Set: show the splash while startup runs, build the pages after.
+  gui2_backend::startup_backend* startup = nullptr;
   // Reuse an already initialized minui display when possible.
   bool display_initialized = false;
 };

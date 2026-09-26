@@ -18,6 +18,8 @@ page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::
                                          const char* title, const char* summary,
                                          int bottom_reserved = 0);
 
+const char* version_text();
+
 }  // namespace gui2_shell
 
 #endif

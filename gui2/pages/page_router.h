@@ -40,6 +40,8 @@ enum class page_id {
   RESTORE_LIST,
   RESTORE,
   RESTORE_PROGRESS,
+  STARTUP_SCRIPT,
+  SYSTEM_READ_ONLY,
 };
 
 struct page_request {

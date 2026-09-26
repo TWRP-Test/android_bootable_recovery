@@ -12,6 +12,17 @@ genrule {
     cmd: "python3 $(location generate_svg_header.py) $(in) > $(out)",
 }
 
+genrule {
+    name: "gui2_splash_assets_header",
+    srcs: [
+        "image/splash/*.png",
+        "image/splash/layout.txt",
+    ],
+    out: ["gui2_splash_assets.h"],
+    tool_files: ["generate_splash_header.py"],
+    cmd: "python3 $(location generate_splash_header.py) $(in) > $(out)",
+}
+
 // LVGL-based recovery UI library.
 cc_library_static {
     name: "libgui2",
@@ -31,7 +42,10 @@ cc_library_static {
         "bootable/recovery/gui/include",
         "bootable/recovery/twrpperf/include",
     ],
-    generated_headers: ["gui2_svg_assets_header"],
+    generated_headers: [
+        "gui2_svg_assets_header",
+        "gui2_splash_assets_header",
+    ],
     srcs: [
         "app/gui2_loop.cpp",
         "app/gui2_lifecycle.cpp",
@@ -82,6 +96,7 @@ cc_library_static {
         "pages/file_manager_page.cpp",
         "pages/terminal_page.cpp",
         "pages/wifi_page.cpp",
+        "pages/system_read_only_page.cpp",
         "pages/settings_page.cpp",
         "pages/backup_page.cpp",
         "pages/decrypt_page.cpp",
@@ -104,6 +119,7 @@ cc_library_static {
         "shell/status_bar_controller.cpp",
         "shell/screen_feedback.cpp",
         "shell/screen_lock.cpp",
+        "shell/splash.cpp",
     ],
     static_libs: [
         "liblvgl_twrp",

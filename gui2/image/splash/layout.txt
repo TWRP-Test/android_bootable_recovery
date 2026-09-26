@@ -1,0 +1,9 @@
+# part x y: top-left in the 1187x1031 design render
+top 414 122
+bottom 52 488
+y 126 212
+a 350 428
+r 603 238
+p 878 428
+arrow 648 588
+based 362 888

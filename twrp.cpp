@@ -29,6 +29,8 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <condition_variable>
+#include <mutex>
 #include "gui2/gui2.h"
 #include "gui2/backend/twrp_console_backend.h"
 #include "gui2/backend/twrp_backup_backend.h"
@@ -49,6 +51,7 @@
 #include "gui2/backend/twrp_wipe_backend.h"
 
 #include <android-base/properties.h>
+#include "twrpminui/minui.h"
 #include <android-base/strings.h>
 #include <cutils/properties.h>
 
@@ -169,7 +172,24 @@ static void Legacy_Decrypt_Page(void) {
 	}
 }
 
-static void ProcessRecoveryMode(const bool skip_decryption) {
+// What startup reports to. The defaults are the legacy behaviour; the gui2
+// splash overrides them.
+class startup_hooks {
+  public:
+	virtual ~startup_hooks() = default;
+	virtual void step(gui2_backend::startup_step) {}
+	virtual bool legacy_ui() const { return true; }
+	virtual void run_script() { OpenRecoveryScript::Run_OpenRecoveryScript(); }
+	virtual void ask_system_read_only() {
+		DataManager::SetValue("tw_back", "main");
+		if (gui_startPage("system_readonly", 1, 1) != 0) {
+			LOGERR("Failed to start system_readonly GUI page.\n");
+		}
+	}
+};
+
+static void ProcessRecoveryMode(const bool skip_decryption, startup_hooks* hooks) {
+  hooks->step(gui2_backend::startup_step::SYSTEM);
   const int crash_counter = std::stoi(android::base::GetProperty("twrp.crash_counter", "-1")) + 1;
   android::base::SetProperty("twrp.crash_counter", std::to_string(crash_counter));
 
@@ -261,6 +281,7 @@ static void ProcessRecoveryMode(const bool skip_decryption) {
 #endif // defined(TW_OVERRIDE_SYSTEM_PROPS)
 #endif // defined(TW_INCLUDE_LIBRESETPROP)
 
+  hooks->step(gui2_backend::startup_step::SCRIPTS);
   // Check for and run startup script if script exists
   TWFunc::CheckAndRunScript("/system/bin/runatboot.sh", "boot");
   TWFunc::CheckAndRunScript("/system/bin/postrecoveryboot.sh", "recovery");
@@ -272,7 +293,7 @@ static void ProcessRecoveryMode(const bool skip_decryption) {
 
   // Check for and load custom theme if present
   TWFunc::CheckSelinuxSupport();
-  gui_loadCustomResources();
+  if (hooks->legacy_ui()) gui_loadCustomResources();
   PartitionManager.Output_Partition_Logging();
 
   // Fixup the RTC clock on devices which require it
@@ -287,9 +308,10 @@ static void ProcessRecoveryMode(const bool skip_decryption) {
   if (const std::string ors_file = cache_dir + "/recovery/openrecoveryscript";
     (DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0 || skip_decryption) &&
     (TWFunc::IsPathExists(SCRIPT_FILE_TMP) || TWFunc::IsPathExists(ors_file))) {
-    OpenRecoveryScript::Run_OpenRecoveryScript();
+    hooks->run_script();
   }
 
+	hooks->step(gui2_backend::startup_step::SERVICES);
 #ifdef TW_HAS_MTP
   const std::string mtp_crash_check = android::base::GetProperty("mtp.crash_check", "0");
   const bool try_mtp = DataManager::GetIntValue("tw_mtp_enabled")
@@ -329,10 +351,7 @@ static void ProcessRecoveryMode(const bool skip_decryption) {
       if (const int mount_system_ro = DataManager::GetIntValue("tw_mount_system_ro");
         (mount_system_ro == 0 && sys->Check_Lifetime_Writes() == 0) || mount_system_ro == 2) {
         if (DataManager::GetIntValue("tw_never_show_system_ro_page") == 0) {
-          DataManager::SetValue("tw_back", "main");
-          if (gui_startPage("system_readonly", 1, 1) != 0) {
-            LOGERR("Failed to start system_readonly GUI page.\n");
-          }
+          hooks->ask_system_read_only();
         } else if (mount_system_ro == 0) {
           sys->Change_Mount_Read_Only(false);
           if (ven) ven->Change_Mount_Read_Only(false);
@@ -349,6 +368,153 @@ static void ProcessRecoveryMode(const bool skip_decryption) {
   // Disable flashing of stock recovery
   TWFunc::DisableStockRecoveryReplace();
 }
+
+static bool run_early_startup(startup_hooks* hooks) {
+	hooks->step(gui2_backend::startup_step::PARTITIONS);
+	printf("=> Linking mtab\n");
+	symlink("/proc/mounts", "/etc/mtab");
+	std::string fstab_filename = "/etc/twrp.fstab";
+	if (!TWFunc::IsPathExists(fstab_filename)) {
+		fstab_filename = "/etc/recovery.fstab";
+	}
+	printf("=> Processing %s\n", fstab_filename.c_str());
+	if (!PartitionManager.Process_Fstab(fstab_filename, 1, true)) {
+		LOGERR("Failing out of recovery due to problem with fstab.\n");
+		return false;
+	}
+
+	hooks->step(gui2_backend::startup_step::STORAGE);
+	PartitionManager.Setup_Fstab_Partitions(true);
+	if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
+		TWFunc::UseTmpfsCache();
+
+	hooks->step(gui2_backend::startup_step::SETTINGS);
+	DataManager::ReadSettingsFile();
+	TWFunc::ClearBootloaderMessage();
+	return true;
+}
+
+// Runs the recovery-mode startup on its own thread while gui2 shows the splash.
+class twrp_startup_backend final : public gui2_backend::startup_backend, public startup_hooks {
+  public:
+	twrp_startup_backend(bool skip_decryption)
+		: skip_decryption_(skip_decryption) {}
+	~twrp_startup_backend() override { finish(); }
+
+	bool started() const { return started_; }
+
+	void start() override {
+		started_ = true;
+		worker_ = std::thread(&twrp_startup_backend::run, this);
+	}
+
+	gui2_backend::startup_status status() override {
+		std::lock_guard<std::mutex> lock(mutex_);
+		return status_;
+	}
+
+	void finish() override {
+		{
+			// A loop that ends during the prompt must not leave the thread waiting.
+			std::lock_guard<std::mutex> lock(mutex_);
+			abandoned_ = true;
+		}
+		answered_.notify_all();
+		if (worker_.joinable())
+			worker_.join();
+	}
+
+	void answer_system_read_only(bool keep_read_only, bool never_show_again) override {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (status_.pause != gui2_backend::startup_pause::SYSTEM_READ_ONLY || has_answer_)
+			return;
+		keep_read_only_ = keep_read_only;
+		never_show_again_ = never_show_again;
+		has_answer_ = true;
+		answered_.notify_all();
+	}
+
+	bool can_hide_system_read_only() override {
+		return DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0;
+	}
+
+	std::string device_label() override {
+		const std::string device = android::base::GetProperty("ro.product.device", "");
+		const std::string model = android::base::GetProperty("ro.product.model", "");
+		if (device.empty() || model.empty())
+			return device + model;
+		return device + " · " + model;
+	}
+
+	void step(gui2_backend::startup_step step) override {
+		std::lock_guard<std::mutex> lock(mutex_);
+		status_.step = step;
+	}
+
+	bool legacy_ui() const override { return false; }
+
+	void run_script() override {
+		set_pause(gui2_backend::startup_pause::SCRIPT);
+		OpenRecoveryScript::Run_OpenRecoveryScript_Action();
+		set_pause(gui2_backend::startup_pause::NONE);
+	}
+
+	// The same writes the legacy mountsystemtoggle action makes; system is not
+	// mounted at this point, so there is nothing to remount.
+	void ask_system_read_only() override {
+		std::unique_lock<std::mutex> lock(mutex_);
+		status_.pause = gui2_backend::startup_pause::SYSTEM_READ_ONLY;
+		has_answer_ = false;
+		answered_.wait(lock, [this] { return has_answer_ || abandoned_; });
+		status_.pause = gui2_backend::startup_pause::NONE;
+		if (!has_answer_)
+			return;
+		const bool keep = keep_read_only_;
+		const bool never_show = never_show_again_;
+		lock.unlock();
+
+		DataManager::SetValue("tw_never_show_system_ro_page", never_show ? 1 : 0);
+		DataManager::SetValue("tw_mount_system_ro", keep ? 1 : 0);
+		TWPartition* sys = PartitionManager.Find_Partition_By_Path(PartitionManager.Get_Android_Root_Path());
+		TWPartition* ven = PartitionManager.Find_Partition_By_Path("/vendor");
+		if (sys)
+			sys->Change_Mount_Read_Only(keep);
+		if (ven)
+			ven->Change_Mount_Read_Only(keep);
+	}
+
+  private:
+	void set_pause(gui2_backend::startup_pause pause) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		status_.pause = pause;
+	}
+
+	void run() {
+		if (!run_early_startup(this)) {
+			std::lock_guard<std::mutex> lock(mutex_);
+			status_.failed = true;
+			return;
+		}
+		ProcessRecoveryMode(skip_decryption_, this);
+
+		// gui2 lists partitions by Display_Name, which the legacy language files
+		// translate.
+		step(gui2_backend::startup_step::FINISHING);
+		PageManager::TranslatePartitionNames(DataManager::GetStrValue("tw_language"));
+		step(gui2_backend::startup_step::DONE);
+	}
+
+	bool skip_decryption_;
+	bool started_ = false;
+	std::thread worker_;
+	std::mutex mutex_;
+	std::condition_variable answered_;
+	gui2_backend::startup_status status_;
+	bool has_answer_ = false;
+	bool keep_read_only_ = true;
+	bool never_show_again_ = false;
+	bool abandoned_ = false;
+};
 
 static void Reboot() {
   gui_msg(Msg("rebooting=Rebooting..."));
@@ -449,62 +615,53 @@ int main(int argc, char* argv[]) {
   printf("Starting TWRP %s-%s on %s (pid %d)\n", TWFunc::GetTwrpVersion().c_str(), TW_GIT_REVISION,
          ctime(&startup_time), getpid());
 
-  // Load default values to set DataManager constants and handle ifdefs
-  DataManager::SetDefaultValues();
-
-  StartupArgs startup;
-  startup.Parse(&argc, &argv);
-
-  android::base::SetProperty(TW_FASTBOOT_MODE_PROP, startup.GetFastbootMode() ? "1" : "0");
-  printf("=> Linking mtab\n");
-  symlink("/proc/mounts", "/etc/mtab");
-  std::string fstab_filename = "/etc/twrp.fstab";
-  if (!TWFunc::IsPathExists(fstab_filename)) {
-    fstab_filename = "/etc/recovery.fstab";
-  }
-  printf("=> Processing %s\n", fstab_filename.c_str());
-  if (!PartitionManager.Process_Fstab(fstab_filename, true, !startup.GetFastbootMode())) {
-    LOGERR("Failing out of recovery due to problem with fstab.\n");
-    return -1;
-  }
-
-#ifdef TW_LOAD_VENDOR_MODULES
-  if (startup.GetFastbootMode()) {
-    std::vector<std::string> prepare_parts = {
-      "/system_root",
-      "/vendor",
-      "/vendor_dlkm",
-      "/odm"
-    };
-    for (auto& prepare_part : prepare_parts) {
-      TWPartition* part = PartitionManager.Find_Partition_By_Path(prepare_part);
-      if (part) PartitionManager.Prepare_Super_Volume(part);
-    }
-  }
-#endif
-
-<<	printf("Starting the UI...\n");
- if (!startup.GetFastbootMode()) PartitionManager.Setup_Fstab_Partitions(true);
-
-<<	DataManager::ReadSettingsFile();
-	const bool legacy_gui_ready = initializeLegacyGui();
-	if (!legacy_gui_ready)
-		LOGERR("Unable to initialize the legacy GUI startup path.\n");
-
-	TWFunc::ClearBootloaderMessage();
+	// Load default values to set DataManager constants and handle ifdefs
+	DataManager::SetDefaultValues();
+	StartupArgs startup;
+	startup.Parse(&argc, &argv);
+	android::base::SetProperty(TW_FASTBOOT_MODE_PROP, startup.GetFastbootMode() ? "1" : "0");
 
 	if (startup.GetFastbootMode()) {
+		printf("=> Linking mtab\n");
+		symlink("/proc/mounts", "/etc/mtab");
+		std::string fstab_filename = "/etc/twrp.fstab";
+		if (!TWFunc::IsPathExists(fstab_filename)) {
+			fstab_filename = "/etc/recovery.fstab";
+		}
+		printf("=> Processing %s\n", fstab_filename.c_str());
+		if (!PartitionManager.Process_Fstab(fstab_filename, 1, false)) {
+			LOGERR("Failing out of recovery due to problem with fstab.\n");
+			return -1;
+		}
+#ifdef TW_LOAD_VENDOR_MODULES
+		std::vector<std::string> prepareParts = {
+			"/system_root",
+			"/vendor",
+			"/vendor_dlkm",
+			"/odm"
+		};
+		for (auto& preparePart : prepareParts) {
+			TWPartition *part = PartitionManager.Find_Partition_By_Path(preparePart);
+			if (part) PartitionManager.Prepare_Super_Volume(part);
+		}
+#endif
+		printf("Starting the UI...\n");
+		if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
+			TWFunc::UseTmpfsCache();
+		DataManager::ReadSettingsFile();
+		if (!initializeLegacyGui())
+			LOGERR("Unable to initialize the legacy GUI startup path.\n");
+		TWFunc::ClearBootloaderMessage();
 		ProcessFastbootdMode();
 		TWFunc::UpdateIntentFile(startup.GetIntent());
 		Reboot();
 		return 0;
-	} else {
-		ProcessRecoveryMode(startup.ShouldSkipDecryption());
 	}
-	// The decryption/read-only pages use the legacy UI, but Qualcomm DRM does
-	// not reliably accept a second modeset after the first pipeline is torn
-	// down. Keep minui initialized and let GUI2 render into the same pipeline.
-	shutdownLegacyGui(true);
+
+	printf("Starting the UI...\n");
+	twrp_startup_backend startup_backend(startup.ShouldSkipDecryption());
+	// The default until startup reads the settings; ReadSettingsFile sets it again.
+	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
 
 	gui2_backend::twrp_settings_store settings_store;
 	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
@@ -541,8 +698,10 @@ int main(int argc, char* argv[]) {
 #endif
 	gui2_context_value.file_manager = &file_manager_backend;
 	gui2_context_value.install = &install_backend;
-	gui2_context_value.display_initialized = true;
+	gui2_context_value.startup = &startup_backend;
 	const int gui2_result = gui2_start(&gui2_context_value);
+	if (gui2_result == GUI2_EXIT_STARTUP_FAILED)
+		return -1;
 
 	// GUI2 owns the display and input loop.  A user-requested switch is a
 	// process-local handoff; there is deliberately no persistent GUI selector.
@@ -550,8 +709,18 @@ int main(int argc, char* argv[]) {
 	// remains usable if a device cannot initialize LVGL or its font resources.
 	if (gui2_result == GUI2_EXIT_TO_LEGACY ||
 		gui2_result == GUI2_EXIT_INITIALIZATION_FAILED) {
-		if (!initializeLegacyGui(gui2_result == GUI2_EXIT_TO_LEGACY))
+		// gui2 keeps a display it brought up; Qualcomm DRM refuses a second modeset.
+		const bool reuse_display = gr_fb_pixel_bytes() > 0;
+		if (!startup_backend.started()) {
+			startup_hooks legacy_hooks;
+			if (!run_early_startup(&legacy_hooks))
+				return -1;
+			if (!initializeLegacyGui(reuse_display))
+				LOGERR("Unable to initialize the legacy GUI startup path.\n");
+			ProcessRecoveryMode(startup.ShouldSkipDecryption(), &legacy_hooks);
+		} else if (!initializeLegacyGui(reuse_display)) {
 			LOGERR("Unable to initialize the legacy GUI fallback.\n");
+		}
 		Legacy_Decrypt_Page();
 		startLegacyBatteryMonitor();
 		gui_start();
