@@ -81,10 +81,6 @@
 #include "TwrpMtpServer.hpp"
 #endif
 
-extern "C" {
-    #include "gui/gui.h"
-}
-
 #ifdef TW_INCLUDE_CRYPTO
 #include "gui/rapidxml.hpp"
 #include "gui/pages.hpp"

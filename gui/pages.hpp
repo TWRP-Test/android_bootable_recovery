@@ -29,6 +29,11 @@
 #include "rapidxml.hpp"
 #include "ziparchive/zip_archive.h"
 
+// C linkage; defined in pages.cpp.
+extern "C" {
+void gui_notifyVarChange(const char *name, const char* value);
+}
+
 enum TOUCH_STATE {
 	TOUCH_START = 0,
 	TOUCH_DRAG = 1,

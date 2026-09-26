@@ -40,7 +40,7 @@
 
 #include "blanktimer.hpp"
 #include "gui.hpp"
-#include "pages.h"
+#include "pages.hpp"
 #include "objects.hpp"
 #include "partitions.hpp"
 #include "rapidxml.hpp"
@@ -49,10 +49,6 @@
 #include "twrpminui/minui.h"
 #include "variables.h"
 #include "ziputil.h"
-
-extern "C" {
-#include "gui.h"
-}
 
 #define TW_THEME_VER_ERR -2
 

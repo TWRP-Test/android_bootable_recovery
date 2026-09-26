@@ -34,10 +34,6 @@
 #include <android-base/strings.h>
 #include <cutils/properties.h>
 
-extern "C" {
-#include "gui/gui.h"
-}
-
 #include "data.hpp"
 #include "openrecoveryscript.hpp"
 #include "partitions.hpp"

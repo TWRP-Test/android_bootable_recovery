@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <zlib.h>
+#include <cutils/properties.h>
 
 #include "twrp_functions.hpp"
 #include "partitions.hpp"
@@ -51,10 +52,6 @@
 #include "orscmd/orscmd.h"
 #include "twinstall.h"
 #include "twinstall/adb_install.h"
-extern "C" {
-	#include "gui/gui.h"
-	#include "cutils/properties.h"
-}
 
 OpenRecoveryScript::VoidFunction OpenRecoveryScript::call_after_cli_command;
 

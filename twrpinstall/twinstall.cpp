@@ -54,9 +54,6 @@
 #include "twinstall.h"
 #include "installcommand.h"
 #include "../twrpRepacker.hpp"
-extern "C" {
-	#include "gui/gui.h"
-}
 
 #define AB_OTA "payload_properties.txt"
 

@@ -43,7 +43,7 @@
 #include <android-base/properties.h>
 
 #include "gui/gui.hpp"
-#include "gui/pages.h"
+#include "gui/pages.hpp"
 #include "infomanager.hpp"
 #include "variables.h"
 #include "partitions.hpp"

@@ -19,7 +19,6 @@
 
 extern "C" {
 	#include "libtar/libtar.h"
-	#include "twrpTar.h"
 	#include "tarWrite.h"
 }
 #include <sys/types.h>
