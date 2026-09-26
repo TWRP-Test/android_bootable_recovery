@@ -3,6 +3,8 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#include <android-base/properties.h>
+
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twrp-functions.hpp"
@@ -121,6 +123,16 @@ bool twrp_reboot_backend::request_reboot(reboot_target target) {
   sync();
   return DataManager::SetValue("tw_reboot_arg", argument) == 0 &&
          DataManager::SetValue("tw_gui_done", 1) == 0;
+}
+
+bool twrp_reboot_backend::usb_fastboot() const {
+  return android::base::GetProperty("sys.usb.config", "") == "fastboot";
+}
+
+// GUIAction::enableadb and GUIAction::enablefastboot.
+void twrp_reboot_backend::set_usb_fastboot(bool fastboot) {
+  android::base::SetProperty("sys.usb.config", "none");
+  android::base::SetProperty("sys.usb.config", fastboot ? "fastboot" : "adb");
 }
 
 }  // namespace gui2_backend

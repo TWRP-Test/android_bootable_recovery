@@ -50,6 +50,7 @@
 #include "pages/reboot_page.h"
 #include "pages/file_actions_page.h"
 #include "pages/file_input_page.h"
+#include "pages/fastbootd_page.h"
 #include "pages/file_manager_page.h"
 #include "pages/general_settings_page.h"
 #include "pages/install_confirm_page.h"
@@ -148,6 +149,7 @@ static gui2_core::wheel_scroll_controller wheel_scroll_controller;
 static bool home_page_active;
 static bool home_navigation_active;
 static bool& switch_to_legacy = runtime.switch_to_legacy;
+static bool fastboot_mode = false;
 static bool& reboot_requested = runtime.reboot_requested;
 
 using app_language = gui2_i18n::language_id;
@@ -245,6 +247,7 @@ static void show_wifi_password_page(page_transition transition);
 static void show_install_page(page_transition transition);
 static void show_startup_script_page(page_transition transition);
 static void show_sideload_page(page_transition transition);
+static void show_fastbootd_page(page_transition transition);
 static void show_sideload_progress_page(page_transition transition);
 static void show_system_read_only_page(page_transition transition);
 static void progress_reboot_system_cb(lv_event_t* event);
@@ -512,6 +515,8 @@ static void navigate_back(void) {
     navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::WIFI_PASSWORD) {
     navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::FASTBOOTD) {
+    // Legacy has no way back from here either.
   } else if (page_router.current() == page_kind::SIDELOAD) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
@@ -578,7 +583,9 @@ static void navigation_event_cb(lv_event_t* event) {
 
   if (*action == gui2_shell::navigation_action::BACK ||
       (*action == gui2_shell::navigation_action::HOME && !home_page_active)) {
-    if (*action == gui2_shell::navigation_action::HOME) {
+    if (*action == gui2_shell::navigation_action::HOME && fastboot_mode) {
+      navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::POP);
+    } else if (*action == gui2_shell::navigation_action::HOME) {
       navigate_to(page_kind::HOME, nullptr, navigation_transition(page_kind::HOME));
     } else {
       navigate_back();
@@ -1022,6 +1029,8 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.sideload_confirm.detach();
   page_state.sideload_progress = {};
   page_state.system_ro_confirm.detach();
+  page_state.fastbootd_tabs.detach();
+  page_state.fastbootd_console = {};
   page_state.decrypt_status = nullptr;
   if (page_state.format_data_keyboard != nullptr) {
     lv_obj_delete(page_state.format_data_keyboard);
@@ -1095,7 +1104,8 @@ static void show_reboot_page(page_transition transition) {
   options.target_selected = page_state.reboot.target_selected;
   options.selected_target = page_state.reboot.selected_target;
   options.error_text = page_state.reboot.has_error ? strings().reboot_failed : nullptr;
-  options.has_boot_slots = capabilities.boot_slots;
+  // Legacy's fastboot reboot page has no slot choice.
+  options.has_boot_slots = capabilities.boot_slots && !fastboot_mode;
   options.current_slot_text = current_slot_text.c_str();
   options.active_slot = &active_slot;
   options.slots = page_state.reboot.slots;
@@ -1920,6 +1930,43 @@ static void show_sideload_progress_page(page_transition transition) {
   page_state.sideload_console_consumed = 0;
   page_state.sideload_last_poll_ms = 0;
   refresh_sideload_progress();
+}
+
+// ---- Fastbootd -------------------------------------------------------------
+
+static void fastbootd_usb_changed(size_t index, void*) {
+  if (reboot != nullptr) reboot->set_usb_fastboot(index == 0);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void poll_fastbootd_console(void) {
+  if (console == nullptr || page_state.fastbootd_console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  page_state.fastbootd_console_consumed =
+      console->fetch(page_state.fastbootd_console_consumed, &lines);
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.fastbootd_console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.fastbootd_console);
+}
+
+static void show_fastbootd_page(page_transition transition) {
+  create_page_scaffold(page_kind::FASTBOOTD, true, strings().fastbootd_title,
+                       strings().fastbootd_summary, 0, transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::fastbootd_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.usb_tabs = &page_state.fastbootd_tabs;
+  options.usb_fastboot = reboot == nullptr || reboot->usb_fastboot();
+  options.usb_callback = fastbootd_usb_changed;
+  page_state.fastbootd_console = gui2_pages::build_fastbootd_page(options).console;
+  page_state.fastbootd_console_consumed = 0;
+  page_state.fastbootd_last_poll_ms = 0;
+  poll_fastbootd_console();
 }
 
 static std::string file_actions_name;
@@ -4018,6 +4065,9 @@ static void build_page(const gui2_pages::page_request& request) {
     case page_kind::SIDELOAD:
       show_sideload_page(request.transition);
       return;
+    case page_kind::FASTBOOTD:
+      show_fastbootd_page(request.transition);
+      return;
     case page_kind::SIDELOAD_PROGRESS:
       show_sideload_progress_page(request.transition);
       return;
@@ -4049,7 +4099,8 @@ static void create_gui2_shell(lv_obj_t* screen) {
   navigate_to(page_kind::HOME, nullptr, page_transition::NONE);
 
   navigation_view = gui2_shell::create_bottom_navigation(
-      screen, ui, home_navigation_active, navigation_event_cb, press_cancel_guard_cb);
+      screen, ui, home_navigation_active, navigation_event_cb, press_cancel_guard_cb,
+      !fastboot_mode);
 
   create_quick_menu();
   mouse_cursor = gui2_shell::create_mouse_cursor(pointer_indev, ev_has_mouse(), ui);
@@ -4187,7 +4238,7 @@ static void poll_startup(uint64_t now_ms) {
 
   startup->finish();
   startup = nullptr;
-  const bool locked = decrypt != nullptr && decrypt->is_encrypted();
+  const bool locked = !fastboot_mode && decrypt != nullptr && decrypt->is_encrypted();
   const bool needs_credential = locked && decrypt->kind() != gui2_backend::lock_kind::DEFAULT;
   gui2_shell::update_splash(&splash_view,
                             needs_credential ? strings().startup_unlock
@@ -4196,7 +4247,9 @@ static void poll_startup(uint64_t now_ms) {
 
   const bool from_pause = shell_ready;
   if (!create_pages()) switch_to_legacy = true;
-  if (from_pause)
+  if (fastboot_mode)
+    navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::REPLACE);
+  else if (from_pause)
     navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
   if (locked) enter_decrypt_flow(page_transition::NONE);
   // The unlock keyboard lives on the top layer too.
@@ -4327,6 +4380,11 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     refresh_install_progress();
   }
   poll_wifi(now_ms);
+  if (page_state.fastbootd_console.body != nullptr &&
+      now_ms - page_state.fastbootd_last_poll_ms >= 100) {
+    page_state.fastbootd_last_poll_ms = now_ms;
+    poll_fastbootd_console();
+  }
   if (page_state.sideload_progress.body != nullptr &&
       now_ms - page_state.sideload_last_poll_ms >= 100) {
     page_state.sideload_last_poll_ms = now_ms;
@@ -4419,6 +4477,7 @@ int gui2_start(const gui2_context* context) {
   restore = context->restore;
   startup = context->startup;
   sideload = context->sideload;
+  fastboot_mode = context->fastboot_mode;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   startup_language_known = startup == nullptr;

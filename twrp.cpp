@@ -153,9 +153,6 @@ static void ProcessFastbootdMode() {
   // Check for and run startup script if script exists
   TWFunc::CheckAndRunScript("/system/bin/runatboot.sh", "boot");
   TWFunc::CheckAndRunScript("/system/bin/postfastboot.sh", "fastboot");
-  if (gui_startPage("fastboot", 1, 1) != 0) {
-    LOGERR("Failed to start fastbootd page.\n");
-  }
 }
 
 // Only reached when GUI2 could not take over: it owns the unlock flow and shows
@@ -170,6 +167,12 @@ static void Legacy_Decrypt_Page(void) {
 		DataManager::SetValue("tw_crypto_user_id", "0");
 	if (gui_startPage("decrypt", 1, 1) != 0) {
 		LOGERR("Failed to start decrypt GUI page.\n");
+	}
+}
+
+static void legacy_fastbootd_page() {
+	if (gui_startPage("fastboot", 1, 1) != 0) {
+		LOGERR("Failed to start fastbootd page.\n");
 	}
 }
 
@@ -395,11 +398,48 @@ static bool run_early_startup(startup_hooks* hooks) {
 	return true;
 }
 
+static bool run_fastboot_startup(startup_hooks* hooks) {
+	hooks->step(gui2_backend::startup_step::PARTITIONS);
+	printf("=> Linking mtab\n");
+	symlink("/proc/mounts", "/etc/mtab");
+	std::string fstab_filename = "/etc/twrp.fstab";
+	if (!TWFunc::IsPathExists(fstab_filename)) {
+		fstab_filename = "/etc/recovery.fstab";
+	}
+	printf("=> Processing %s\n", fstab_filename.c_str());
+	if (!PartitionManager.Process_Fstab(fstab_filename, 1, false)) {
+		LOGERR("Failing out of recovery due to problem with fstab.\n");
+		return false;
+	}
+#ifdef TW_LOAD_VENDOR_MODULES
+	std::vector<std::string> prepareParts = {
+		"/system_root",
+		"/vendor",
+		"/vendor_dlkm",
+		"/odm"
+	};
+	for (auto& preparePart : prepareParts) {
+		TWPartition *part = PartitionManager.Find_Partition_By_Path(preparePart);
+		if (part) PartitionManager.Prepare_Super_Volume(part);
+	}
+#endif
+
+	hooks->step(gui2_backend::startup_step::SETTINGS);
+	if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
+		TWFunc::UseTmpfsCache();
+	DataManager::ReadSettingsFile();
+	TWFunc::ClearBootloaderMessage();
+
+	hooks->step(gui2_backend::startup_step::SCRIPTS);
+	ProcessFastbootdMode();
+	return true;
+}
+
 // Runs the recovery-mode startup on its own thread while gui2 shows the splash.
 class twrp_startup_backend final : public gui2_backend::startup_backend, public startup_hooks {
   public:
-	twrp_startup_backend(bool skip_decryption)
-		: skip_decryption_(skip_decryption) {}
+	twrp_startup_backend(bool skip_decryption, bool fastboot)
+		: skip_decryption_(skip_decryption), fastboot_(fastboot) {}
 	~twrp_startup_backend() override { finish(); }
 
 	bool started() const { return started_; }
@@ -491,6 +531,15 @@ class twrp_startup_backend final : public gui2_backend::startup_backend, public 
 	}
 
 	void run() {
+		if (fastboot_) {
+			if (!run_fastboot_startup(this)) {
+				std::lock_guard<std::mutex> lock(mutex_);
+				status_.failed = true;
+				return;
+			}
+			step(gui2_backend::startup_step::DONE);
+			return;
+		}
 		if (!run_early_startup(this)) {
 			std::lock_guard<std::mutex> lock(mutex_);
 			status_.failed = true;
@@ -506,6 +555,7 @@ class twrp_startup_backend final : public gui2_backend::startup_backend, public 
 	}
 
 	bool skip_decryption_;
+	bool fastboot_;
 	bool started_ = false;
 	std::thread worker_;
 	std::mutex mutex_;
@@ -622,45 +672,9 @@ int main(int argc, char* argv[]) {
 	startup.Parse(&argc, &argv);
 	android::base::SetProperty(TW_FASTBOOT_MODE_PROP, startup.GetFastbootMode() ? "1" : "0");
 
-	if (startup.GetFastbootMode()) {
-		printf("=> Linking mtab\n");
-		symlink("/proc/mounts", "/etc/mtab");
-		std::string fstab_filename = "/etc/twrp.fstab";
-		if (!TWFunc::IsPathExists(fstab_filename)) {
-			fstab_filename = "/etc/recovery.fstab";
-		}
-		printf("=> Processing %s\n", fstab_filename.c_str());
-		if (!PartitionManager.Process_Fstab(fstab_filename, 1, false)) {
-			LOGERR("Failing out of recovery due to problem with fstab.\n");
-			return -1;
-		}
-#ifdef TW_LOAD_VENDOR_MODULES
-		std::vector<std::string> prepareParts = {
-			"/system_root",
-			"/vendor",
-			"/vendor_dlkm",
-			"/odm"
-		};
-		for (auto& preparePart : prepareParts) {
-			TWPartition *part = PartitionManager.Find_Partition_By_Path(preparePart);
-			if (part) PartitionManager.Prepare_Super_Volume(part);
-		}
-#endif
-		printf("Starting the UI...\n");
-		if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
-			TWFunc::UseTmpfsCache();
-		DataManager::ReadSettingsFile();
-		if (!initializeLegacyGui())
-			LOGERR("Unable to initialize the legacy GUI startup path.\n");
-		TWFunc::ClearBootloaderMessage();
-		ProcessFastbootdMode();
-		TWFunc::UpdateIntentFile(startup.GetIntent());
-		Reboot();
-		return 0;
-	}
-
 	printf("Starting the UI...\n");
-	twrp_startup_backend startup_backend(startup.ShouldSkipDecryption());
+	const bool fastboot = startup.GetFastbootMode();
+	twrp_startup_backend startup_backend(startup.ShouldSkipDecryption(), fastboot);
 	// The default until startup reads the settings; ReadSettingsFile sets it again.
 	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
 
@@ -702,6 +716,7 @@ int main(int argc, char* argv[]) {
 	gui2_context_value.install = &install_backend;
 	gui2_context_value.sideload = &sideload_backend;
 	gui2_context_value.startup = &startup_backend;
+	gui2_context_value.fastboot_mode = fastboot;
 	const int gui2_result = gui2_start(&gui2_context_value);
 	if (gui2_result == GUI2_EXIT_STARTUP_FAILED)
 		return -1;
@@ -716,13 +731,20 @@ int main(int argc, char* argv[]) {
 		const bool reuse_display = gr_fb_pixel_bytes() > 0;
 		if (!startup_backend.started()) {
 			startup_hooks legacy_hooks;
-			if (!run_early_startup(&legacy_hooks))
+			if (!(fastboot ? run_fastboot_startup(&legacy_hooks) : run_early_startup(&legacy_hooks)))
 				return -1;
 			if (!initializeLegacyGui(reuse_display))
 				LOGERR("Unable to initialize the legacy GUI startup path.\n");
-			ProcessRecoveryMode(startup.ShouldSkipDecryption(), &legacy_hooks);
+			if (!fastboot)
+				ProcessRecoveryMode(startup.ShouldSkipDecryption(), &legacy_hooks);
 		} else if (!initializeLegacyGui(reuse_display)) {
 			LOGERR("Unable to initialize the legacy GUI fallback.\n");
+		}
+		if (fastboot) {
+			legacy_fastbootd_page();
+			TWFunc::UpdateIntentFile(startup.GetIntent());
+			Reboot();
+			return 0;
 		}
 		Legacy_Decrypt_Page();
 		startLegacyBatteryMonitor();

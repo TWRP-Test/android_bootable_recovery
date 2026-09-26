@@ -109,6 +109,10 @@ struct page_state {
   gui2_components::swipe_slider install_confirm;
   gui2_components::swipe_slider system_ro_confirm;
   gui2_components::swipe_slider sideload_confirm;
+  gui2_components::tab_bar fastbootd_tabs;
+  console_page_view fastbootd_console;
+  size_t fastbootd_console_consumed = 0;
+  uint64_t fastbootd_last_poll_ms = 0;
   bool sideload_wipe_dalvik = false;
   bool sideload_wipe_cache = false;
   progress_page_view sideload_progress;
