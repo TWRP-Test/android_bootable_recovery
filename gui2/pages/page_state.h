@@ -108,6 +108,12 @@ struct page_state {
   bool install_both_slots = false;
   gui2_components::swipe_slider install_confirm;
   gui2_components::swipe_slider system_ro_confirm;
+  gui2_components::swipe_slider sideload_confirm;
+  bool sideload_wipe_dalvik = false;
+  bool sideload_wipe_cache = false;
+  progress_page_view sideload_progress;
+  size_t sideload_console_consumed = 0;
+  uint64_t sideload_last_poll_ms = 0;
   progress_page_view install_progress;
   size_t install_console_consumed = 0;
   uint64_t install_last_poll_ms = 0;

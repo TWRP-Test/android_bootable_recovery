@@ -240,6 +240,17 @@ struct language_pack {
   const char* sys_ro_never_show;
   const char* sys_ro_keep;
   const char* sys_ro_swipe;
+  const char* sideload_title;
+  const char* sideload_summary;
+  const char* sideload_hint;
+  const char* sideload_usage;
+  const char* sideload_wipe_dalvik;
+  const char* sideload_wipe_cache;
+  const char* sideload_swipe;
+  const char* sideload_waiting;
+  const char* sideload_complete;
+  const char* sideload_failed;
+  const char* sideload_cancelled;
   const char* keyboard_settings_title;
   const char* keyboard_settings_summary;
   const char* keyboard_lift_label;

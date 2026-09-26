@@ -472,6 +472,7 @@ cc_binary {
         "gui2/backend/twrp_restore_backend.cpp",
         "gui2/backend/twrp_file_manager_backend.cpp",
         "gui2/backend/twrp_install_backend.cpp",
+        "gui2/backend/twrp_sideload_backend.cpp",
         "gui2/backend/twrp_terminal_backend.cpp",
         "gui2/backend/twrp_wifi_backend.cpp",
         "gui2/backend/twrp_wipe_backend.cpp",

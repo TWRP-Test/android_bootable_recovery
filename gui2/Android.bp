@@ -97,6 +97,7 @@ cc_library_static {
         "pages/terminal_page.cpp",
         "pages/wifi_page.cpp",
         "pages/system_read_only_page.cpp",
+        "pages/sideload_page.cpp",
         "pages/settings_page.cpp",
         "pages/backup_page.cpp",
         "pages/decrypt_page.cpp",

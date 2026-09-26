@@ -38,6 +38,7 @@
 #include "gui2/backend/twrp_restore_backend.h"
 #include "gui2/backend/twrp_file_manager_backend.h"
 #include "gui2/backend/twrp_install_backend.h"
+#include "gui2/backend/twrp_sideload_backend.h"
 #include "gui2/backend/twrp_terminal_backend.h"
 #ifdef TW_INCLUDE_WIFI
 #include "gui2/backend/twrp_wifi_backend.h"
@@ -708,6 +709,7 @@ int main(int argc, char **argv) {
 #endif
 	gui2_backend::twrp_file_manager_backend file_manager_backend;
 	gui2_backend::twrp_install_backend install_backend;
+	gui2_backend::twrp_sideload_backend sideload_backend;
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
@@ -726,6 +728,7 @@ int main(int argc, char **argv) {
 #endif
 	gui2_context_value.file_manager = &file_manager_backend;
 	gui2_context_value.install = &install_backend;
+	gui2_context_value.sideload = &sideload_backend;
 	gui2_context_value.startup = &startup_backend;
 	const int gui2_result = gui2_start(&gui2_context_value);
 	if (gui2_result == GUI2_EXIT_STARTUP_FAILED)
