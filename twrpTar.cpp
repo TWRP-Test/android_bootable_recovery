@@ -17,10 +17,8 @@
 	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-extern "C" {
 	#include "libtar/libtar.h"
-	#include "tarWrite.h"
-}
+	#include "tarWrite.hpp"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -39,6 +37,8 @@ extern "C" {
 #include <sys/ioctl.h>
 #include <zlib.h>
 #include <semaphore.h>
+#include <android-base/file.h>
+#include <android-base/unique_fd.h>
 #include "twrpTar.hpp"
 #include "twcommon.h"
 #include "variables.h"
@@ -120,7 +120,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 	int progress_pipe[2];
 
 	file_count = 0;
-	if (backup_exclusions == NULL) {
+	if (backup_exclusions == nullptr) {
 		LOGINFO("backup_exclusions is NULL\n");
 		return -1;
 	}
@@ -131,7 +131,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			return -1;
 	}
 
-	if (pipe(progress_pipe) < 0) {
+	if (pipe2(progress_pipe, O_CLOEXEC) < 0) {
 		LOGINFO("Error creating progress tracking pipe\n");
 		gui_err("backup_error=Error creating backup.");
 		return -1;
@@ -145,11 +145,15 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 	}
 
 	if (*tar_fork_pid == 0) {
-		// Child process
-		// Child closes input side of progress pipe
+		// Child process.
 		signal(SIGUSR2, twrpTar::Signal_Kill);
 		close(progress_pipe[0]);
 		progress_pipe_fd = progress_pipe[1];
+		// Close the progress pipe and terminate the child on any exit path.
+		auto exit_child = [&progress_pipe](int code) {
+			close(progress_pipe[1]);
+			_exit(code);
+		};
 
 		if (use_encryption || userdata_encryption) {
 			LOGINFO("Using encryption\n");
@@ -175,13 +179,12 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			Archive_Current_Size = 0;
 
 			d = opendir(tardir.c_str());
-			if (d == NULL) {
+			if (d == nullptr) {
 				gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(tardir)(strerror(errno)));
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			// Figure out the size of all data to be encrypted and create a list of unencrypted files
-			while ((de = readdir(d)) != NULL) {
+			while ((de = readdir(d)) != nullptr) {
 				FileName = tardir + "/" + de->d_name;
 
 				if (de->d_type == DT_BLK || de->d_type == DT_CHR || backup_exclusions->check_skip_dirs(FileName))
@@ -194,9 +197,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 							LOGINFO("Error in Generate_TarList with regular list!\n");
 							gui_err("backup_error=Error creating backup.");
 							closedir(d);
-							close(progress_pipe_fd);
-							close(progress_pipe[1]);
-							_exit(-1);
+							exit_child(-1);
 						}
 						file_count = (unsigned long long)(ret);
 						regular_size += backup_exclusions->Get_Folder_Size(FileName);
@@ -223,13 +224,12 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			Archive_Current_Size = 0;
 
 			d = opendir(tardir.c_str());
-			if (d == NULL) {
+			if (d == nullptr) {
 				gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(tardir)(strerror(errno)));
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			// Divide up the encrypted file list for threading
-			while ((de = readdir(d)) != NULL) {
+			while ((de = readdir(d)) != nullptr) {
 				FileName = tardir + "/" + de->d_name;
 
 				if (de->d_type == DT_BLK || de->d_type == DT_CHR || backup_exclusions->check_skip_dirs(FileName))
@@ -245,8 +245,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 							LOGINFO("Error in Generate_TarList with encrypted list!\n");
 							gui_err("backup_error=Error creating backup.");
 							closedir(d);
-							close(progress_pipe[1]);
-							_exit(-1);
+							exit_child(-1);
 						}
 						file_count += (unsigned long long)(ret);
 					}
@@ -265,8 +264,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 				LOGINFO("Error dividing up threads for encryption, %u threads for %u cores!\n", enc_thread_id, core_count);
 				if (enc_thread_id > core_count) {
 					gui_err("backup_error=Error creating backup.");
-					close(progress_pipe[1]);
-					_exit(-1);
+					exit_child(-1);
 				} else {
 					LOGINFO("Continuining anyway.");
 				}
@@ -292,28 +290,24 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 				if (createList((void*)&reg) != 0) {
 					LOGINFO("Error creating unencrypted backup.\n");
 					gui_err("backup_error=Error creating backup.");
-					close(progress_pipe[1]);
-					_exit(-1);
+					exit_child(-1);
 				}
 			}
 
 			if (pthread_attr_init(&tattr)) {
 				LOGINFO("Unable to pthread_attr_init\n");
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			if (pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_JOINABLE)) {
 				LOGINFO("Error setting pthread_attr_setdetachstate\n");
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			if (pthread_attr_setscope(&tattr, PTHREAD_SCOPE_SYSTEM)) {
 				LOGINFO("Error setting pthread_attr_setscope\n");
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			/*if (pthread_attr_setstacksize(&tattr, 524288)) {
 				LOGERR("Error setting pthread_attr_setstacksize\n");
@@ -340,8 +334,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 					if (createList((void*)&enc[i]) != 0) {
 						LOGINFO("Error creating encrypted backup %i.\n", i);
 						gui_err("backup_error=Error creating backup.");
-						close(progress_pipe[1]);
-						_exit(-1);
+						exit_child(-1);
 					} else {
 						enc[i].thread_id = i + 1;
 					}
@@ -356,8 +349,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 					if (pthread_join(enc_thread[i], &thread_return)) {
 						LOGINFO("Error joining thread %i\n", i);
 						gui_err("backup_error=Error creating backup.");
-						close(progress_pipe[1]);
-						_exit(-1);
+						exit_child(-1);
 					} else {
 						LOGINFO("Joined thread %i.\n", i);
 						ret = (int)(intptr_t)thread_return;
@@ -365,8 +357,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 							thread_error = 1;
 							LOGINFO("Thread %i returned an error %i.\n", i, ret);
 							gui_err("backup_error=Error creating backup.");
-							close(progress_pipe[1]);
-							_exit(-1);
+							exit_child(-1);
 						}
 					}
 				} else {
@@ -376,12 +367,10 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			if (thread_error) {
 				LOGINFO("Error returned by one or more threads.\n");
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			LOGINFO("Finished encrypted backup.\n");
-			close(progress_pipe[1]);
-			_exit(0);
+			exit_child(0);
 		} else {
 			// Not encrypted
 			std::vector<TarListStruct> FileList;
@@ -395,8 +384,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			if (ret < 0) {
 				LOGINFO("Error in Generate_TarList!\n");
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
 			file_count = (unsigned long long)(ret);
 			// Create a backup
@@ -419,11 +407,9 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			write(progress_pipe_fd, &Total_Backup_Size, sizeof(Total_Backup_Size));
 			if (createList((void*)&reg) != 0) {
 				gui_err("backup_error=Error creating backup.");
-				close(progress_pipe[1]);
-				_exit(-1);
+				exit_child(-1);
 			}
-			close(progress_pipe[1]);
-			_exit(0);
+			exit_child(0);
 		}
 	} else {
 		// Parent side
@@ -434,7 +420,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 		close(progress_pipe[1]);
 
 		// Read progress data from children
-		while (read(progress_pipe[0], &fs, sizeof(fs)) > 0) {
+		while (android::base::ReadFully(progress_pipe[0], &fs, sizeof(fs))) {
 			if (first_data == 0) {
 				// First incoming data is the file count
 				file_count = fs;
@@ -1432,33 +1418,83 @@ uint64_t twrpTar::get_size() {
 	return 0;
 }
 
-unsigned long long twrpTar::uncompressedSize(string filename) {
-	unsigned long long total_size = 0;
-	string Tar, Command, result;
-	vector<string> split;
+namespace {
+// pigz -l data row's original/uncompressed size lands at split[5]; 0 if unparseable.
+uint64_t parsePigzUncompressedSize(const string& output) {
+	vector<string> parts = TWFunc::SplitString(output, ' ', true);
+	if (parts.size() > 5)
+		return strtoull(parts[5].c_str(), nullptr, 10);
+	return 0;
+}
+
+// Stream filename through aes-decrypt then pigz -l; empty string on pipe/fork failure.
+string pigzDecryptedListing(const string& filename, const string& password) {
+	android::base::unique_fd aes_read, aes_write, pigz_read, pigz_write;
+	if (!android::base::Pipe(&aes_read, &aes_write) ||
+	    !android::base::Pipe(&pigz_read, &pigz_write))
+		return {};
+
+	pid_t aes_pid = fork();
+	if (aes_pid == 0) {
+		int input = open(filename.c_str(), O_RDONLY | O_LARGEFILE);
+		if (input < 0)
+			_exit(1);
+		dup2(input, STDIN_FILENO);
+		dup2(aes_write.get(), STDOUT_FILENO);
+		close(input);
+		close(aes_read.get());
+		close(aes_write.get());
+		close(pigz_read.get());
+		close(pigz_write.get());
+		TWFunc::AesDecryptStream(password);
+		_exit(0);
+	}
+
+	pid_t pigz_pid = fork();
+	if (pigz_pid == 0) {
+		dup2(aes_read.get(), STDIN_FILENO);
+		dup2(pigz_write.get(), STDOUT_FILENO);
+		close(aes_read.get());
+		close(aes_write.get());
+		close(pigz_read.get());
+		close(pigz_write.get());
+		execlp("pigz", "pigz", "-l", static_cast<char*>(nullptr));
+		_exit(1);
+	}
+
+	// Close every end the parent doesn't use so children see EOF and exit.
+	aes_read.reset();
+	aes_write.reset();
+	pigz_write.reset();
+
+	string result;
+	if (aes_pid > 0 && pigz_pid > 0) {
+		char buf[256];
+		ssize_t n;
+		while ((n = read(pigz_read.get(), buf, sizeof(buf) - 1)) > 0)
+			result.append(buf, n);
+	}
+
+	int status;
+	if (aes_pid > 0)
+		waitpid(aes_pid, &status, 0);
+	if (pigz_pid > 0)
+		waitpid(pigz_pid, &status, 0);
+	return result;
+}
+}  // namespace
+
+uint64_t twrpTar::uncompressedSize(const string& filename) {
+	uint64_t total_size = 0;
+	string result;
 
 	Set_Archive_Type(TWFunc::GetFileType(tarfn));
 	if (current_archive_type == UNCOMPRESSED) {
 		total_size = TWFunc::GetFileSize(filename);
 	} else if (current_archive_type == COMPRESSED) {
-		// Compressed
-		Command = "pigz -l '" + filename + "'";
-		/* if we set Command = "pigz -l " + tarfn + " | sed '1d' | cut -f5 -d' '";
-		we get the uncompressed size at once. */
-		TWFunc::ExecCmd(Command, result, false);
-		if (!result.empty()) {
-			/* Expected output:
-			compressed original  reduced name
-			95855838   179403776 -1.3%   data.<filesystem>.win
-			^
-			split[5]
-			*/
-			split = TWFunc::SplitString(result, ' ', true);
-			if (split.size() > 4)
-				total_size = atoi(split[5].c_str());
-		}
+		TWFunc::ExecCmd("pigz -l '" + filename + "'", result, false);
+		total_size = parsePigzUncompressedSize(result);
 	} else if (current_archive_type == COMPRESSED_ENCRYPTED) {
-		// File is encrypted and may be compressed
 		int ret = TWFunc::TryDecryptingFile(filename, password);
 		if (ret < 1) {
 			gui_msg(Msg(msg::kError, "fail_decrypt_tar=Failed to decrypt tar file '{1}'")(tarfn));
@@ -1467,78 +1503,20 @@ unsigned long long twrpTar::uncompressedSize(string filename) {
 			LOGERR("Decrypted file is not in tar format.\n");
 			total_size = TWFunc::GetFileSize(filename);
 		} else if (ret == 3) {
-			// Match the original OpenAES path: inspect the decrypted gzip stream
-			// with pigz to obtain the uncompressed size.
-			int aes_pipe[2], pigz_pipe[2];
-			if (pipe2(aes_pipe, O_CLOEXEC) == 0) {
-				if (pipe2(pigz_pipe, O_CLOEXEC) != 0) {
-					close(aes_pipe[0]);
-					close(aes_pipe[1]);
-				} else {
-				pid_t aes_pid = fork();
-				if (aes_pid == 0) {
-					int input = open(filename.c_str(), O_RDONLY | O_LARGEFILE);
-					if (input < 0)
-						_exit(1);
-					dup2(input, STDIN_FILENO);
-					dup2(aes_pipe[1], STDOUT_FILENO);
-					close(input);
-					close(aes_pipe[0]);
-					close(aes_pipe[1]);
-					close(pigz_pipe[0]);
-					close(pigz_pipe[1]);
-					TWFunc::AesDecryptStream(password);
-					_exit(0);
-				}
-
-				pid_t pigz_pid = fork();
-				if (pigz_pid == 0) {
-					dup2(aes_pipe[0], STDIN_FILENO);
-					dup2(pigz_pipe[1], STDOUT_FILENO);
-					close(aes_pipe[0]);
-					close(aes_pipe[1]);
-					close(pigz_pipe[0]);
-					close(pigz_pipe[1]);
-					execlp("pigz", "pigz", "-l", static_cast<char*>(NULL));
-					_exit(1);
-				}
-
-				close(aes_pipe[0]);
-				close(aes_pipe[1]);
-				close(pigz_pipe[1]);
-				if (aes_pid > 0 && pigz_pid > 0) {
-					char buf[256];
-					ssize_t n;
-					while ((n = read(pigz_pipe[0], buf, sizeof(buf) - 1)) > 0)
-						result.append(buf, n);
-				}
-				close(pigz_pipe[0]);
-				int status;
-				if (aes_pid > 0)
-					waitpid(aes_pid, &status, 0);
-				if (pigz_pid > 0)
-					waitpid(pigz_pid, &status, 0);
-				if (!result.empty()) {
-					split = TWFunc::SplitString(result, ' ', true);
-					if (split.size() > 5)
-						total_size = strtoull(split[5].c_str(), NULL, 10);
-				}
-				}
-			}
+			total_size = parsePigzUncompressedSize(pigzDecryptedListing(filename, password));
 			if (total_size == 0)
 				total_size = TWFunc::GetFileSize(filename);
 		} else {
 			total_size = TWFunc::GetFileSize(filename);
 		}
 	}
-
 	return total_size;
 }
 
-extern "C" ssize_t write_tar(int fd, const void *buffer, size_t size) {
-	return (ssize_t) write_libtar_buffer(fd, buffer, size);
+extern "C" ssize_t write_tar(const int fd, const void *buffer, const size_t size) {
+	return write_libtar_buffer(fd, buffer, size);
 }
 
-extern "C" ssize_t write_tar_no_buffer(int fd, const void *buffer, size_t size) {
-	return (ssize_t) write_libtar_no_buffer(fd, buffer, size);
+extern "C" ssize_t write_tar_no_buffer(const int fd, const void *buffer, const size_t size) {
+	return write_libtar_no_buffer(fd, buffer, size);
 }

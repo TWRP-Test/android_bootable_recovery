@@ -16,8 +16,8 @@
         along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-extern "C" {
 	#include "libtar/libtar.h"
+extern "C" {
 	ssize_t write_tar(int fd, const void *buffer, size_t size);
 	ssize_t write_tar_no_buffer(int fd, const void *buffer, size_t size);
 }
@@ -86,7 +86,7 @@ private:
 	static void* createList(void *cookie);
 	static void* extractMulti(void *cookie);
 	int tarList(std::vector<TarListStruct> *TarList, unsigned thread_id);
-	unsigned long long uncompressedSize(string filename);
+	uint64_t uncompressedSize(const string& filename);
 	static void Signal_Kill(int signum);
 
 	enum ArchiveType current_archive_type;

@@ -454,7 +454,7 @@ cc_binary {
         "startup/get_args.cpp",
         "twrp_functions.cpp",
         "openrecoveryscript.cpp",
-        "tarWrite.c",
+        "tarWrite.cpp",
         "twrpAdbBuFifo.cpp",
         "twrpRepacker.cpp",
         "oaes/oaes.cpp",
