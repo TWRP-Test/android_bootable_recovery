@@ -52,6 +52,8 @@ struct progress_page_options {
   lv_obj_t* page_layer = nullptr;
   progress_action left_action;
   progress_action right_action;
+  // One full-width button shown while the job runs, e.g. cancel.
+  progress_action running_action;
   lv_event_cb_t press_guard_callback = nullptr;
 };
 
@@ -69,6 +71,7 @@ struct progress_page_view {
   console_page_view console;
   // Hidden until the job stops running.
   lv_obj_t* actions = nullptr;
+  lv_obj_t* running_action = nullptr;
   bool sweeping = false;
 };
 

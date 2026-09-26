@@ -58,6 +58,7 @@
 #include "pages/wifi_page.h"
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
+#include "pages/sideload_page.h"
 #include "pages/system_read_only_page.h"
 #include "pages/wipe_page.h"
 #include "pages/progress_page.h"
@@ -105,6 +106,7 @@ static gui2_backend::wifi_backend*& wifi = runtime.wifi;
 static gui2_backend::file_manager_backend*& file_manager = runtime.file_manager;
 static gui2_backend::install_backend*& install = runtime.install;
 static gui2_backend::startup_backend*& startup = runtime.startup;
+static gui2_backend::sideload_backend*& sideload = runtime.sideload;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -167,6 +169,7 @@ static bool page_is_progress(page_kind page) {
     case page_kind::BACKUP_PROGRESS:
     case page_kind::RESTORE_PROGRESS:
     case page_kind::STARTUP_SCRIPT:
+    case page_kind::SIDELOAD_PROGRESS:
       return true;
     default:
       return false;
@@ -241,6 +244,8 @@ static void show_wifi_page(page_transition transition);
 static void show_wifi_password_page(page_transition transition);
 static void show_install_page(page_transition transition);
 static void show_startup_script_page(page_transition transition);
+static void show_sideload_page(page_transition transition);
+static void show_sideload_progress_page(page_transition transition);
 static void show_system_read_only_page(page_transition transition);
 static void progress_reboot_system_cb(lv_event_t* event);
 static void progress_back_cb(lv_event_t* event);
@@ -402,6 +407,7 @@ enum class settings_target {
   ADVANCED_WIPE,
   FILE_MANAGER,
   WIFI,
+  SIDELOAD,
   FORMAT_DATA,
 };
 
@@ -418,6 +424,7 @@ static constexpr settings_target keyboard_settings_target = settings_target::KEY
 static constexpr settings_target advanced_wipe_target = settings_target::ADVANCED_WIPE;
 static constexpr settings_target file_manager_target = settings_target::FILE_MANAGER;
 static constexpr settings_target wifi_target = settings_target::WIFI;
+static constexpr settings_target sideload_target = settings_target::SIDELOAD;
 static constexpr settings_target format_data_target = settings_target::FORMAT_DATA;
 static constexpr int wipe_target_indices[24] = {
   0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
@@ -505,6 +512,17 @@ static void navigate_back(void) {
     navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::WIFI_PASSWORD) {
     navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::SIDELOAD) {
+    navigate_to(page_kind::ACTION,
+                &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
+                page_transition::POP);
+  } else if (page_router.current() == page_kind::SIDELOAD_PROGRESS) {
+    if (sideload == nullptr || sideload->status().state != gui2_backend::sideload_state::RUNNING) {
+      if (sideload != nullptr) sideload->acknowledge();
+      navigate_to(page_kind::ACTION,
+                  &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
+                  page_transition::POP);
+    }
   } else if (page_router.current() == page_kind::WIFI) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
@@ -1001,6 +1019,8 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.restore_view = {};
   page_state.restore_progress = {};
   page_state.restore_console_consumed = 0;
+  page_state.sideload_confirm.detach();
+  page_state.sideload_progress = {};
   page_state.system_ro_confirm.detach();
   page_state.decrypt_status = nullptr;
   if (page_state.format_data_keyboard != nullptr) {
@@ -1107,6 +1127,8 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::FILE_MANAGER);
   else if (*target == settings_target::WIFI)
     navigate_to(page_kind::WIFI);
+  else if (*target == settings_target::SIDELOAD)
+    navigate_to(page_kind::SIDELOAD);
   else if (*target == settings_target::EXPORT_LOG)
     navigate_to(page_kind::EXPORT_LOG);
   else if (*target == settings_target::CONSOLE_SETTINGS)
@@ -1783,6 +1805,121 @@ static void poll_wifi(uint64_t now_ms) {
   if (finished == wifi_job::CONNECT) wifi_last_failed = state == gui2_backend::wifi_state::FAILED;
   // A report only adds log lines, which are already on screen.
   if (finished != wifi_job::REPORT) wifi_refresh_page();
+}
+
+// ---- ADB Sideload ----------------------------------------------------------
+static void sideload_option_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  if (toggle == nullptr || index == nullptr) return;
+  const bool checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  (*index == 0 ? page_state.sideload_wipe_dalvik : page_state.sideload_wipe_cache) = checked;
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void sideload_confirmed(void*) {
+  if (sideload == nullptr) return;
+  if (!sideload->start(page_state.sideload_wipe_dalvik, page_state.sideload_wipe_cache)) {
+    page_state.sideload_confirm.reset();
+    return;
+  }
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
+  navigate_to(page_kind::SIDELOAD_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void show_sideload_page(page_transition transition) {
+  const int track_height = gui2_pages::wipe_track_height();
+  const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
+  create_page_scaffold(page_kind::SIDELOAD, false, strings().sideload_title,
+                       strings().sideload_summary, bottom_reserved, transition);
+
+  gui2_pages::sideload_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.wipe_dalvik = page_state.sideload_wipe_dalvik;
+  options.wipe_cache = page_state.sideload_wipe_cache;
+  options.option_callback = sideload_option_cb;
+  gui2_pages::build_sideload_page(options);
+
+  page_state.sideload_confirm.create(page_layer, ui, ui.outer_margin,
+                                     ui.height - ui.status_height - ui.nav_height - track_height -
+                                         ui.cards_top_gap,
+                                     ui.content_width, track_height, strings().sideload_swipe,
+                                     sideload_confirmed, nullptr);
+}
+
+static void sideload_cancel_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (sideload != nullptr) sideload->cancel();
+  if (page_state.sideload_progress.running_action != nullptr)
+    lv_obj_set_hidden(page_state.sideload_progress.running_action, true);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void poll_sideload_console(void) {
+  if (console == nullptr || page_state.sideload_progress.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  page_state.sideload_console_consumed =
+      console->fetch(page_state.sideload_console_consumed, &lines);
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.sideload_progress.console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.sideload_progress.console);
+}
+
+// Waiting for the computer has no number to show; the zip's own progress
+// takes over once it reports any.
+static void refresh_sideload_progress(void) {
+  if (sideload == nullptr) return;
+  const auto status = sideload->status();
+  gui2_pages::operation_status progress;
+  switch (status.state) {
+    case gui2_backend::sideload_state::DONE:
+      progress.state = gui2_pages::operation_state::DONE;
+      break;
+    case gui2_backend::sideload_state::FAILED:
+    case gui2_backend::sideload_state::CANCELLED:
+      progress.state = gui2_pages::operation_state::FAILED;
+      break;
+    default:
+      progress.state = gui2_pages::operation_state::RUNNING;
+      progress.total = status.progress > 0 ? 100 : 0;
+      progress.done = status.progress;
+      break;
+  }
+  gui2_pages::operation_labels labels;
+  labels.running = status.progress > 0 ? strings().installing : strings().sideload_waiting;
+  labels.done = strings().sideload_complete;
+  labels.failed = status.state == gui2_backend::sideload_state::CANCELLED
+                      ? strings().sideload_cancelled
+                      : strings().sideload_failed;
+  gui2_pages::update_progress(&page_state.sideload_progress, labels, progress);
+}
+
+static void show_sideload_progress_page(page_transition transition) {
+  create_page_scaffold(page_kind::SIDELOAD_PROGRESS, false, strings().sideload_title,
+                       strings().sideload_usage, gui2_pages::progress_actions_height(ui),
+                       transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text = strings().sideload_waiting;
+  options.subtitle = page_summary;
+  options.page_layer = page_layer;
+  options.left_action = { strings().action_back, progress_back_cb };
+  options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
+  options.running_action = { strings().cancel, sideload_cancel_cb };
+  options.press_guard_callback = press_cancel_guard_cb;
+  page_state.sideload_progress = gui2_pages::build_progress_page(options);
+  page_state.sideload_console_consumed = 0;
+  page_state.sideload_last_poll_ms = 0;
+  refresh_sideload_progress();
 }
 
 static std::string file_actions_name;
@@ -3697,6 +3834,7 @@ static void show_action_page(const action_definition& definition, page_transitio
     advanced_options.strings = &strings();
     advanced_options.file_manager_target = &file_manager_target;
     // Absent from the build, or switched off for this device: no row at all.
+    advanced_options.sideload_target = sideload != nullptr ? &sideload_target : nullptr;
     advanced_options.wifi_target = wifi != nullptr && wifi->available() ? &wifi_target
                                                                      : nullptr;
     advanced_options.option_event_callback = settings_option_event_cb;
@@ -3876,6 +4014,12 @@ static void build_page(const gui2_pages::page_request& request) {
       return;
     case page_kind::STARTUP_SCRIPT:
       show_startup_script_page(request.transition);
+      return;
+    case page_kind::SIDELOAD:
+      show_sideload_page(request.transition);
+      return;
+    case page_kind::SIDELOAD_PROGRESS:
+      show_sideload_progress_page(request.transition);
       return;
     case page_kind::SYSTEM_READ_ONLY:
       show_system_read_only_page(request.transition);
@@ -4183,6 +4327,12 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     refresh_install_progress();
   }
   poll_wifi(now_ms);
+  if (page_state.sideload_progress.body != nullptr &&
+      now_ms - page_state.sideload_last_poll_ms >= 100) {
+    page_state.sideload_last_poll_ms = now_ms;
+    poll_sideload_console();
+    refresh_sideload_progress();
+  }
   if (page_state.terminal_view.output.body != nullptr &&
       now_ms - page_state.terminal_last_poll_ms >= 100) {
     page_state.terminal_last_poll_ms = now_ms;
@@ -4268,6 +4418,7 @@ int gui2_start(const gui2_context* context) {
   install = context->install;
   restore = context->restore;
   startup = context->startup;
+  sideload = context->sideload;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   startup_language_known = startup == nullptr;

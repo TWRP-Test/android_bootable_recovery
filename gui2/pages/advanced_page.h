@@ -17,6 +17,7 @@ struct advanced_page_options {
   const void* export_log_target = nullptr;
   // Null hides the row, which is what a build without Wi-Fi wants.
   const void* wifi_target = nullptr;
+  const void* sideload_target = nullptr;
 };
 
 void build_advanced_page(const advanced_page_options& options);

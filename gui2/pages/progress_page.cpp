@@ -126,13 +126,28 @@ static bool has_actions(const progress_page_options& options) {
          options.left_action.label != nullptr && options.right_action.label != nullptr;
 }
 
+static bool has_running_action(const progress_page_options& options) {
+  return options.page_layer != nullptr && options.metrics != nullptr &&
+         options.running_action.label != nullptr;
+}
+
 static int bottom_reserved_for(const progress_page_options& options) {
-  return has_actions(options) ? progress_actions_height(*options.metrics)
-                              : gui2_core::navigation_safe_area();
+  return has_actions(options) || has_running_action(options)
+             ? progress_actions_height(*options.metrics)
+             : gui2_core::navigation_safe_area();
 }
 
 static void build_actions(progress_page_view* view,
                           const progress_page_options& options) {
+  if (has_running_action(options)) {
+    const auto& metrics = *options.metrics;
+    const int height = gui2_core::single_line_card_height();
+    view->running_action =
+        create_action_button(options.page_layer, metrics, options.running_action, false,
+                             metrics.content_width, height, options.press_guard_callback);
+    lv_obj_set_pos(view->running_action, metrics.outer_margin,
+                   metrics.height - metrics.status_height - metrics.outer_margin - height);
+  }
   if (!has_actions(options)) return;
 
   const auto& metrics = *options.metrics;
@@ -253,6 +268,8 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
     else
       lv_obj_set_hidden(view->actions, false);
   }
+  if (view->running_action != nullptr && status.state != operation_state::RUNNING)
+    lv_obj_set_hidden(view->running_action, true);
 
   if (view->bar == nullptr || view->bar_fill == nullptr || view->track_width <= 0) return;
 
