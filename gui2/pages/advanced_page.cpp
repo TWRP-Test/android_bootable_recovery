@@ -29,6 +29,18 @@ void build_advanced_page(const advanced_page_options& options) {
                                        options.strings->export_log_summary,
                                        options.option_event_callback, options.export_log_target,
                                        options.press_guard_callback);
+
+  const auto add = [&](const void* target, const char* title, const char* detail) {
+    if (target == nullptr) return;
+    gui2_components::create_setting_card(options.content, *options.metrics, title, detail,
+                                         options.option_event_callback, target,
+                                         options.press_guard_callback);
+  };
+  const auto& strings = *options.strings;
+  add(options.twrp_folder_target, strings.twrp_folder_title, options.twrp_folder_detail);
+  add(options.fix_bootloop_target, strings.fix_bootloop_title, strings.fix_bootloop_summary);
+  add(options.merge_snapshots_target, strings.merge_title, strings.merge_summary);
+  add(options.disable_avb2_target, strings.avb_title, strings.avb_summary);
 }
 
 }  // namespace gui2_pages

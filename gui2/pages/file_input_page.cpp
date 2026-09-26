@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "components/section_label.h"
+#include "components/setting_card.h"
 #include "core/ui_helpers.h"
 
 namespace gui2_pages {
@@ -55,6 +57,21 @@ file_input_page_view build_file_input_page(const file_input_page_options& option
   lv_obj_set_style_pad_left(view.input, gui2_core::card_inner_padding(), LV_PART_MAIN);
   lv_obj_set_style_pad_top(view.input, input_pad, LV_PART_MAIN);
   lv_obj_set_scrollbar_mode(view.input, LV_SCROLLBAR_MODE_OFF);
+
+  if (options.error_text != nullptr || options.note_text != nullptr ||
+      options.action_title != nullptr)
+    lv_obj_set_style_pad_row(view.body, metrics.card_gap, LV_PART_MAIN);
+  if (options.error_text != nullptr) {
+    lv_obj_t* error =
+        gui2_components::create_section_label(view.body, metrics, options.error_text);
+    lv_obj_set_style_text_color(error, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  }
+  if (options.note_text != nullptr)
+    gui2_components::create_section_label(view.body, metrics, options.note_text);
+  if (options.action_title != nullptr)
+    gui2_components::create_setting_card(view.body, metrics, options.action_title,
+                                         options.action_detail, options.action_callback, nullptr,
+                                         options.press_guard_callback);
 
   if (options.keyboard != nullptr) {
     gui2_components::keyboard_options keyboard;

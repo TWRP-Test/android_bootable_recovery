@@ -102,6 +102,17 @@ void build_advanced_wipe_page(const advanced_wipe_page_options& options) {
         body, metrics, name, options.selected[i], options.option_event_callback,
         const_cast<void*>(static_cast<const void*>(&options.target_indices[i])));
   }
+
+  if (options.repair_callback != nullptr) {
+    lv_obj_t* card = gui2_components::create_setting_card(
+        body, metrics, options.strings->repair_change_title,
+        options.repair_invalid ? options.strings->repair_change_invalid
+                               : options.strings->repair_change_hint,
+        options.repair_callback, nullptr, options.press_guard_callback);
+    lv_obj_t* detail = lv_obj_get_child(lv_obj_get_child(card, 0), 1);
+    if (options.repair_invalid && detail != nullptr)
+      lv_obj_set_style_text_color(detail, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  }
 }
 
 format_data_page_view build_format_data_page(const format_data_page_options& options) {

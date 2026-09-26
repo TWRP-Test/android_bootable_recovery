@@ -20,6 +20,8 @@ class swipe_slider {
   // A disabled track keeps its place but refuses the gesture outright, rather
   // than letting it run and rejecting the result afterwards.
   void set_enabled(bool enabled);
+  // Red instead of blue, for the swipes that destroy data.
+  void set_danger(bool danger);
   int progress() const {
     return progress_;
   }

@@ -45,6 +45,11 @@ enum class page_id {
   SIDELOAD_PROGRESS,
   FASTBOOTD,
   SYSTEM_READ_ONLY,
+  PARTITION_OPTIONS,
+  CHANGE_FS,
+  TOOL_CONFIRM,
+  TOOL_PROGRESS,
+  TOOL_INPUT,
 };
 
 struct page_request {

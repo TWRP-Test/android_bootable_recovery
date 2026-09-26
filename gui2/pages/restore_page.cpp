@@ -104,6 +104,18 @@ restore_page_view build_restore_page(const restore_page_options& options) {
         const_cast<void*>(static_cast<const void*>(options.check_digest_target)));
   }
 
+  if (options.manage_callback != nullptr) {
+    gui2_components::create_section_label(view.options_pane, metrics, strings.manage_backup);
+    gui2_components::create_setting_card(view.options_pane, metrics, strings.rename_backup,
+                                         nullptr, options.manage_callback, options.rename_target,
+                                         options.press_guard_callback);
+    lv_obj_t* remove = gui2_components::create_setting_card(
+        view.options_pane, metrics, strings.delete_backup, nullptr, options.manage_callback,
+        options.delete_target, options.press_guard_callback);
+    lv_obj_set_style_text_color(lv_obj_get_child(lv_obj_get_child(remove, 0), 0),
+                                lv_color_hex(0xF0443E), LV_PART_MAIN);
+  }
+
   // A password is only ever asked for when the folder turned out to be
   // encrypted, which is something the backup itself says.
   if (options.encrypted) {

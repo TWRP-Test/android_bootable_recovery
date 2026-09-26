@@ -2,8 +2,10 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <iterator>
 #include <string>
 
@@ -61,6 +63,7 @@
 #include "pages/settings_page.h"
 #include "pages/sideload_page.h"
 #include "pages/system_read_only_page.h"
+#include "pages/tool_pages.h"
 #include "pages/wipe_page.h"
 #include "pages/progress_page.h"
 #include "pages/restore_page.h"
@@ -77,6 +80,7 @@
 #include "shell/quick_panel_controller.h"
 #include "shell/screen_feedback.h"
 #include "shell/screen_lock.h"
+#include "components/tip_card.h"
 #include "shell/splash.h"
 #include "shell/status_bar.h"
 #include "shell/status_bar_controller.h"
@@ -108,6 +112,7 @@ static gui2_backend::file_manager_backend*& file_manager = runtime.file_manager;
 static gui2_backend::install_backend*& install = runtime.install;
 static gui2_backend::startup_backend*& startup = runtime.startup;
 static gui2_backend::sideload_backend*& sideload = runtime.sideload;
+static gui2_backend::tools_backend*& tools = runtime.tools;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -172,6 +177,7 @@ static bool page_is_progress(page_kind page) {
     case page_kind::RESTORE_PROGRESS:
     case page_kind::STARTUP_SCRIPT:
     case page_kind::SIDELOAD_PROGRESS:
+    case page_kind::TOOL_PROGRESS:
       return true;
     default:
       return false;
@@ -412,6 +418,10 @@ enum class settings_target {
   WIFI,
   SIDELOAD,
   FORMAT_DATA,
+  TWRP_FOLDER,
+  FIX_BOOTLOOP,
+  MERGE_SNAPSHOTS,
+  DISABLE_AVB2,
 };
 
 static constexpr settings_target language_target = settings_target::LANGUAGE;
@@ -429,10 +439,50 @@ static constexpr settings_target file_manager_target = settings_target::FILE_MAN
 static constexpr settings_target wifi_target = settings_target::WIFI;
 static constexpr settings_target sideload_target = settings_target::SIDELOAD;
 static constexpr settings_target format_data_target = settings_target::FORMAT_DATA;
+static constexpr settings_target twrp_folder_target = settings_target::TWRP_FOLDER;
+static constexpr settings_target fix_bootloop_target = settings_target::FIX_BOOTLOOP;
+static constexpr settings_target merge_snapshots_target = settings_target::MERGE_SNAPSHOTS;
+static constexpr settings_target disable_avb2_target = settings_target::DISABLE_AVB2;
 static constexpr int wipe_target_indices[24] = {
   0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
   12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
 };
+
+// ---- Legacy tools: shared state --------------------------------------------
+// One confirm page and one progress page serve every job; the request says
+// what they show and where each of them returns to.
+struct tool_request {
+  gui2_backend::tool_job job = gui2_backend::tool_job::REPAIR;
+  std::string target;
+  std::string value;
+  std::string title;
+  std::string summary;
+  std::string text;
+  gui2_pages::confirm_tone tone = gui2_pages::confirm_tone::INFO;
+  const char* swipe = nullptr;
+  const char* running = nullptr;
+  const char* done = nullptr;
+  gui2_pages::page_request back{ page_kind::HOME };
+  gui2_pages::page_request after{ page_kind::HOME };
+};
+static tool_request tool_job_request;
+
+enum class tool_input_kind {
+  RENAME_BACKUP,
+  TWRP_FOLDER,
+};
+static tool_input_kind tool_input_mode = tool_input_kind::RENAME_BACKUP;
+
+static void wipe_repair_event_cb(lv_event_t* event);
+static void restore_manage_event_cb(lv_event_t* event);
+static void open_advanced_tool(settings_target target);
+static void show_partition_options_page(page_transition transition);
+static void show_change_fs_page(page_transition transition);
+static void show_tool_confirm_page(page_transition transition);
+static void show_tool_progress_page(page_transition transition);
+static void show_tool_input_page(page_transition transition);
+static void poll_tool_console(void);
+static void refresh_tool_progress(void);
 
 static int navigation_rank(page_kind page) {
   if (page == page_kind::HOME) return 0;
@@ -549,6 +599,25 @@ static void navigate_back(void) {
     } else {
       navigate_to(page_kind::HOME, nullptr, page_transition::POP);
     }
+  } else if (page_router.current() == page_kind::PARTITION_OPTIONS) {
+    navigate_to(page_kind::ADVANCED_WIPE, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::CHANGE_FS) {
+    navigate_to(page_kind::PARTITION_OPTIONS, nullptr, page_transition::POP);
+  } else if (page_router.current() == page_kind::TOOL_CONFIRM) {
+    navigate_to(tool_job_request.back.id, tool_job_request.back.payload, page_transition::POP);
+  } else if (page_router.current() == page_kind::TOOL_PROGRESS) {
+    if (tools == nullptr || tools->status() != gui2_backend::tool_state::RUNNING) {
+      if (tools != nullptr) tools->acknowledge();
+      navigate_to(tool_job_request.after.id, tool_job_request.after.payload,
+                  page_transition::POP);
+    }
+  } else if (page_router.current() == page_kind::TOOL_INPUT) {
+    if (tool_input_mode == tool_input_kind::RENAME_BACKUP)
+      navigate_to(page_kind::RESTORE, nullptr, page_transition::POP);
+    else
+      navigate_to(page_kind::ACTION,
+                  &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
+                  page_transition::POP);
   } else if (!home_page_active) {
     navigate_to(page_kind::HOME, nullptr, page_transition::POP);
   }
@@ -1031,6 +1100,12 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.system_ro_confirm.detach();
   page_state.fastbootd_tabs.detach();
   page_state.fastbootd_console = {};
+  page_state.change_fs_confirm.detach();
+  page_state.tool_confirm.detach();
+  page_state.tool_progress = {};
+  page_state.tool_console_consumed = 0;
+  page_state.tool_input_keyboard.dismiss();
+  page_state.tool_input = nullptr;
   page_state.decrypt_status = nullptr;
   if (page_state.format_data_keyboard != nullptr) {
     lv_obj_delete(page_state.format_data_keyboard);
@@ -1151,6 +1226,10 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::ADVANCED_WIPE);
   else if (*target == settings_target::FORMAT_DATA)
     navigate_to(page_kind::FORMAT_DATA);
+  else if (*target == settings_target::TWRP_FOLDER || *target == settings_target::FIX_BOOTLOOP ||
+           *target == settings_target::MERGE_SNAPSHOTS ||
+           *target == settings_target::DISABLE_AVB2)
+    open_advanced_tool(*target);
   else
     request_legacy_gui_event_cb(event);
 }
@@ -2940,6 +3019,8 @@ static void show_advanced_wipe_page(page_transition transition) {
   options.selected = page_state.wipe_selected;
   options.option_event_callback = wipe_selection_event_cb;
   options.target_indices = wipe_target_indices;
+  options.repair_callback = wipe_repair_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_advanced_wipe_page(options);
 
   const int page_height = ui.height - ui.status_height - ui.nav_height;
@@ -3124,8 +3205,21 @@ static std::vector<gui2_backend::restore_target> restore_targets;
 static constexpr int kBackupCompressTarget = 100;
 static constexpr int kBackupSkipDigestTarget = 101;
 static constexpr int kRestoreSkipDigestTarget = 111;
+static constexpr int kRestoreRenameTarget = 112;
+static constexpr int kRestoreDeleteTarget = 113;
 static constexpr int kBackupEncryptTarget = 103;
 static constexpr int kMountSystemTarget = 102;
+
+// What legacy asked on its multiuser_warning and restore_keymaster pages.
+static void add_backup_tips(lv_obj_t* body, bool restoring) {
+  const auto add = [&](const char* text) {
+    gui2_components::create_tip_card(body, ui, text, lv_color_hex(0xFFC46B),
+                                     lv_color_hex(0x2E2412));
+  };
+  if (tools != nullptr && tools->users_locked()) add(strings().multiuser_body);
+  if (restoring && decrypt != nullptr && decrypt->kind() != gui2_backend::lock_kind::DEFAULT)
+    add(strings().restore_lock_tip);
+}
 
 static void backup_selection_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
@@ -3242,6 +3336,7 @@ static void show_backup_page(page_transition transition) {
       &gui2_pages::action_definitions()[static_cast<int>(action_id::BACKUP)];
   lv_obj_t* action_body = gui2_pages::build_action_page(action_options);
   if (action_body == nullptr) return;
+  add_backup_tips(action_body, false);
 
   gui2_pages::backup_page_options options;
   options.content = action_body;
@@ -3424,6 +3519,7 @@ static void show_restore_list_page(page_transition transition) {
       &gui2_pages::action_definitions()[static_cast<int>(action_id::RESTORE)];
   lv_obj_t* action_body = gui2_pages::build_action_page(action_options);
   if (action_body == nullptr) return;
+  add_backup_tips(action_body, true);
 
   gui2_pages::restore_list_page_options options;
   options.content = action_body;
@@ -3471,6 +3567,10 @@ static void show_restore_page(page_transition transition) {
   options.active_tab = page_state.restore_active_tab;
   options.confirm = &page_state.restore_confirm;
   options.confirm_callback = restore_confirmed;
+  options.manage_callback = restore_manage_event_cb;
+  options.rename_target = &kRestoreRenameTarget;
+  options.delete_target = &kRestoreDeleteTarget;
+  options.press_guard_callback = press_cancel_guard_cb;
   page_state.restore_view = gui2_pages::build_restore_page(options);
 }
 
@@ -3529,6 +3629,454 @@ static void show_restore_progress_page(page_transition transition) {
   page_state.restore_last_poll_ms = 0;
   poll_restore_console();
   refresh_restore_progress();
+}
+
+// ---- Legacy tools ------------------------------------------------------------
+static std::string format_text(const char* format, const std::string& first,
+                               const std::string& second = std::string()) {
+  char buffer[512];
+  std::snprintf(buffer, sizeof(buffer), format, first.c_str(), second.c_str());
+  return buffer;
+}
+
+static gui2_pages::page_request page_at(page_kind page, const void* payload = nullptr) {
+  return { page, payload, page_transition::POP };
+}
+
+static const void* advanced_definition(void) {
+  return &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)];
+}
+
+static void create_bottom_swipe(gui2_components::swipe_slider* slider, const char* text,
+                                gui2_components::swipe_complete_callback callback, bool danger) {
+  const int track_height = gui2_pages::wipe_track_height();
+  slider->create(page_layer, ui, ui.outer_margin,
+                 ui.height - ui.status_height - ui.nav_height - track_height - ui.cards_top_gap,
+                 ui.content_width, track_height, text, callback, nullptr);
+  slider->set_danger(danger);
+}
+
+static int bottom_swipe_reserved(void) {
+  return ui.nav_height + gui2_pages::wipe_track_height() + ui.cards_top_gap * 2;
+}
+
+static void open_tool_confirm(const tool_request& request) {
+  tool_job_request = request;
+  navigate_to(page_kind::TOOL_CONFIRM, nullptr, page_transition::PUSH);
+}
+
+static void start_tool_job(gui2_components::swipe_slider* slider) {
+  if (tools == nullptr ||
+      !tools->start(tool_job_request.job, tool_job_request.target, tool_job_request.value)) {
+    slider->reset();
+    return;
+  }
+  navigate_to(page_kind::TOOL_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void tool_confirmed(void*) {
+  start_tool_job(&page_state.tool_confirm);
+}
+
+static void show_tool_confirm_page(page_transition transition) {
+  create_page_scaffold(page_kind::TOOL_CONFIRM, false, tool_job_request.title.c_str(),
+                       tool_job_request.summary.c_str(), bottom_swipe_reserved(), transition);
+  if (!tool_job_request.text.empty()) {
+    gui2_pages::confirm_page_options options;
+    options.content = main_content;
+    options.metrics = &ui;
+    options.text = tool_job_request.text.c_str();
+    options.tone = tool_job_request.tone;
+    gui2_pages::build_confirm_page(options);
+  }
+  create_bottom_swipe(&page_state.tool_confirm, tool_job_request.swipe, tool_confirmed,
+                      tool_job_request.tone == gui2_pages::confirm_tone::DANGER);
+}
+
+static void poll_tool_console(void) {
+  if (console == nullptr || page_state.tool_progress.console.body == nullptr) return;
+  std::vector<gui2_backend::console_line> lines;
+  page_state.tool_console_consumed = console->fetch(page_state.tool_console_consumed, &lines);
+  if (lines.empty()) return;
+  gui2_pages::append_console_lines(&page_state.tool_progress.console, ui, lines);
+  gui2_pages::scroll_console_to_end(page_state.tool_progress.console);
+}
+
+static void refresh_tool_progress(void) {
+  if (tools == nullptr) return;
+  gui2_pages::operation_status progress;
+  progress.total = 0;
+  switch (tools->status()) {
+    case gui2_backend::tool_state::DONE:
+      progress.state = gui2_pages::operation_state::DONE;
+      break;
+    case gui2_backend::tool_state::FAILED:
+      progress.state = gui2_pages::operation_state::FAILED;
+      break;
+    default:
+      progress.state = gui2_pages::operation_state::RUNNING;
+      break;
+  }
+  gui2_pages::operation_labels labels;
+  labels.running = tool_job_request.running;
+  labels.done = tool_job_request.done;
+  labels.failed = strings().operation_failed;
+  gui2_pages::update_progress(&page_state.tool_progress, labels, progress);
+}
+
+static void show_tool_progress_page(page_transition transition) {
+  create_page_scaffold(page_kind::TOOL_PROGRESS, false, tool_job_request.title.c_str(),
+                       tool_job_request.running, gui2_pages::progress_actions_height(ui),
+                       transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text = tool_job_request.running;
+  options.subtitle = page_summary;
+  add_progress_actions(&options);
+  page_state.tool_progress = gui2_pages::build_progress_page(options);
+  page_state.tool_console_consumed = 0;
+  page_state.tool_last_poll_ms = 0;
+  poll_tool_console();
+  refresh_tool_progress();
+}
+
+// Advanced wipe -> partition options -> change file system.
+static gui2_backend::partition_details partition_info;
+static constexpr int kPartitionRepair = 0;
+static constexpr int kPartitionResize = 1;
+static constexpr int kPartitionChange = 2;
+static constexpr int change_fs_indices[6] = { 0, 1, 2, 3, 4, 5 };
+static std::string change_fs_summary;
+static std::string change_fs_swipe;
+
+// checkpartitionlist: these rows are not partitions and do not count.
+static bool counts_as_partition(const std::string& mount_point) {
+  return mount_point != "DALVIK" && mount_point != "INTERNAL" && mount_point != "/and-sec";
+}
+
+static void wipe_repair_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  std::string chosen;
+  int count = 0;
+  for (size_t i = 0; i < wipe_targets.size() && i < std::size(page_state.wipe_selected); ++i) {
+    if (!page_state.wipe_selected[i] || !counts_as_partition(wipe_targets[i].mount_point))
+      continue;
+    ++count;
+    chosen = wipe_targets[i].mount_point;
+  }
+  if (count != 1) {
+    // Rebuilding the page would clear the ticks, so only the detail changes.
+    auto* card = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_obj_t* detail = card == nullptr ? nullptr : lv_obj_get_child(lv_obj_get_child(card, 0), 1);
+    if (detail != nullptr) {
+      lv_label_set_text(detail, count == 0 ? strings().repair_change_hint
+                                           : strings().repair_change_invalid);
+      lv_obj_set_style_text_color(detail, lv_color_hex(0xF0443E), LV_PART_MAIN);
+    }
+    return;
+  }
+  page_state.partition_mount_point = chosen;
+  navigate_to(page_kind::PARTITION_OPTIONS);
+}
+
+static void partition_action_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* action = static_cast<const int*>(lv_event_get_user_data(event));
+  if (action == nullptr) return;
+  if (*action == kPartitionChange) {
+    page_state.change_fs_selected = -1;
+    navigate_to(page_kind::CHANGE_FS);
+    return;
+  }
+  const bool repair = *action == kPartitionRepair;
+  tool_request request;
+  request.job = repair ? gui2_backend::tool_job::REPAIR : gui2_backend::tool_job::RESIZE;
+  request.target = partition_info.mount_point;
+  request.title = repair ? strings().repair_fs : strings().resize_fs;
+  request.summary = partition_info.name;
+  request.text = format_text(repair ? strings().repair_confirm : strings().resize_confirm,
+                             partition_info.name);
+  request.swipe = repair ? strings().swipe_repair : strings().swipe_resize;
+  request.running = repair ? strings().repairing : strings().resizing;
+  request.done = repair ? strings().repair_complete : strings().resize_complete;
+  request.back = request.after = page_at(page_kind::PARTITION_OPTIONS);
+  open_tool_confirm(request);
+}
+
+static void show_partition_options_page(page_transition transition) {
+  partition_info = {};
+  if (tools != nullptr) tools->details(page_state.partition_mount_point, &partition_info);
+  create_page_scaffold(page_kind::PARTITION_OPTIONS, false,
+                       partition_info.name.empty() ? page_state.partition_mount_point.c_str()
+                                                   : partition_info.name.c_str(),
+                       strings().part_options, 0, transition);
+  gui2_pages::partition_options_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.details = &partition_info;
+  options.action_callback = partition_action_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  options.repair_target = &kPartitionRepair;
+  options.resize_target = &kPartitionResize;
+  options.change_target = &kPartitionChange;
+  gui2_pages::build_partition_options_page(options);
+}
+
+static void change_fs_choice_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  if (index == nullptr) return;
+  page_state.change_fs_selected = *index;
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+  navigate_to(page_kind::CHANGE_FS, nullptr, page_transition::NONE);
+}
+
+static void change_fs_confirmed(void*) {
+  const int selected = page_state.change_fs_selected;
+  if (selected < 0 || static_cast<size_t>(selected) >= partition_info.file_systems.size()) {
+    page_state.change_fs_confirm.reset();
+    return;
+  }
+  tool_request request;
+  request.job = gui2_backend::tool_job::CHANGE_FILE_SYSTEM;
+  request.target = partition_info.mount_point;
+  request.value = partition_info.file_systems[selected];
+  request.title = strings().change_fs;
+  request.summary = partition_info.name;
+  request.running = strings().formatting;
+  request.done = strings().format_complete;
+  request.back = page_at(page_kind::CHANGE_FS);
+  request.after = page_at(page_kind::PARTITION_OPTIONS);
+  tool_job_request = request;
+  start_tool_job(&page_state.change_fs_confirm);
+}
+
+static void show_change_fs_page(page_transition transition) {
+  change_fs_summary =
+      format_text(strings().change_fs_summary, partition_info.name, partition_info.file_system);
+  create_page_scaffold(page_kind::CHANGE_FS, false, strings().change_fs, change_fs_summary.c_str(),
+                       bottom_swipe_reserved(), transition);
+  gui2_pages::change_fs_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.details = &partition_info;
+  options.selected = page_state.change_fs_selected;
+  options.choice_indices = change_fs_indices;
+  options.choice_callback = change_fs_choice_event_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  gui2_pages::build_change_fs_page(options);
+
+  const int selected = page_state.change_fs_selected;
+  const bool chosen =
+      selected >= 0 && static_cast<size_t>(selected) < partition_info.file_systems.size();
+  change_fs_swipe =
+      chosen ? format_text(strings().swipe_change_fs,
+                           gui2_pages::file_system_label(partition_info.file_systems[selected]))
+             : strings().change_fs_new;
+  create_bottom_swipe(&page_state.change_fs_confirm, change_fs_swipe.c_str(), change_fs_confirmed,
+                      true);
+  page_state.change_fs_confirm.set_enabled(chosen);
+}
+
+// Rename backup and the TWRP folder both type a name into the file input page.
+static std::string tool_input_text;
+static std::string tool_input_summary;
+static const char* tool_input_error = nullptr;
+
+static void open_tool_input(tool_input_kind kind, const std::string& initial) {
+  tool_input_mode = kind;
+  tool_input_text = initial;
+  tool_input_error = nullptr;
+  navigate_to(page_kind::TOOL_INPUT);
+}
+
+// The <restrict allow="..."> of the legacy input: letters, digits and extra.
+static bool name_allowed(const std::string& name, const char* extra) {
+  if (name.empty() || name.size() > 64) return false;
+  for (char c : name) {
+    if (!std::isalnum(static_cast<unsigned char>(c)) && std::strchr(extra, c) == nullptr)
+      return false;
+  }
+  return true;
+}
+
+static std::string twrp_folder_summary(void) {
+  if (tools == nullptr) return std::string();
+  return format_text(strings().twrp_folder_current, tools->storage_path() + tools->twrp_folder());
+}
+
+static void confirm_twrp_folder(const std::string& name) {
+  tool_request request;
+  request.job = gui2_backend::tool_job::TWRP_FOLDER;
+  request.value = name;
+  request.title = strings().twrp_folder_title;
+  request.summary = twrp_folder_summary();
+  request.text = format_text(strings().twrp_folder_confirm, name);
+  request.tone = gui2_pages::confirm_tone::WARNING;
+  request.swipe = strings().swipe_confirm;
+  request.running = strings().changing_twrp_folder;
+  request.done = strings().twrp_folder_changed;
+  request.back = page_at(page_kind::TOOL_INPUT);
+  request.after = page_at(page_kind::ACTION, advanced_definition());
+  open_tool_confirm(request);
+}
+
+static void show_tool_input_error(const char* error) {
+  tool_input_error = error;
+  navigate_to(page_kind::TOOL_INPUT, nullptr, page_transition::NONE);
+}
+
+static void tool_input_accept_cb(void*) {
+  if (tools == nullptr || page_state.tool_input == nullptr) return;
+  const char* text = lv_textarea_get_text(page_state.tool_input);
+  tool_input_text = text == nullptr ? std::string() : text;
+
+  if (tool_input_mode == tool_input_kind::TWRP_FOLDER) {
+    if (!name_allowed(tool_input_text, ""))
+      show_tool_input_error(strings().folder_name_invalid);
+    else if (tools->path_exists(tools->storage_path() + '/' + tool_input_text))
+      show_tool_input_error(strings().folder_exists);
+    else
+      confirm_twrp_folder(tool_input_text);
+    return;
+  }
+
+  const size_t slash = page_state.restore_path.find_last_of('/');
+  const std::string parent =
+      slash == std::string::npos ? std::string() : page_state.restore_path.substr(0, slash + 1);
+  if (!name_allowed(tool_input_text, " -_.{}[]")) {
+    show_tool_input_error(strings().backup_name_invalid);
+    return;
+  }
+  if (tools->path_exists(parent + tool_input_text)) {
+    show_tool_input_error(strings().backup_name_exists);
+    return;
+  }
+  tool_request request;
+  request.job = gui2_backend::tool_job::RENAME_BACKUP;
+  request.target = page_state.restore_path;
+  request.value = tool_input_text;
+  request.title = strings().rename_backup;
+  request.summary = page_state.restore_name;
+  request.text = format_text(strings().rename_backup_confirm, tool_input_text);
+  request.tone = gui2_pages::confirm_tone::WARNING;
+  request.swipe = strings().swipe_rename;
+  request.running = strings().renaming_backup;
+  request.done = strings().rename_backup_complete;
+  request.back = page_at(page_kind::TOOL_INPUT);
+  request.after = page_at(page_kind::RESTORE_LIST);
+  open_tool_confirm(request);
+}
+
+static void twrp_folder_default_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || tools == nullptr)
+    return;
+  if (tools->path_exists(tools->storage_path() + "/TWRP")) {
+    show_tool_input_error(strings().folder_exists);
+    return;
+  }
+  confirm_twrp_folder("TWRP");
+}
+
+static void show_tool_input_page(page_transition transition) {
+  const bool rename = tool_input_mode == tool_input_kind::RENAME_BACKUP;
+  const std::string folder = tools == nullptr ? std::string("/TWRP") : tools->twrp_folder();
+  tool_input_summary = rename ? page_state.restore_name : twrp_folder_summary();
+  create_page_scaffold(page_kind::TOOL_INPUT, false,
+                       rename ? strings().rename_backup : strings().twrp_folder_title,
+                       tool_input_summary.c_str(),
+                       gui2_pages::file_input_bottom_reserved(ui, false), transition);
+
+  gui2_pages::file_input_page_options options;
+  options.content = main_content;
+  options.overlay_layer = lv_layer_top();
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.hint = strings().fm_new_name;
+  options.initial_text = tool_input_text.c_str();
+  options.keyboard = &page_state.tool_input_keyboard;
+  options.accept_callback = tool_input_accept_cb;
+  options.key_callback = keyboard_feedback_cb;
+  options.error_text = tool_input_error;
+  options.press_guard_callback = press_cancel_guard_cb;
+  if (!rename) {
+    options.note_text = strings().twrp_folder_hint;
+    // Legacy offers the way back only once the folder was renamed.
+    if (folder != "/TWRP") {
+      options.action_title = strings().restore_default_folder;
+      options.action_detail = strings().restore_default_folder_detail;
+      options.action_callback = twrp_folder_default_event_cb;
+    }
+  }
+  page_state.tool_input = gui2_pages::build_file_input_page(options).input;
+}
+
+static void restore_manage_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* target = static_cast<const int*>(lv_event_get_user_data(event));
+  if (target == nullptr) return;
+  if (*target == kRestoreRenameTarget) {
+    open_tool_input(tool_input_kind::RENAME_BACKUP, page_state.restore_name);
+    return;
+  }
+  tool_request request;
+  request.job = gui2_backend::tool_job::DELETE_BACKUP;
+  request.target = page_state.restore_path;
+  request.title = strings().delete_backup;
+  request.summary = page_state.restore_name;
+  request.text = strings().delete_backup_body;
+  request.tone = gui2_pages::confirm_tone::DANGER;
+  request.swipe = strings().swipe_delete_backup;
+  request.running = strings().deleting_backup;
+  request.done = strings().backup_deleted;
+  request.back = page_at(page_kind::RESTORE);
+  request.after = page_at(page_kind::RESTORE_LIST);
+  open_tool_confirm(request);
+}
+
+static std::string advanced_twrp_folder_detail;
+
+static void open_advanced_tool(settings_target target) {
+  if (tools == nullptr) return;
+  if (target == settings_target::TWRP_FOLDER) {
+    std::string folder = tools->twrp_folder();
+    if (!folder.empty() && folder[0] == '/') folder.erase(0, 1);
+    open_tool_input(tool_input_kind::TWRP_FOLDER, folder);
+    return;
+  }
+  tool_request request;
+  request.swipe = strings().swipe_confirm;
+  request.back = request.after = page_at(page_kind::ACTION, advanced_definition());
+  if (target == settings_target::FIX_BOOTLOOP) {
+    request.job = gui2_backend::tool_job::FIX_RECOVERY_BOOTLOOP;
+    request.title = strings().fix_bootloop_title;
+    request.summary = strings().fix_bootloop_summary;
+    request.tone = gui2_pages::confirm_tone::DANGER;
+    request.running = strings().fixing_bootloop;
+    request.done = strings().fix_bootloop_complete;
+  } else if (target == settings_target::MERGE_SNAPSHOTS) {
+    request.job = gui2_backend::tool_job::MERGE_SNAPSHOTS;
+    request.title = strings().merge_title;
+    request.summary = strings().merge_summary;
+    request.running = strings().merging;
+    request.done = strings().merge_complete;
+  } else {
+    request.job = gui2_backend::tool_job::DISABLE_AVB2;
+    request.title = strings().avb_title;
+    request.summary = strings().avb_summary;
+    request.tone = gui2_pages::confirm_tone::DANGER;
+    request.running = strings().disabling_avb;
+    request.done = strings().avb_complete;
+  }
+  open_tool_confirm(request);
 }
 
 // Targets the mount page hands back through its events. The partition rows
@@ -3704,6 +4252,7 @@ static void show_format_data_page(page_transition transition) {
   page_state.format_data_keyboard = view.keyboard;
   page_state.format_data_track = view.slider_track;
   page_state.format_data_confirm.set_enabled(false);
+  page_state.format_data_confirm.set_danger(true);
 }
 
 static constexpr int kKernelLogTarget = 0;
@@ -3887,6 +4436,18 @@ static void show_action_page(const action_definition& definition, page_transitio
     advanced_options.option_event_callback = settings_option_event_cb;
     advanced_options.press_guard_callback = press_cancel_guard_cb;
     advanced_options.export_log_target = &export_log_target;
+    const auto available =
+        tools == nullptr ? gui2_backend::tool_availability() : tools->availability();
+    advanced_twrp_folder_detail =
+        tools == nullptr ? std::string()
+                         : format_text(strings().twrp_folder_current, tools->twrp_folder());
+    advanced_options.twrp_folder_target = available.twrp_folder ? &twrp_folder_target : nullptr;
+    advanced_options.twrp_folder_detail = advanced_twrp_folder_detail.c_str();
+    advanced_options.fix_bootloop_target =
+        available.fix_recovery_bootloop ? &fix_bootloop_target : nullptr;
+    advanced_options.merge_snapshots_target =
+        available.merge_snapshots ? &merge_snapshots_target : nullptr;
+    advanced_options.disable_avb2_target = available.disable_avb2 ? &disable_avb2_target : nullptr;
     gui2_pages::build_advanced_page(advanced_options);
   }
 }
@@ -4073,6 +4634,21 @@ static void build_page(const gui2_pages::page_request& request) {
       return;
     case page_kind::SYSTEM_READ_ONLY:
       show_system_read_only_page(request.transition);
+      return;
+    case page_kind::PARTITION_OPTIONS:
+      show_partition_options_page(request.transition);
+      return;
+    case page_kind::CHANGE_FS:
+      show_change_fs_page(request.transition);
+      return;
+    case page_kind::TOOL_CONFIRM:
+      show_tool_confirm_page(request.transition);
+      return;
+    case page_kind::TOOL_PROGRESS:
+      show_tool_progress_page(request.transition);
+      return;
+    case page_kind::TOOL_INPUT:
+      show_tool_input_page(request.transition);
       return;
   }
 }
@@ -4385,6 +4961,12 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     page_state.fastbootd_last_poll_ms = now_ms;
     poll_fastbootd_console();
   }
+  if (page_state.tool_progress.body != nullptr &&
+      now_ms - page_state.tool_last_poll_ms >= 100) {
+    page_state.tool_last_poll_ms = now_ms;
+    poll_tool_console();
+    refresh_tool_progress();
+  }
   if (page_state.sideload_progress.body != nullptr &&
       now_ms - page_state.sideload_last_poll_ms >= 100) {
     page_state.sideload_last_poll_ms = now_ms;
@@ -4477,6 +5059,7 @@ int gui2_start(const gui2_context* context) {
   restore = context->restore;
   startup = context->startup;
   sideload = context->sideload;
+  tools = context->tools;
   fastboot_mode = context->fastboot_mode;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;

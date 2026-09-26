@@ -61,6 +61,12 @@ struct restore_page_options {
   gui2_components::swipe_slider* confirm = nullptr;
   void (*confirm_callback)(void*) = nullptr;
   void* confirm_user_data = nullptr;
+
+  // Rename and delete, as on the legacy restore_select page.
+  lv_event_cb_t manage_callback = nullptr;
+  const void* rename_target = nullptr;
+  const void* delete_target = nullptr;
+  lv_event_cb_t press_guard_callback = nullptr;
 };
 
 struct restore_page_view {

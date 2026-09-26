@@ -126,6 +126,10 @@ enum class BackupMethod {
     BM_DD = 2,
 };
 
+namespace gui2_backend {
+class twrp_tools_backend;
+}
+
 // Partition class
 class TWPartition {
 public:
@@ -353,6 +357,7 @@ private:
     friend class DataManager;
     friend class GUIPartitionList;
     friend class GUIAction;
+    friend class gui2_backend::twrp_tools_backend;
     friend class PageManager;
 };
 

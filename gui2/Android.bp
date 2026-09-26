@@ -99,6 +99,7 @@ cc_library_static {
         "pages/system_read_only_page.cpp",
         "pages/sideload_page.cpp",
         "pages/fastbootd_page.cpp",
+        "pages/tool_pages.cpp",
         "pages/settings_page.cpp",
         "pages/backup_page.cpp",
         "pages/decrypt_page.cpp",

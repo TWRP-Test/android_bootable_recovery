@@ -13,6 +13,7 @@
 #include "backend/settings_store.h"
 #include "backend/sideload_backend.h"
 #include "backend/startup_backend.h"
+#include "backend/tools_backend.h"
 
 namespace gui2_app {
 
@@ -37,6 +38,7 @@ struct runtime_state {
   gui2_backend::install_backend* install = nullptr;
   gui2_backend::sideload_backend* sideload = nullptr;
   gui2_backend::startup_backend* startup = nullptr;
+  gui2_backend::tools_backend* tools = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };
