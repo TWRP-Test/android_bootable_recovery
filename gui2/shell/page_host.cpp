@@ -60,7 +60,9 @@ page_scaffold_result page_host::build(const char* title, const char* summary, in
   }
 
   const int width = metrics_->width;
-  if (transition == gui2_core::page_transition::POP) {
+  if (transition == gui2_core::page_transition::FADE) {
+    lv_obj_set_style_opa(new_page, LV_OPA_TRANSP, LV_PART_MAIN);
+  } else if (transition == gui2_core::page_transition::POP) {
     lv_obj_set_x(new_page, -width);
   } else {
     lv_obj_set_x(new_page, width);
@@ -91,7 +93,7 @@ void page_host::start_transition() {
   lv_anim_set_var(&animation, this);
   lv_anim_set_user_data(&animation, this);
   lv_anim_set_values(&animation, 0, 1000);
-  lv_anim_set_duration(&animation, 220);
+  lv_anim_set_duration(&animation, transition_ == gui2_core::page_transition::FADE ? 300 : 220);
   lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
   lv_anim_set_exec_cb(&animation, animation_exec);
   lv_anim_set_completed_cb(&animation, animation_ready);
@@ -142,6 +144,11 @@ void page_host::animation_exec(void* object, int32_t progress) {
   auto* host = static_cast<page_host*>(object);
   if (host == nullptr || host->current_page_ == nullptr || host->previous_page_ == nullptr) return;
 
+  if (host->transition_ == gui2_core::page_transition::FADE) {
+    lv_obj_set_style_opa(host->current_page_, static_cast<lv_opa_t>(LV_OPA_COVER * progress / 1000),
+                         LV_PART_MAIN);
+    return;
+  }
   const int width = host->metrics_ == nullptr ? 0 : host->metrics_->width;
   const int distance = static_cast<int>((static_cast<int64_t>(width) * progress) / 1000);
   if (host->transition_ == gui2_core::page_transition::POP) {
@@ -170,7 +177,10 @@ void page_host::finish_transition() {
     lv_obj_delete(previous_page_);
     previous_page_ = nullptr;
   }
-  if (current_page_ != nullptr) lv_obj_set_x(current_page_, 0);
+  if (current_page_ != nullptr) {
+    lv_obj_set_x(current_page_, 0);
+    lv_obj_set_style_opa(current_page_, LV_OPA_COVER, LV_PART_MAIN);
+  }
   transition_ = gui2_core::page_transition::NONE;
 }
 
@@ -184,7 +194,10 @@ void page_host::stop_transition() {
     lv_obj_delete(previous_page_);
     previous_page_ = nullptr;
   }
-  if (current_page_ != nullptr) lv_obj_set_x(current_page_, 0);
+  if (current_page_ != nullptr) {
+    lv_obj_set_x(current_page_, 0);
+    lv_obj_set_style_opa(current_page_, LV_OPA_COVER, LV_PART_MAIN);
+  }
   transition_active_ = false;
   transition_ = gui2_core::page_transition::NONE;
 }
