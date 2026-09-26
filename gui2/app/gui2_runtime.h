@@ -11,6 +11,7 @@
 #include "backend/reboot_backend.h"
 #include "backend/screen_backend.h"
 #include "backend/settings_store.h"
+#include "backend/startup_backend.h"
 
 namespace gui2_app {
 
@@ -33,6 +34,7 @@ struct runtime_state {
   gui2_backend::wifi_backend* wifi = nullptr;
   gui2_backend::file_manager_backend* file_manager = nullptr;
   gui2_backend::install_backend* install = nullptr;
+  gui2_backend::startup_backend* startup = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };

@@ -22,7 +22,7 @@ class twrp_hardware_settings final : public hardware_settings {
 
  private:
   settings_store* settings_;
-  bool haptics_available_;
+  mutable int haptics_state_ = -1;
 };
 
 }  // namespace gui2_backend

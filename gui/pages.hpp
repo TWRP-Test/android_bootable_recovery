@@ -160,6 +160,8 @@ public:
 	static char* LoadFileToBuffer(std::string filename, ZipArchiveHandle package);
 	static void LoadLanguageList(ZipArchiveHandle package);
 	static void LoadLanguage(std::string filename);
+	// Partition display names in that language, without loading a theme.
+	static void TranslatePartitionNames(const std::string& language);
 	static int LoadPackage(std::string name, std::string package, std::string startpage);
 	static PageSet* SelectPackage(std::string name);
 	static int ReloadPackage(std::string name, std::string package);

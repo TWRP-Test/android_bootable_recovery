@@ -12,6 +12,10 @@ constexpr const char* kVersionText = "4.0.0";
 
 }  // namespace
 
+const char* version_text() {
+  return kVersionText;
+}
+
 page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::ui_metrics& metrics,
                                          const char* title, const char* summary,
                                          int bottom_reserved) {

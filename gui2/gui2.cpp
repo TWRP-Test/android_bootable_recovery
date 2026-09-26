@@ -58,6 +58,7 @@
 #include "pages/wifi_page.h"
 #include "pages/settings_data.h"
 #include "pages/settings_page.h"
+#include "pages/system_read_only_page.h"
 #include "pages/wipe_page.h"
 #include "pages/progress_page.h"
 #include "pages/restore_page.h"
@@ -74,6 +75,7 @@
 #include "shell/quick_panel_controller.h"
 #include "shell/screen_feedback.h"
 #include "shell/screen_lock.h"
+#include "shell/splash.h"
 #include "shell/status_bar.h"
 #include "shell/status_bar_controller.h"
 #include "twrpminui/minui.h"
@@ -102,6 +104,7 @@ static gui2_backend::terminal_backend*& terminal = runtime.terminal;
 static gui2_backend::wifi_backend*& wifi = runtime.wifi;
 static gui2_backend::file_manager_backend*& file_manager = runtime.file_manager;
 static gui2_backend::install_backend*& install = runtime.install;
+static gui2_backend::startup_backend*& startup = runtime.startup;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -163,6 +166,7 @@ static bool page_is_progress(page_kind page) {
     case page_kind::DECRYPT_PROGRESS:
     case page_kind::BACKUP_PROGRESS:
     case page_kind::RESTORE_PROGRESS:
+    case page_kind::STARTUP_SCRIPT:
       return true;
     default:
       return false;
@@ -177,6 +181,7 @@ static bool page_fills_viewport(page_kind page) {
 }
 
 static bool page_keeps_navigation(page_kind page) {
+  if (page == page_kind::SYSTEM_READ_ONLY) return false;
   return !page_is_progress(page) || page == page_kind::DECRYPT_PROGRESS;
 }
 using gui2_core::page_transition;
@@ -235,6 +240,8 @@ static void show_file_input_page(page_transition transition);
 static void show_wifi_page(page_transition transition);
 static void show_wifi_password_page(page_transition transition);
 static void show_install_page(page_transition transition);
+static void show_startup_script_page(page_transition transition);
+static void show_system_read_only_page(page_transition transition);
 static void progress_reboot_system_cb(lv_event_t* event);
 static void progress_back_cb(lv_event_t* event);
 static void show_install_confirm_page(page_transition transition);
@@ -994,6 +1001,7 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.restore_view = {};
   page_state.restore_progress = {};
   page_state.restore_console_consumed = 0;
+  page_state.system_ro_confirm.detach();
   page_state.decrypt_status = nullptr;
   if (page_state.format_data_keyboard != nullptr) {
     lv_obj_delete(page_state.format_data_keyboard);
@@ -3866,6 +3874,12 @@ static void build_page(const gui2_pages::page_request& request) {
     case page_kind::MOUNT:
       show_mount_page(request.transition);
       return;
+    case page_kind::STARTUP_SCRIPT:
+      show_startup_script_page(request.transition);
+      return;
+    case page_kind::SYSTEM_READ_ONLY:
+      show_system_read_only_page(request.transition);
+      return;
   }
 }
 
@@ -3903,6 +3917,209 @@ static void screen_lock_unlocked(void*) {
 
 static void screen_lock_before_screen_off(void*) {
   screen_lock.show();
+}
+
+// ---- Startup ---------------------------------------------------------------
+// Pages are built only once the startup thread stops touching the partitions.
+static gui2_shell::splash_view splash_view;
+static std::string splash_device;
+static bool shell_ready = false;
+static bool startup_language_known = false;
+static bool startup_failed = false;
+static bool startup_input_rescanned = false;
+static uint64_t startup_last_poll_ms = 0;
+static uint64_t splash_started_ms = 0;
+static bool splash_dismiss_pending = false;
+static gui2_pages::progress_page_view startup_script_view;
+static size_t startup_script_consumed = 0;
+static bool system_ro_never_show = false;
+
+static bool create_pages(void) {
+  if (shell_ready) return true;
+  create_gui2_shell(lv_screen_active());
+  screen_lock.create(ui, "", strings().swipe_to_unlock, screen_lock_unlocked, nullptr);
+  screen_actions.initialize(screen, &screen_feedback, screen_lock_before_screen_off, nullptr);
+  screen_actions.set_screenshot_result_callback(screenshot_result_cb);
+  shell_ready = true;
+  if (splash_view.root != nullptr) lv_obj_move_foreground(splash_view.root);
+  return status_controller.start(settings, ui, status_view, refresh_recording_ui);
+}
+
+static const char* startup_step_text(gui2_backend::startup_step step) {
+  switch (step) {
+    case gui2_backend::startup_step::SYSTEM:
+      return strings().startup_system;
+    case gui2_backend::startup_step::SCRIPTS:
+      return strings().startup_scripts;
+    case gui2_backend::startup_step::SERVICES:
+      return strings().startup_services;
+    case gui2_backend::startup_step::FINISHING:
+    case gui2_backend::startup_step::DONE:
+      return strings().startup_finishing;
+    default:
+      return "";
+  }
+}
+
+static float startup_fraction(gui2_backend::startup_step step) {
+  return static_cast<float>(static_cast<int>(step)) /
+         static_cast<float>(static_cast<int>(gui2_backend::startup_step::DONE));
+}
+
+static void enter_startup_pause(page_kind page) {
+  if (page_router.current() == page && shell_ready) return;
+  create_pages();
+  navigate_to(page, nullptr, page_transition::REPLACE);
+  gui2_shell::dismiss_splash(&splash_view);
+  splash_dismiss_pending = false;
+}
+
+static void poll_startup_script(void) {
+  if (page_router.current() != page_kind::STARTUP_SCRIPT || startup_script_view.body == nullptr)
+    return;
+  if (console != nullptr) {
+    std::vector<gui2_backend::console_line> lines;
+    startup_script_consumed = console->fetch(startup_script_consumed, &lines);
+    if (!lines.empty()) {
+      gui2_pages::append_console_lines(&startup_script_view.console, ui, lines);
+      gui2_pages::scroll_console_to_end(startup_script_view.console);
+    }
+  }
+
+  gui2_pages::operation_status progress;
+  progress.total = 0;
+  const bool running =
+      startup != nullptr && startup->status().pause == gui2_backend::startup_pause::SCRIPT;
+  progress.state =
+      running ? gui2_pages::operation_state::RUNNING : gui2_pages::operation_state::DONE;
+  gui2_pages::operation_labels labels;
+  labels.running = strings().ors_running;
+  labels.done = strings().ors_done;
+  labels.failed = strings().ors_done;
+  gui2_pages::update_progress(&startup_script_view, labels, progress);
+}
+
+static void poll_startup(uint64_t now_ms) {
+  if (startup == nullptr || now_ms - startup_last_poll_ms < 100) return;
+  startup_last_poll_ms = now_ms;
+
+  const auto status = startup->status();
+  if (status.failed) {
+    startup->finish();
+    startup = nullptr;
+    startup_failed = true;
+    return;
+  }
+
+  // Touch comes from a vendor module loaded with the fstab; minui would take up
+  // to two seconds to notice it.
+  if (!startup_input_rescanned && status.step > gui2_backend::startup_step::PARTITIONS) {
+    ev_exit();
+    ev_init();
+    startup_input_rescanned = true;
+  }
+
+  if (!startup_language_known && status.step > gui2_backend::startup_step::SETTINGS) {
+    current_language = language_from_code(settings->get_string("tw_language", "en"));
+    pending_language = current_language;
+    startup_language_known = true;
+  }
+
+  if (status.pause == gui2_backend::startup_pause::SCRIPT)
+    enter_startup_pause(page_kind::STARTUP_SCRIPT);
+  else if (status.pause == gui2_backend::startup_pause::SYSTEM_READ_ONLY)
+    enter_startup_pause(page_kind::SYSTEM_READ_ONLY);
+  poll_startup_script();
+
+  // A normal start is over before any of this could be read.
+  if (now_ms - splash_started_ms >= 3000) gui2_shell::show_splash_details(&splash_view);
+
+  if (status.step != gui2_backend::startup_step::DONE) {
+    gui2_shell::update_splash(&splash_view,
+                              startup_language_known ? startup_step_text(status.step) : "",
+                              startup_fraction(status.step));
+    return;
+  }
+
+  startup->finish();
+  startup = nullptr;
+  const bool locked = decrypt != nullptr && decrypt->is_encrypted();
+  const bool needs_credential = locked && decrypt->kind() != gui2_backend::lock_kind::DEFAULT;
+  gui2_shell::update_splash(&splash_view,
+                            needs_credential ? strings().startup_unlock
+                                             : strings().startup_finishing,
+                            1.0f);
+
+  const bool from_pause = shell_ready;
+  if (!create_pages()) switch_to_legacy = true;
+  if (from_pause)
+    navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
+  if (locked) enter_decrypt_flow(page_transition::NONE);
+  // The unlock keyboard lives on the top layer too.
+  if (splash_view.root != nullptr) lv_obj_move_foreground(splash_view.root);
+  splash_dismiss_pending = splash_view.root != nullptr;
+}
+
+static void show_startup_script_page(page_transition transition) {
+  create_page_scaffold(page_kind::STARTUP_SCRIPT, false, strings().ors_title,
+                       strings().ors_running, gui2_core::navigation_safe_area(), transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text = strings().ors_running;
+  options.subtitle = page_summary;
+  startup_script_view = gui2_pages::build_progress_page(options);
+  startup_script_consumed = 0;
+  poll_startup_script();
+}
+
+static void system_ro_never_show_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  system_ro_never_show = toggle != nullptr && lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static void answer_system_read_only(bool keep_read_only) {
+  if (startup == nullptr) return;
+  startup->answer_system_read_only(keep_read_only, system_ro_never_show);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
+}
+
+static void system_ro_keep_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  answer_system_read_only(true);
+}
+
+static void system_ro_allow_cb(void*) {
+  answer_system_read_only(false);
+}
+
+static void show_system_read_only_page(page_transition transition) {
+  const int track_height = gui2_pages::wipe_track_height();
+  create_page_scaffold(page_kind::SYSTEM_READ_ONLY, false, strings().sys_ro_title,
+                       strings().sys_ro_summary, track_height + ui.cards_top_gap * 2, transition);
+
+  gui2_pages::system_read_only_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.show_never_show = startup != nullptr && startup->can_hide_system_read_only();
+  options.never_show = system_ro_never_show;
+  options.never_show_callback = system_ro_never_show_cb;
+  options.keep_callback = system_ro_keep_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  gui2_pages::build_system_read_only_page(options);
+
+  page_state.system_ro_confirm.create(
+      page_layer, ui, ui.outer_margin,
+      ui.height - ui.status_height - track_height - ui.cards_top_gap * 2, ui.content_width,
+      track_height, strings().sys_ro_swipe, system_ro_allow_cb, nullptr);
 }
 
 static void shutdown_gui2(bool keep_display = false) {
@@ -3943,10 +4160,16 @@ static void shutdown_gui2(bool keep_display = false) {
 }
 
 static bool gui2_loop_should_exit(void*) {
-  return switch_to_legacy || reboot_requested;
+  return switch_to_legacy || reboot_requested || startup_failed;
 }
 
 static void gui2_loop_tick(void*, uint64_t now_ms) {
+  poll_startup(now_ms);
+  if (splash_dismiss_pending && gui2_shell::splash_intro_finished()) {
+    gui2_shell::dismiss_splash(&splash_view);
+    splash_dismiss_pending = false;
+  }
+  if (!shell_ready) return;
   advance_wheel_scroll(now_ms);
   screen_feedback.update(now_ms);
   if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 100) {
@@ -3991,6 +4214,7 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
 }
 
 static void gui2_loop_key_action(void*, gui2_key_action key_action) {
+  if (!shell_ready) return;
   if (key_action == gui2_key_action::SCREENSHOT) {
     close_quick_menu();
     screen_actions.request_screenshot();
@@ -4002,11 +4226,13 @@ static void gui2_loop_key_action(void*, gui2_key_action key_action) {
 }
 
 static void gui2_loop_activity(void*, bool was_screen_off) {
-  if (was_screen_off) screen_lock.show();
+  if (was_screen_off && shell_ready) screen_lock.show();
 }
 
 static void gui2_loop_wheel(void*, int wheel) {
-  if (main_content == nullptr || quick_menu_input_active() || pointer_indev == nullptr) return;
+  if (!shell_ready || main_content == nullptr || quick_menu_input_active() ||
+      pointer_indev == nullptr)
+    return;
   lv_point_t point;
   lv_indev_get_point(pointer_indev, &point);
   lv_area_t content_area;
@@ -4017,6 +4243,7 @@ static void gui2_loop_wheel(void*, int wheel) {
 }
 
 static void gui2_loop_after_present(void*) {
+  if (!shell_ready) return;
   screen_actions.process_after_present();
 }
 
@@ -4040,15 +4267,21 @@ int gui2_start(const gui2_context* context) {
   file_manager = context->file_manager;
   install = context->install;
   restore = context->restore;
+  startup = context->startup;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
+  startup_language_known = startup == nullptr;
+  startup_input_rescanned = startup == nullptr;
+  startup_failed = false;
+  shell_ready = false;
   msg::SetTranslator(console_translator);
   switch_to_legacy = false;
   reboot_requested = false;
   screen_actions.reset();
 
   if (!gui2_app::initialize_graphics(context, &graphics, lv_tick_ms)) {
-    shutdown_gui2();
+    // Keep the display: Qualcomm DRM refuses a second modeset in the fallback.
+    shutdown_gui2(true);
     return GUI2_EXIT_INITIALIZATION_FAILED;
   }
   runtime_text_font = graphics.text_font;
@@ -4060,17 +4293,32 @@ int gui2_start(const gui2_context* context) {
   pointer_indev = graphics.pointer_indev;
   gui2_core::configure_click_guard(pointer_indev, hardware);
 
-  create_gui2_shell(lv_screen_active());
-  screen_lock.create(ui, "", strings().swipe_to_unlock, screen_lock_unlocked, nullptr);
-  screen_actions.initialize(screen, &screen_feedback, screen_lock_before_screen_off, nullptr);
-  screen_actions.set_screenshot_result_callback(screenshot_result_cb);
-
-  if (decrypt != nullptr && decrypt->is_encrypted())
-    enter_decrypt_flow(page_transition::NONE);
-
-  if (!status_controller.start(settings, ui, status_view, refresh_recording_ui)) {
-    shutdown_gui2();
-    return GUI2_EXIT_INITIALIZATION_FAILED;
+  if (startup != nullptr) {
+    gui2_shell::gui_shell_base_options metrics_options;
+    metrics_options.text_font = runtime_text_font;
+    metrics_options.status_font = runtime_status_font;
+    metrics_options.brand_font = runtime_brand_font;
+    metrics_options.keyboard_font = runtime_keyboard_font;
+    gui2_shell::init_ui_metrics(metrics_options);
+    splash_device = startup->device_label();
+    gui2_shell::splash_options splash;
+    splash.layer = lv_layer_top();
+    splash.metrics = &ui;
+    splash.text_font = runtime_status_font;
+    splash.small_font = runtime_console_fonts[1];
+    splash.version = gui2_shell::version_text();
+    splash.device = splash_device.c_str();
+    splash_view = gui2_shell::create_splash(splash);
+    splash_started_ms = monotonic_ms();
+    splash_dismiss_pending = false;
+    startup->start();
+  } else {
+    if (!create_pages()) {
+      shutdown_gui2();
+      return GUI2_EXIT_INITIALIZATION_FAILED;
+    }
+    if (decrypt != nullptr && decrypt->is_encrypted())
+      enter_decrypt_flow(page_transition::NONE);
   }
 
   gui2_app::loop_callbacks callbacks;
@@ -4082,6 +4330,16 @@ int gui2_start(const gui2_context* context) {
   callbacks.after_present = gui2_loop_after_present;
   gui2_app::run_gui2_loop(screen, pointer_indev, nullptr, callbacks);
 
+  if (startup != nullptr) {
+    startup->finish();
+    startup = nullptr;
+  }
+  splash_view = {};
+  shell_ready = false;
+  if (startup_failed) {
+    shutdown_gui2(true);
+    return GUI2_EXIT_STARTUP_FAILED;
+  }
   shutdown_gui2(switch_to_legacy);
   return switch_to_legacy ? GUI2_EXIT_TO_LEGACY : 0;
 }

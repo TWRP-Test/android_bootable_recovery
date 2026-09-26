@@ -40,15 +40,7 @@ int haptic_default(haptic_channel channel) {
 
 }  // namespace
 
-twrp_hardware_settings::twrp_hardware_settings(settings_store* settings)
-    : settings_(settings),
-#ifdef TW_NO_HAPTICS
-      haptics_available_(false) {
-}
-#else
-      haptics_available_(haptics_available() != 0) {
-}
-#endif
+twrp_hardware_settings::twrp_hardware_settings(settings_store* settings) : settings_(settings) {}
 
 bool twrp_hardware_settings::has_brightness() const {
   return DataManager::GetIntValue("tw_has_brightnesss_file") != 0 &&
@@ -74,8 +66,15 @@ bool twrp_hardware_settings::set_brightness_percent(int percent) {
          settings_->set_persistent("tw_brightness_pct", std::to_string(percent));
 }
 
+// Asked on first use: the vibrator driver may be a vendor module that is not
+// loaded yet when this object is made.
 bool twrp_hardware_settings::has_haptics() const {
-  return haptics_available_;
+#ifdef TW_NO_HAPTICS
+  return false;
+#else
+  if (haptics_state_ < 0) haptics_state_ = haptics_available() != 0 ? 1 : 0;
+  return haptics_state_ == 1;
+#endif
 }
 
 int twrp_hardware_settings::haptic_duration_ms(haptic_channel channel) const {

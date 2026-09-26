@@ -11,11 +11,10 @@ using gui2_core::ui;
 using gui2_core::ui_px;
 using gui2_core::ui_scale_for;
 
-gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options) {
-  gui_shell_base_view view;
-  if (options.screen == nullptr || options.text_font == nullptr || options.status_font == nullptr ||
+bool init_ui_metrics(const gui_shell_base_options& options) {
+  if (options.text_font == nullptr || options.status_font == nullptr ||
       options.brand_font == nullptr)
-    return view;
+    return false;
 
   const int width = gr_fb_width();
   const int height = gr_fb_height();
@@ -65,8 +64,17 @@ gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options)
     primary_text,
     secondary_text,
   };
+  return true;
+}
 
-  lv_obj_set_style_bg_color(options.screen, background, LV_PART_MAIN);
+gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options) {
+  gui_shell_base_view view;
+  if (options.screen == nullptr || !init_ui_metrics(options)) return view;
+
+  const int width = ui.width;
+  const int height = ui.height;
+  const int status_height = ui.status_height;
+  lv_obj_set_style_bg_color(options.screen, ui.background, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(options.screen, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_text_font(options.screen, options.text_font, LV_PART_MAIN);
   lv_obj_set_style_pad_all(options.screen, 0, LV_PART_MAIN);
@@ -78,7 +86,7 @@ gui_shell_base_view create_gui_shell_base(const gui_shell_base_options& options)
   view.page_layer = lv_obj_create(options.screen);
   lv_obj_set_pos(view.page_layer, 0, status_height);
   lv_obj_set_size(view.page_layer, width, std::max(1, height - status_height));
-  gui2_core::set_surface_style(view.page_layer, background, LV_OPA_TRANSP);
+  gui2_core::set_surface_style(view.page_layer, ui.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(view.page_layer, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.page_layer);
   return view;
