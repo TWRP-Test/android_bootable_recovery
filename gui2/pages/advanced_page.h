@@ -18,6 +18,12 @@ struct advanced_page_options {
   // Null hides the row, which is what a build without Wi-Fi wants.
   const void* wifi_target = nullptr;
   const void* sideload_target = nullptr;
+  // The legacy advanced tools; null hides a row the device does not qualify for.
+  const void* twrp_folder_target = nullptr;
+  const char* twrp_folder_detail = nullptr;
+  const void* fix_bootloop_target = nullptr;
+  const void* merge_snapshots_target = nullptr;
+  const void* disable_avb2_target = nullptr;
 };
 
 void build_advanced_page(const advanced_page_options& options);

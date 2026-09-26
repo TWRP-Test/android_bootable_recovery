@@ -42,6 +42,11 @@ struct advanced_wipe_page_options {
   const bool* selected = nullptr;
   lv_event_cb_t option_event_callback = nullptr;
   const int* target_indices = nullptr;
+  // The legacy "Repair or Change File System" button; red detail once the
+  // selection was not a single partition.
+  lv_event_cb_t repair_callback = nullptr;
+  bool repair_invalid = false;
+  lv_event_cb_t press_guard_callback = nullptr;
 };
 
 void build_advanced_wipe_page(const advanced_wipe_page_options& options);

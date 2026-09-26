@@ -119,6 +119,16 @@ struct page_state {
   size_t sideload_console_consumed = 0;
   uint64_t sideload_last_poll_ms = 0;
   progress_page_view install_progress;
+  // Advanced wipe's single partition, and the file system picked for it.
+  std::string partition_mount_point;
+  int change_fs_selected = -1;
+  gui2_components::swipe_slider change_fs_confirm;
+  gui2_components::swipe_slider tool_confirm;
+  progress_page_view tool_progress;
+  size_t tool_console_consumed = 0;
+  uint64_t tool_last_poll_ms = 0;
+  gui2_components::keyboard tool_input_keyboard;
+  lv_obj_t* tool_input = nullptr;
   size_t install_console_consumed = 0;
   uint64_t install_last_poll_ms = 0;
   bool file_clipboard_move = false;

@@ -22,6 +22,13 @@ struct file_input_page_options {
   gui2_components::keyboard_callback accept_callback = nullptr;
   gui2_components::keyboard_callback key_callback = nullptr;
   void* keyboard_user_data = nullptr;
+  // Under the field: a note, an error in red, and one card with an action.
+  const char* note_text = nullptr;
+  const char* error_text = nullptr;
+  const char* action_title = nullptr;
+  const char* action_detail = nullptr;
+  lv_event_cb_t action_callback = nullptr;
+  lv_event_cb_t press_guard_callback = nullptr;
 };
 
 struct file_input_page_view {

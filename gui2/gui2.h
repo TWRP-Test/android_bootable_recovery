@@ -18,6 +18,7 @@
 #include "backend/settings_store.h"
 #include "backend/sideload_backend.h"
 #include "backend/startup_backend.h"
+#include "backend/tools_backend.h"
 
 enum gui2_exit_reason {
   GUI2_EXIT_INITIALIZATION_FAILED = 1,
@@ -44,6 +45,7 @@ struct gui2_context {
   gui2_backend::file_manager_backend* file_manager = nullptr;
   gui2_backend::install_backend* install = nullptr;
   gui2_backend::sideload_backend* sideload = nullptr;
+  gui2_backend::tools_backend* tools = nullptr;
   // Set: show the splash while startup runs, build the pages after.
   gui2_backend::startup_backend* startup = nullptr;
   // fastbootd: the pages are the fastboot page and reboot, nothing else.

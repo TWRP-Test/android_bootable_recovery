@@ -153,6 +153,13 @@ void swipe_slider::set_enabled(bool enabled) {
   }
 }
 
+void swipe_slider::set_danger(bool danger) {
+  if (knob_ != nullptr)
+    lv_obj_set_style_bg_color(knob_, lv_color_hex(danger ? 0xE5483F : 0x347FF1), LV_PART_MAIN);
+  if (fill_ != nullptr)
+    lv_obj_set_style_bg_color(fill_, lv_color_hex(danger ? 0xF2A7A1 : 0x9BC5E9), LV_PART_MAIN);
+}
+
 void swipe_slider::detach() {
   track_ = nullptr;
   fill_ = nullptr;
