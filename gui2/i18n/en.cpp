@@ -241,6 +241,8 @@ extern const language_pack kEnglish = {
   "Fastbootd",
   "Flash partitions with fastboot from a computer",
   "USB mode",
+  "Rebooting to system in %d s",
+  "No OS installed! Are you sure you wish to reboot?",
   "Repair or Change File System",
   "Tick one partition first",
   "Only one partition at a time",

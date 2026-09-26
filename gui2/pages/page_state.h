@@ -119,6 +119,10 @@ struct page_state {
   size_t sideload_console_consumed = 0;
   uint64_t sideload_last_poll_ms = 0;
   progress_page_view install_progress;
+  // tw_install_reboot's countdown: when it started, and whether it is over or
+  // was cancelled for this install.
+  uint64_t install_countdown_start_ms = 0;
+  bool install_countdown_done = false;
   // Advanced wipe's single partition, and the file system picked for it.
   std::string partition_mount_point;
   int change_fs_selected = -1;
