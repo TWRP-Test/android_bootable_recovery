@@ -132,6 +132,9 @@ void clear_console_lines(console_page_view* view) {
 
 void scroll_console_to_end(const console_page_view& view) {
   if (view.content == nullptr) return;
+  // The lines just appended only get coordinates on the next layout pass, and
+  // the scroll bottom is measured from those.
+  lv_obj_update_layout(view.content);
   lv_obj_scroll_to_y(view.content, lv_obj_get_scroll_bottom(view.content) +
                                        lv_obj_get_scroll_y(view.content),
                      LV_ANIM_OFF);
