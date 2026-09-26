@@ -331,7 +331,15 @@ static void action_card_event_cb(lv_event_t* event) {
   if (!accept_click(event)) return;
 
   const auto* definition = static_cast<const action_definition*>(lv_event_get_user_data(event));
-  if (definition != nullptr) navigate_to(page_kind::ACTION, definition, page_transition::PUSH);
+  if (definition == nullptr) return;
+  // Install has its own page. Going through the action page first built that
+  // page only to leave it at once, and it showed while the next one slid in.
+  if (definition->id == action_id::INSTALL) {
+    page_state.install_queue.clear();
+    navigate_to(page_kind::INSTALL, nullptr, page_transition::PUSH);
+    return;
+  }
+  navigate_to(page_kind::ACTION, definition, page_transition::PUSH);
 }
 
 static void reset_reboot_page_state(void) {
@@ -3653,11 +3661,6 @@ static void show_action_page(const action_definition& definition, page_transitio
   lv_obj_t* body = gui2_pages::build_action_page(options);
   if (body == nullptr) return;
 
-  if (definition.id == action_id::INSTALL) {
-    page_state.install_queue.clear();
-    navigate_to(page_kind::INSTALL, nullptr, page_transition::PUSH);
-    return;
-  }
   if (definition.id == action_id::SETTINGS) {
     gui2_pages::settings_page_options settings_options;
     settings_options.content = body;
