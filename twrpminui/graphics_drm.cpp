@@ -252,11 +252,15 @@ static struct Connector conn_res;
 static struct Plane plane_res[NUM_PLANES];
 static uint32_t number_of_lms = DEFAULT_NUM_LMS;
 static bool legacy_modeset = false;
+// On top of main_monitor_crtc->mode, not in place of it.
+static drmModeModeInfo fast_mode;
+static uint32_t fast_mode_blob_id;
 static uint32_t spr_enabled;
 static uint32_t spr_bypass;
 static std::string spr_prop_name;
 
 static int set_legacy_crtc(uint32_t fb_id);
+static void switch_to_fast_mode(int buffer);
 
 static bool rect_empty(const GRRect& rect) {
   return rect.left >= rect.right || rect.top >= rect.bottom;
@@ -711,6 +715,8 @@ static void drm_blank(minui_backend* backend __unused, bool blank) {
     current_blank_state = blank;
     if (!blank)
       displayed_buffer = buffer;
+    if (!blank && fast_mode_blob_id != 0)
+      switch_to_fast_mode(buffer);
   } else {
     printf("Atomic Commit failed, rc = %d\n", ret);
   }
@@ -961,6 +967,23 @@ static bool get_kernel_video_mode(uint32_t* width, uint32_t* height) {
     return false;
 }
 
+static bool pick_fastest_mode(drmModeConnector* connector, uint32_t width, uint32_t height,
+                              uint32_t* mode_index) {
+    bool found = false;
+    uint32_t best_refresh = 0;
+    for (int modes = 0; modes < connector->count_modes; modes++) {
+        const drmModeModeInfo& mode = connector->modes[modes];
+        if (mode.hdisplay != width || mode.vdisplay != height)
+            continue;
+        if (!found || mode.vrefresh > best_refresh) {
+            found = true;
+            best_refresh = mode.vrefresh;
+            *mode_index = modes;
+        }
+    }
+    return found;
+}
+
 static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
         uint32_t *mode_index) {
     /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
@@ -1105,6 +1128,33 @@ static drmModeAtomicReqPtr create_atomic_flip_request(int buffer) {
   }
 
   return atomic_req;
+}
+
+/* Switching in the takeover commit blanks some panels. */
+static void switch_to_fast_mode(int buffer) {
+  drmModeAtomicReqPtr atomic_req = create_atomic_flip_request(buffer);
+  if (!atomic_req)
+    return;
+
+  uint32_t prop_id;
+  find_prop_id(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "MODE_ID", prop_id);
+  int ret = prop_id == 0 ? -EINVAL
+                         : drmModeAtomicAddProperty(atomic_req, main_monitor_crtc->crtc_id,
+                                                    prop_id, fast_mode_blob_id);
+  if (ret >= 0)
+    ret = drmModeAtomicCommit(drm_fd, atomic_req, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
+  drmModeAtomicFree(atomic_req);
+
+  if (ret == 0) {
+    printf("Switched to %ux%u@%u\n", (unsigned)fast_mode.hdisplay,
+           (unsigned)fast_mode.vdisplay, fast_mode.vrefresh);
+  } else {
+    printf("Could not switch to %u Hz, rc = %d; staying at %u Hz\n", fast_mode.vrefresh, ret,
+           main_monitor_crtc->mode.vrefresh);
+    drmModeDestroyPropertyBlob(drm_fd, fast_mode_blob_id);
+    fast_mode_blob_id = 0;
+  }
+  fflush(stdout);
 }
 
 static int commit_atomic_buffer(int buffer, uint32_t flags, void* user_data) {
@@ -1258,7 +1308,15 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   int width = main_monitor_crtc->mode.hdisplay;
   int height = main_monitor_crtc->mode.vdisplay;
 
-  printf("width: %d, height: %d\n", width, height);
+  printf("width: %d, height: %d, enabling at %u Hz\n", width, height,
+         main_monitor_crtc->mode.vrefresh);
+
+  fast_mode = {};
+  uint32_t fastest = selected_mode;
+  if (!legacy_modeset && android::base::GetBoolProperty("twrp.drm.fast_mode", false) &&
+      pick_fastest_mode(main_monitor_connector, width, height, &fastest) &&
+      main_monitor_connector->modes[fastest].vrefresh > main_monitor_crtc->mode.vrefresh)
+    fast_mode = main_monitor_connector->modes[fastest];
 
   drmModeFreeResources(res);
 
@@ -1437,6 +1495,12 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return NULL;
   }
 
+  if (fast_mode.vrefresh != 0 &&
+      drmModeCreatePropertyBlob(drm_fd, &fast_mode, sizeof(fast_mode), &fast_mode_blob_id)) {
+    printf("failed to create the %u Hz mode blob\n", fast_mode.vrefresh);
+    fast_mode_blob_id = 0;
+  }
+
   /* Save fb_prop_id*/
   uint32_t prop_id;
   prop_id = find_plane_prop_id(plane_res[0].plane->plane_id, "FB_ID", plane_res);
@@ -1507,6 +1571,9 @@ static GRSurface* drm_flip(minui_backend* backend __unused) {
 static void drm_exit(minui_backend* backend __unused) {
     drm_blank(nullptr, true);
     drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+    if (fast_mode_blob_id != 0)
+        drmModeDestroyPropertyBlob(drm_fd, fast_mode_blob_id);
+    fast_mode_blob_id = 0;
     drm_destroy_surface(drm_surfaces[0]);
     drm_destroy_surface(drm_surfaces[1]);
     if (draw_buf) {
