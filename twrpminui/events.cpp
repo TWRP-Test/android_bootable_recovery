@@ -387,7 +387,8 @@ int haptics_available()
 #elif defined(USE_SAMSUNG_HAPTICS)
     return access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
 #else
-    return access(LEDS_HAPTICS_ACTIVATE_FILE, W_OK) == 0 ||
+    return open_ff_haptics() >= 0 ||
+           access(LEDS_HAPTICS_ACTIVATE_FILE, W_OK) == 0 ||
            access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
 #endif
 }
