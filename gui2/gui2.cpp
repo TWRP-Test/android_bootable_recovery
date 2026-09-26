@@ -2254,7 +2254,8 @@ static void refresh_install_progress(void) {
   const auto status = install->status();
 
   gui2_pages::operation_status progress;
-  progress.total = 0;
+  progress.total = status.progress > 0 ? 100 : 0;
+  progress.done = status.progress;
   switch (status.state) {
     case gui2_backend::install_state::DONE:
       progress.state = gui2_pages::operation_state::DONE;
