@@ -362,7 +362,7 @@ void twrp_wifi_backend::refresh_connected() {
 // freeze the UI loop that calls this. Hand back what is known and ask again in
 // the background.
 std::string twrp_wifi_backend::connected_ssid() {
-  if (!available()) return std::string();
+  if (!available() || !service_running()) return std::string();
 
   const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::steady_clock::now().time_since_epoch())
