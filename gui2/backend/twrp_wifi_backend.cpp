@@ -47,6 +47,19 @@ std::string trimmed(std::string value) {
   return value.substr(start);
 }
 
+// Builds that use toybox have no busybox; toybox's ping takes the same options
+// and prints the same summary.
+const std::string& ping_command() {
+  static const std::string command =
+      trimmed(run("command -v busybox")).empty() ? "toybox ping" : "busybox ping";
+  return command;
+}
+
+// "100% packet loss" contains "0% packet loss", so match the leading space too.
+bool all_replied(const std::string& reply) {
+  return reply.find(" 0% packet loss") != std::string::npos;
+}
+
 // wpa_cli prints anything outside printable ASCII as \xNN.
 std::string unescaped(const std::string& value) {
   std::string out;
@@ -404,15 +417,14 @@ void twrp_wifi_backend::run_test() {
     note("Could not determine the gateway\n");
   } else {
     note("Pinging the gateway (%s)...\n", gateway.c_str());
-    const std::string reply = run("busybox ping -I " + std::string(kInterface) + " -c 1 " +
+    const std::string reply = run(ping_command() + " -I " + kInterface + " -c 1 " +
                                   quoted(gateway));
-    gateway_ok = reply.find("0% packet loss") != std::string::npos;
+    gateway_ok = all_replied(reply);
     note("Gateway ping: %s\n", gateway_ok ? "ok" : "failed");
   }
 
-  const std::string outside =
-      run("busybox ping -I " + std::string(kInterface) + " -c 4 8.8.8.8");
-  const bool reachable = outside.find("0% packet loss") != std::string::npos;
+  const std::string outside = run(ping_command() + " -I " + kInterface + " -c 4 8.8.8.8");
+  const bool reachable = all_replied(outside);
   note("Internet ping: %s\n", reachable ? "ok" : "failed");
 
   finish(gateway_ok || reachable);
