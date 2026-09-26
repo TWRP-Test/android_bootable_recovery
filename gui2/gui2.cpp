@@ -2847,7 +2847,7 @@ static void refresh_decrypt_progress(void) {
   page_state.decrypt_refreshing = false;
   if (refreshing || state == gui2_backend::decrypt_state::DONE) {
     page_state.decrypt_failed = false;
-    navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
+    navigate_to(page_kind::HOME, nullptr, page_transition::FADE);
   } else {
     page_state.decrypt_failed = true;
     navigate_to(page_kind::DECRYPT, nullptr, page_transition::POP);
