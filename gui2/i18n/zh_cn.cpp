@@ -241,6 +241,8 @@ extern const language_pack kSimplifiedChinese = {
   "Fastbootd",
   "在电脑上用 fastboot 刷写分区",
   "USB 模式",
+  "%d 秒后重启到系统",
+  "没有检测到已安装的系统。确定要重启吗？",
   "修复或更改文件系统",
   "先勾选一个分区",
   "一次只能选一个分区",

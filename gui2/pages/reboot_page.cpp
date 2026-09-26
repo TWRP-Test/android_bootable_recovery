@@ -5,6 +5,7 @@
 #include "components/choice_card.h"
 #include "components/icon_card.h"
 #include "components/section_label.h"
+#include "components/tip_card.h"
 #include "core/ui_helpers.h"
 #include "gui2_svg_assets.h"
 
@@ -153,9 +154,18 @@ reboot_page_view build_reboot_page(const reboot_page_options& options) {
       options.confirmation_callback != nullptr && options.page_layer != nullptr) {
     const int track_height = reboot_track_height();
     const int page_height = metrics.height - metrics.status_height - metrics.nav_height;
+    const int track_y = page_height - track_height - metrics.cards_top_gap;
+    if (options.warning_text != nullptr) {
+      lv_obj_t* warning = gui2_components::create_tip_card(
+          options.page_layer, metrics, options.warning_text, lv_color_hex(0xFF8A80),
+          lv_color_hex(0x2E1414));
+      lv_obj_update_layout(warning);
+      lv_obj_set_pos(warning, metrics.outer_margin,
+                     track_y - lv_obj_get_height(warning) - metrics.card_gap);
+    }
     view.slider_track = options.confirmation_slider->create(
-        options.page_layer, metrics, metrics.outer_margin,
-        page_height - track_height - metrics.cards_top_gap, metrics.content_width, track_height,
+        options.page_layer, metrics, metrics.outer_margin, track_y, metrics.content_width,
+        track_height,
         options.selected_target == gui2_backend::reboot_target::POWER_OFF
             ? options.strings->swipe_power_off
             : options.strings->swipe_reboot,

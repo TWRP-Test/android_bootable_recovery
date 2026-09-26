@@ -15,6 +15,7 @@ class twrp_reboot_backend final : public reboot_backend {
   bool request_reboot(reboot_target target) override;
   bool usb_fastboot() const override;
   void set_usb_fastboot(bool fastboot) override;
+  bool os_installed() const override;
 
  private:
   bool is_supported(reboot_target target) const;

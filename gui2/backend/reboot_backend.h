@@ -43,6 +43,9 @@ class reboot_backend {
   // In fastbootd: whether USB speaks fastboot rather than adb.
   virtual bool usb_fastboot() const = 0;
   virtual void set_usb_fastboot(bool fastboot) = 0;
+
+  // False when system looks empty, which is when legacy asks before rebooting.
+  virtual bool os_installed() const = 0;
 };
 
 }  // namespace gui2_backend

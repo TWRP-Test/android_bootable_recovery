@@ -3,11 +3,14 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#include <cstdlib>
+
 #include <android-base/properties.h>
 
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twrp-functions.hpp"
+#include "variables.h"
 
 namespace gui2_backend {
 
@@ -133,6 +136,14 @@ bool twrp_reboot_backend::usb_fastboot() const {
 void twrp_reboot_backend::set_usb_fastboot(bool fastboot) {
   android::base::SetProperty("sys.usb.config", "none");
   android::base::SetProperty("sys.usb.config", fastboot ? "fastboot" : "adb");
+}
+
+// The rebootcheck page's comparison.
+bool twrp_reboot_backend::os_installed() const {
+  const auto value = [](const char* name) {
+    return std::strtoull(DataManager::GetStrValue(name).c_str(), nullptr, 10);
+  };
+  return value(TW_BACKUP_SYSTEM_SIZE) >= value(TW_MIN_SYSTEM_VAR);
 }
 
 }  // namespace gui2_backend

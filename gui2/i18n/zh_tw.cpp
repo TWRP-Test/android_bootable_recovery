@@ -241,6 +241,8 @@ extern const language_pack kTraditionalChinese = {
   "Fastbootd",
   "在電腦上用 fastboot 刷寫分割區",
   "USB 模式",
+  "%d 秒後重新啟動到系統",
+  "沒有偵測到已安裝的系統。確定要重新啟動嗎？",
   "修復或變更檔案系統",
   "先勾選一個分割區",
   "一次只能選一個分割區",

@@ -27,6 +27,8 @@ struct reboot_page_options {
   bool target_selected = false;
   gui2_backend::reboot_target selected_target = gui2_backend::reboot_target::SYSTEM;
   const char* error_text = nullptr;
+  // Sits right above the swipe, e.g. the legacy "No OS installed" question.
+  const char* warning_text = nullptr;
 
   bool has_boot_slots = false;
   const char* current_slot_text = nullptr;

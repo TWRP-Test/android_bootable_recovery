@@ -402,6 +402,22 @@ static void reboot_confirmation_complete(void* user_data) {
   reboot_requested = true;
 }
 
+// Legacy asks before rebooting into an empty system. The reboot page carries
+// that question, so an empty system goes there with the target picked.
+static void reboot_to_system(void) {
+  if (reboot == nullptr) return;
+  if (!fastboot_mode && !reboot->os_installed()) {
+    page_state.reboot.return_request = page_router.current_request();
+    reset_reboot_page_state();
+    page_state.reboot.selected_target = gui2_backend::reboot_target::SYSTEM;
+    page_state.reboot.target_selected = true;
+    navigate_to(page_kind::REBOOT, nullptr, page_transition::PUSH);
+    return;
+  }
+  if (!reboot->request_reboot(gui2_backend::reboot_target::SYSTEM)) return;
+  reboot_requested = true;
+}
+
 enum class settings_target {
   LANGUAGE,
   TIMEZONE,
@@ -1137,9 +1153,12 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
 }
 
 static void show_reboot_page(page_transition transition) {
+  const bool no_os = page_state.reboot.target_selected && reboot != nullptr && !fastboot_mode &&
+                     !reboot->os_installed();
   const int bottom_reserved =
       page_state.reboot.target_selected
-          ? ui.nav_height + gui2_pages::reboot_track_height() + ui.cards_top_gap * 2
+          ? ui.nav_height + gui2_pages::reboot_track_height() + ui.cards_top_gap * 2 +
+                (no_os ? gui2_core::ui_px(240) : 0)
           : 0;
   create_page_scaffold(page_kind::REBOOT, false, strings().reboot_title, strings().reboot_summary,
                        bottom_reserved, transition);
@@ -1179,6 +1198,7 @@ static void show_reboot_page(page_transition transition) {
   options.target_selected = page_state.reboot.target_selected;
   options.selected_target = page_state.reboot.selected_target;
   options.error_text = page_state.reboot.has_error ? strings().reboot_failed : nullptr;
+  options.warning_text = no_os ? strings().no_os_warning : nullptr;
   // Legacy's fastboot reboot page has no slot choice.
   options.has_boot_slots = capabilities.boot_slots && !fastboot_mode;
   options.current_slot_text = current_slot_text.c_str();
@@ -2369,6 +2389,8 @@ static void install_confirmed(void*) {
   }
   if (!started) return;
   page_state.install_queue.clear();
+  page_state.install_countdown_start_ms = 0;
+  page_state.install_countdown_done = false;
   navigate_to(page_kind::INSTALL_PROGRESS, nullptr, page_transition::PUSH);
 }
 
@@ -2543,7 +2565,45 @@ static void refresh_install_progress(void) {
   labels.running = strings().installing;
   labels.done = strings().install_complete;
   labels.failed = strings().install_failed;
+
+  // tw_install_reboot: flash_done hands a finished zip to
+  // flash_sleep_and_reboot, which counts tw_sleep_total down and reboots.
+  static char countdown[96];
+  if (status.state == gui2_backend::install_state::DONE && !page_state.install_image &&
+      !page_state.install_countdown_done && settings != nullptr &&
+      settings->get_int("tw_install_reboot", 0) != 0 && reboot != nullptr &&
+      reboot->capabilities().system) {
+    const uint64_t now = monotonic_ms();
+    if (page_state.install_countdown_start_ms == 0) {
+      page_state.install_countdown_start_ms = now;
+      if (page_state.install_progress.running_action != nullptr)
+        lv_obj_set_hidden(page_state.install_progress.running_action, false);
+    }
+    const uint64_t total_ms =
+        static_cast<uint64_t>(std::max(1, settings->get_int("tw_sleep_total", 5))) * 1000;
+    const uint64_t elapsed = now - page_state.install_countdown_start_ms;
+    if (elapsed >= total_ms) {
+      page_state.install_countdown_done = true;
+      reboot_to_system();
+      return;
+    }
+    progress.state = gui2_pages::operation_state::RUNNING;
+    progress.total = static_cast<int>(total_ms);
+    progress.done = static_cast<int>(elapsed);
+    std::snprintf(countdown, sizeof(countdown), strings().install_reboot_in,
+                  static_cast<int>((total_ms - elapsed + 999) / 1000));
+    labels.running = countdown;
+  }
   gui2_pages::update_progress(&page_state.install_progress, labels, progress);
+}
+
+static void install_countdown_cancel_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  page_state.install_countdown_done = true;
+  if (page_state.install_progress.running_action != nullptr)
+    lv_obj_set_hidden(page_state.install_progress.running_action, true);
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+  refresh_install_progress();
 }
 
 static void show_install_progress_page(page_transition transition) {
@@ -2563,8 +2623,13 @@ static void show_install_progress_page(page_transition transition) {
   options.page_layer = page_layer;
   options.left_action = { strings().action_back, progress_back_cb };
   options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
+  options.running_action = { strings().cancel, install_countdown_cancel_cb };
   options.press_guard_callback = press_cancel_guard_cb;
   page_state.install_progress = gui2_pages::build_progress_page(options);
+  // The cancel belongs to the countdown only, not to the install itself.
+  if (page_state.install_progress.running_action != nullptr &&
+      (page_state.install_countdown_start_ms == 0 || page_state.install_countdown_done))
+    lv_obj_set_hidden(page_state.install_progress.running_action, true);
   page_state.install_console_consumed = 0;
   page_state.install_last_poll_ms = 0;
   poll_install_console();
@@ -2860,10 +2925,8 @@ static void progress_back_cb(lv_event_t* event) {
 }
 
 static void progress_reboot_system_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || reboot == nullptr)
-    return;
-  if (!reboot->request_reboot(gui2_backend::reboot_target::SYSTEM)) return;
-  reboot_requested = true;
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  reboot_to_system();
 }
 
 static void add_progress_actions(gui2_pages::progress_page_options* options) {
