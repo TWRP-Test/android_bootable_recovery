@@ -1,7 +1,10 @@
 #include "twrp_hardware_settings.h"
 
 #include <algorithm>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "data.hpp"
 #include "settings_store.h"
@@ -13,6 +16,45 @@ namespace {
 
 constexpr int kMinBrightnessPercent = 10;
 constexpr int kMaxBrightnessPercent = 100;
+
+// On some panels a backlight write is a panel command that blocks for several
+// milliseconds, longer than a frame at 120 Hz. A drag hands the value to this
+// thread, which only ever writes the newest one.
+class backlight_writer {
+ public:
+  backlight_writer() { std::thread(&backlight_writer::run, this).detach(); }
+
+  void set(int value) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      pending_ = value;
+    }
+    wake_.notify_one();
+  }
+
+ private:
+  void run() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    for (;;) {
+      wake_.wait(lock, [this] { return pending_ >= 0; });
+      const int value = pending_;
+      pending_ = -1;
+      lock.unlock();
+      TWFunc::SetBrightness(std::to_string(value));
+      lock.lock();
+    }
+  }
+
+  std::mutex mutex_;
+  std::condition_variable wake_;
+  int pending_ = -1;
+};
+
+// Never destroyed: the detached thread waits on it until the process ends.
+backlight_writer& backlight() {
+  static backlight_writer* writer = new backlight_writer();
+  return *writer;
+}
 
 const char* haptic_key(haptic_channel channel) {
   switch (channel) {
@@ -60,7 +102,7 @@ bool twrp_hardware_settings::set_brightness_percent(int percent) {
   percent = std::clamp(percent, kMinBrightnessPercent, kMaxBrightnessPercent);
   const int maximum = DataManager::GetIntValue("tw_brightness_max");
   const int value = maximum * percent / 100;
-  if (TWFunc::SetBrightness(std::to_string(value)) != 0) return false;
+  backlight().set(value);
 
   return settings_->set_persistent("tw_brightness", std::to_string(value)) &&
          settings_->set_persistent("tw_brightness_pct", std::to_string(percent));
