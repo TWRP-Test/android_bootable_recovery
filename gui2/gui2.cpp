@@ -1170,7 +1170,7 @@ static void show_reboot_page(page_transition transition) {
           ? ui.nav_height + gui2_pages::reboot_track_height() + ui.cards_top_gap * 2 +
                 (no_os ? gui2_core::ui_px(240) : 0)
           : 0;
-  create_page_scaffold(page_kind::REBOOT, false, strings().reboot_title, strings().reboot_summary,
+  create_page_scaffold(page_kind::REBOOT, false, strings().reboot_title, "",
                        bottom_reserved, transition);
 
   gui2_backend::reboot_capabilities capabilities;
@@ -1404,7 +1404,7 @@ static void show_brightness_page(page_transition transition) {
   screen_timeout_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false, true,
                              false };
   create_page_scaffold(page_kind::BRIGHTNESS, false, strings().screen_title,
-                       strings().screen_summary, 0, transition);
+                       "", 0, transition);
 
   const bool has_brightness = hardware != nullptr && hardware->has_brightness();
   const bool has_timeout = screen != nullptr && screen->has_screen_off();
@@ -1510,7 +1510,7 @@ static void show_general_settings_page(page_transition transition) {
   const int button_height = single_line_card_height();
   const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::GENERAL_SETTINGS, false, strings().general_settings_title,
-                       strings().general_settings_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   rebuild_general_settings_items();
 
@@ -1534,7 +1534,7 @@ static void show_keyboard_settings_page(page_transition transition) {
                             false };
   keyboard_lift_binding.keyboard_lift = true;
   create_page_scaffold(page_kind::KEYBOARD_SETTINGS, false, strings().keyboard_settings_title,
-                       strings().keyboard_settings_summary, 0, transition);
+                       "", 0, transition);
 
   gui2_pages::hardware_slider_spec sliders[1];
   sliders[0] = { strings().keyboard_lift_label,
@@ -1832,7 +1832,7 @@ static void wifi_append_log(void) {
 }
 
 static void show_wifi_page(page_transition transition) {
-  create_page_scaffold(page_kind::WIFI, false, strings().wifi_title, strings().wifi_summary, 0,
+  create_page_scaffold(page_kind::WIFI, false, strings().wifi_title, "", 0,
                        transition);
   wifi_view = {};
   wifi_log_rendered = 0;
@@ -1951,7 +1951,7 @@ static void show_sideload_page(page_transition transition) {
   const int track_height = gui2_pages::wipe_track_height();
   const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::SIDELOAD, false, strings().sideload_title,
-                       strings().sideload_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   gui2_pages::sideload_page_options options;
   options.content = main_content;
@@ -2586,7 +2586,7 @@ static void show_install_page(page_transition transition) {
 
   create_page_scaffold(page_kind::INSTALL, false,
                        strings().actions[static_cast<int>(action_id::INSTALL)].title,
-                       strings().install_pick, 0, transition);
+                       "", 0, transition);
   // Straight from the metrics: the box has not been laid out yet, so asking it
   // for its height here gives zero.
   const int bar = gui2_pages::crumb_bar_height(ui);
@@ -2874,7 +2874,7 @@ static void show_console_settings_page(page_transition transition) {
   console_font_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false, false,
                            true };
   create_page_scaffold(page_kind::CONSOLE_SETTINGS, false, strings().console_settings_title,
-                       strings().console_settings_summary, 0, transition);
+                       "", 0, transition);
 
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
@@ -2897,7 +2897,7 @@ static void show_haptics_page(page_transition transition) {
   for (auto& binding : haptic_bindings)
     binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, false };
   create_page_scaffold(page_kind::HAPTICS, false, strings().haptics_title,
-                       strings().haptics_summary, 0, transition);
+                       "", 0, transition);
   const gui2_backend::haptic_channel channels[3] = {
     gui2_backend::haptic_channel::BUTTON,
     gui2_backend::haptic_channel::KEYBOARD,
@@ -2931,7 +2931,7 @@ static void show_recording_page(page_transition transition) {
   hardware_settings_dirty = false;
   recording_binding = { nullptr, gui2_backend::haptic_channel::BUTTON, false, true };
   create_page_scaffold(page_kind::RECORDING, false, strings().recording_settings_title,
-                       strings().recording_settings_summary, 0, transition);
+                       "", 0, transition);
   int fps = screen == nullptr ? 30 : screen->recording_fps();
   int index = 2;
   for (int i = 0; i < recording_fps_count(screen); ++i) {
@@ -3080,7 +3080,7 @@ static void show_console_page(page_transition transition) {
   create_page_scaffold(
       page_kind::CONSOLE, false,
       terminal_tab ? strings().console_tab_terminal : strings().console_title,
-      terminal_tab ? strings().terminal_summary : strings().console_summary, 0, transition);
+      "", 0, transition);
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
 
@@ -3269,7 +3269,7 @@ static void show_wipe_page(page_transition transition) {
   const int bottom_reserved = ui.nav_height + gui2_pages::wipe_track_height() +
                               gui2_pages::wipe_hint_height(ui, strings().factory_reset_detail) +
                               ui.cards_top_gap * 3;
-  create_page_scaffold(page_kind::WIPE, false, strings().wipe_title, strings().wipe_summary,
+  create_page_scaffold(page_kind::WIPE, false, strings().wipe_title, "",
                        bottom_reserved, transition);
 
   gui2_pages::action_page_options action_options;
@@ -3300,7 +3300,7 @@ static void show_advanced_wipe_page(page_transition transition) {
   const int track_height = gui2_pages::wipe_track_height();
   const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::ADVANCED_WIPE, false, strings().advanced_wipe_title,
-                       strings().advanced_wipe_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   wipe_targets = wipe == nullptr ? std::vector<gui2_backend::wipe_target>() : wipe->targets();
   for (bool& selected : page_state.wipe_selected) selected = false;
@@ -3616,7 +3616,7 @@ static void mount_event_cb(lv_event_t* event) {
 static void show_backup_page(page_transition transition) {
   const int track_height = gui2_pages::wipe_track_height();
   const int bottom_reserved = ui.nav_height + track_height + ui.cards_top_gap * 2;
-  create_page_scaffold(page_kind::BACKUP, false, strings().backup_title, strings().backup_summary,
+  create_page_scaffold(page_kind::BACKUP, false, strings().backup_title, "",
                        bottom_reserved, transition);
 
   backup_targets = backup == nullptr ? std::vector<gui2_backend::backup_target>()
@@ -3802,7 +3802,7 @@ static void restore_confirmed(void*) {
 
 static void show_restore_list_page(page_transition transition) {
   create_page_scaffold(page_kind::RESTORE_LIST, false, strings().restore_title,
-                       strings().restore_summary, 0, transition);
+                       "", 0, transition);
 
   restore_backups = restore == nullptr ? std::vector<gui2_backend::restore_backup>()
                                        : restore->backups();
@@ -4451,7 +4451,7 @@ static void show_select_storage_page(page_transition transition) {
 }
 
 static void show_mount_page(page_transition transition) {
-  create_page_scaffold(page_kind::MOUNT, false, strings().mount_title, strings().mount_summary, 0,
+  create_page_scaffold(page_kind::MOUNT, false, strings().mount_title, "", 0,
                        transition);
 
   mount_targets = mount == nullptr ? std::vector<gui2_backend::mount_target>() : mount->targets();
@@ -4502,7 +4502,7 @@ static void show_mount_page(page_transition transition) {
 static void show_decrypt_page(page_transition transition) {
   const int bottom_reserved = ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::DECRYPT, false, strings().decrypt_title,
-                       strings().decrypt_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   gui2_pages::decrypt_page_options options;
   options.content = main_content;
@@ -4621,7 +4621,7 @@ static void show_timezone_page(page_transition transition) {
 
   const int button_height = single_line_card_height();
   const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
-  create_page_scaffold(page_kind::TIMEZONE, false, strings().time_title, strings().time_summary,
+  create_page_scaffold(page_kind::TIMEZONE, false, strings().time_title, "",
                        bottom_reserved, transition);
 
   const std::string current = settings == nullptr
@@ -4689,7 +4689,7 @@ static void show_action_page(const action_definition& definition, page_transitio
   }
 
   const auto& action_text = strings().actions[static_cast<int>(definition.id)];
-  create_page_scaffold(page_kind::ACTION, false, action_text.title, action_text.summary, 0,
+  create_page_scaffold(page_kind::ACTION, false, action_text.title, "", 0,
                        transition);
   gui2_pages::action_page_options options;
   options.content = main_content;
@@ -4751,7 +4751,7 @@ static void show_action_page(const action_definition& definition, page_transitio
 static void show_export_log_page(page_transition transition) {
   const int bottom_reserved = ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::EXPORT_LOG, false, strings().export_log_title,
-                       strings().export_log_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   const bool has_logcat = log_export != nullptr && log_export->has_logcat();
   if (!has_logcat) page_state.include_logcat = false;
@@ -4782,7 +4782,7 @@ static void show_language_page(page_transition transition) {
   const int button_height = single_line_card_height();
   const int bottom_reserved = ui.nav_height + button_height + ui.cards_top_gap * 2;
   create_page_scaffold(page_kind::LANGUAGE, false, strings().language_title,
-                       strings().language_summary, bottom_reserved, transition);
+                       "", bottom_reserved, transition);
 
   gui2_pages::language_page_options options;
   options.content = main_content;
