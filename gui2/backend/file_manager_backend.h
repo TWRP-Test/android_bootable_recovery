@@ -13,6 +13,8 @@ struct file_entry {
   uint64_t size = 0;
   // Permission bits as the chmod dialog shows them, e.g. "0755".
   std::string mode;
+  // Seconds since the epoch, for sorting by date.
+  int64_t modified = 0;
 };
 
 // The legacy file manager's actions, minus the ones that only make sense with

@@ -489,6 +489,12 @@ enum class tool_input_kind {
 };
 static tool_input_kind tool_input_mode = tool_input_kind::RENAME_BACKUP;
 
+// ---- File search and sort: shared state ------------------------------------
+static lv_obj_t* sort_menu = nullptr;
+static gui2_pages::file_toolbar_view file_manager_toolbar;
+static gui2_pages::file_toolbar_view install_toolbar;
+static void close_open_sort_menu(bool animate);
+
 static void wipe_repair_event_cb(lv_event_t* event);
 static void restore_manage_event_cb(lv_event_t* event);
 static void open_advanced_tool(settings_target target);
@@ -1102,6 +1108,10 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.terminal_keyboard_widget.dismiss();
   page_state.file_input_keyboard.dismiss();
   page_state.file_input = nullptr;
+  page_state.search_keyboard.dismiss();
+  close_open_sort_menu(false);
+  file_manager_toolbar = {};
+  install_toolbar = {};
   page_state.install_confirm.detach();
   page_state.install_progress = {};
   page_state.install_console_consumed = 0;
@@ -2119,12 +2129,225 @@ static void file_paste_cb(lv_event_t* event) {
 
 static gui2_pages::file_manager_page_view file_manager_view;
 static void file_manager_parent_cb(lv_event_t* event);
+// ---- File search and sort ----------------------------------------------------
+// tw_gui_sort_order keeps legacy's numbering: 1 name, 2 date, 3 size, and a
+// negative value for the other direction. The menu lists them in this order.
+static constexpr int kSortOrders[6] = { 1, -1, -2, 2, -3, 3 };
+static constexpr int sort_indices[6] = { 0, 1, 2, 3, 4, 5 };
+
+static void clear_file_manager_view(void);
+static void build_file_manager_body(int direction);
+static void clear_install_view(void);
+static void build_install_body(int direction);
+
+static int file_sort_order(void) {
+  const int order = settings == nullptr ? 1 : settings->get_int("tw_gui_sort_order", 1);
+  return std::find(std::begin(kSortOrders), std::end(kSortOrders), order) ==
+                 std::end(kSortOrders)
+             ? 1
+             : order;
+}
+
+static const char* sort_key_label(int order) {
+  switch (order < 0 ? -order : order) {
+    case 2:
+      return strings().sort_time;
+    case 3:
+      return strings().sort_size;
+    default:
+      return strings().sort_name;
+  }
+}
+
+// Folders stay on top whatever the order, as in legacy; a size order leaves
+// folders by name, since their size says nothing about what they hold.
+static void sort_file_entries(std::vector<gui2_backend::file_entry>* entries, int order) {
+  const int key = order < 0 ? -order : order;
+  const bool ascending = order > 0;
+  std::stable_sort(entries->begin(), entries->end(),
+                   [key, ascending](const gui2_backend::file_entry& a,
+                                    const gui2_backend::file_entry& b) {
+                     if (a.directory != b.directory) return a.directory;
+                     if (key == 3 && !a.directory && a.size != b.size)
+                       return ascending ? a.size < b.size : a.size > b.size;
+                     if (key == 2 && a.modified != b.modified)
+                       return ascending ? a.modified < b.modified : a.modified > b.modified;
+                     const int by_name = strcasecmp(a.name.c_str(), b.name.c_str());
+                     return key == 1 && !ascending ? by_name > 0 : by_name < 0;
+                   });
+}
+
+static void filter_file_entries(std::vector<gui2_backend::file_entry>* entries,
+                                const std::string& query) {
+  if (query.empty()) return;
+  std::string needle = query;
+  for (char& c : needle) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  entries->erase(std::remove_if(entries->begin(), entries->end(),
+                                [&needle](const gui2_backend::file_entry& entry) {
+                                  std::string name = entry.name;
+                                  for (char& c : name)
+                                    c = static_cast<char>(
+                                        std::tolower(static_cast<unsigned char>(c)));
+                                  return name.find(needle) == std::string::npos;
+                                }),
+                 entries->end());
+}
+
+static bool searching_install(void) {
+  return page_router.current() == page_kind::INSTALL;
+}
+
+static gui2_pages::file_toolbar_view& active_toolbar(void) {
+  return searching_install() ? install_toolbar : file_manager_toolbar;
+}
+
+static void rebuild_file_list(void) {
+  if (searching_install()) {
+    clear_install_view();
+    build_install_body(0);
+  } else {
+    clear_file_manager_view();
+    build_file_manager_body(0);
+  }
+  page_host.settle();
+}
+
+static void search_input_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  auto& toolbar = active_toolbar();
+  if (toolbar.input == nullptr) return;
+  const char* text = lv_textarea_get_text(toolbar.input);
+  std::string& query = searching_install() ? page_state.install_search : page_state.file_search;
+  const std::string value = text == nullptr ? std::string() : text;
+  if (value == query) return;
+  query = value;
+  gui2_pages::show_file_toolbar_clear(toolbar, !query.empty());
+  rebuild_file_list();
+}
+
+static void search_clear_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  auto& toolbar = active_toolbar();
+  if (toolbar.input != nullptr) lv_textarea_set_text(toolbar.input, "");
+  page_state.search_keyboard.hide();
+}
+
+// A new folder starts with an empty search, as a file manager's usually does.
+static void reset_file_search(gui2_pages::file_toolbar_view& toolbar, std::string& query) {
+  query.clear();
+  if (toolbar.input != nullptr) lv_textarea_set_text(toolbar.input, "");
+  gui2_pages::show_file_toolbar_clear(toolbar, false);
+  page_state.search_keyboard.hide();
+}
+
+static void search_keyboard_shown(void*) {
+  gui2_pages::set_file_toolbar_active(active_toolbar(), true);
+}
+
+static void search_keyboard_hidden(void*) {
+  gui2_pages::set_file_toolbar_active(active_toolbar(), false);
+}
+
+static void search_keyboard_done(void*) {
+  page_state.search_keyboard.hide();
+}
+
+static void close_open_sort_menu(bool animate) {
+  if (sort_menu == nullptr) return;
+  gui2_pages::close_sort_menu(sort_menu, animate);
+  sort_menu = nullptr;
+}
+
+static void sort_menu_dismiss_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  close_open_sort_menu(true);
+}
+
+static void sort_choice_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
+  if (index == nullptr || *index < 0 || *index >= static_cast<int>(std::size(kSortOrders)))
+    return;
+  const int order = kSortOrders[*index];
+  if (settings != nullptr && settings->set_persistent("tw_gui_sort_order", std::to_string(order)))
+    settings->flush();
+  close_open_sort_menu(true);
+  if (file_manager_toolbar.sort_label != nullptr)
+    lv_label_set_text(file_manager_toolbar.sort_label, sort_key_label(order));
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+  rebuild_file_list();
+  gui2_pages::fade_file_list(file_manager_view);
+}
+
+static void sort_button_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (sort_menu != nullptr || file_manager_toolbar.sort_button == nullptr) return;
+  page_state.search_keyboard.hide();
+  const auto& text = strings();
+  static const char* labels[6];
+  labels[0] = text.sort_name_asc;
+  labels[1] = text.sort_name_desc;
+  labels[2] = text.sort_time_desc;
+  labels[3] = text.sort_time_asc;
+  labels[4] = text.sort_size_desc;
+  labels[5] = text.sort_size_asc;
+  const int order = file_sort_order();
+  gui2_pages::sort_menu_options options;
+  options.anchor = file_manager_toolbar.sort_button;
+  options.metrics = &ui;
+  options.labels = labels;
+  options.count = std::size(labels);
+  options.selected = static_cast<size_t>(
+      std::find(std::begin(kSortOrders), std::end(kSortOrders), order) - std::begin(kSortOrders));
+  options.indices = sort_indices;
+  options.choice_callback = sort_choice_cb;
+  options.dismiss_callback = sort_menu_dismiss_cb;
+  sort_menu = gui2_pages::open_sort_menu(options);
+}
+
+static void build_search_toolbar(gui2_pages::file_toolbar_view* view, const std::string& query,
+                                 bool sortable, int y) {
+  gui2_pages::file_toolbar_options options;
+  options.parent = page_layer;
+  options.y = y;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.query = query.c_str();
+  options.input_callback = search_input_cb;
+  options.clear_callback = search_clear_cb;
+  options.sort_label = sortable ? sort_key_label(file_sort_order()) : nullptr;
+  options.sort_callback = sort_button_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  *view = gui2_pages::build_file_toolbar(options);
+  if (view->input == nullptr) return;
+
+  gui2_components::keyboard_options keyboard;
+  keyboard.parent = lv_layer_top();
+  keyboard.metrics = &ui;
+  keyboard.strings = &strings();
+  keyboard.textarea = view->input;
+  keyboard.start_hidden = true;
+  keyboard.accept_callback = search_keyboard_done;
+  keyboard.shown_callback = search_keyboard_shown;
+  keyboard.hidden_callback = search_keyboard_hidden;
+  keyboard.key_callback = keyboard_feedback_cb;
+  lv_obj_t* root = page_state.search_keyboard.create(keyboard);
+  if (root == nullptr) return;
+  lv_obj_set_align(root, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(root, 0,
+                 ui.height - gui2_components::keyboard_height(
+                                 ui, gui2_components::keyboard_layout::LETTERS));
+  page_state.search_keyboard.bind(view->input);
+}
+
 
 // direction: 1 going deeper, -1 coming back up, 0 for a plain refresh.
 static void build_file_manager_body(int direction) {
   file_manager_entries = file_manager == nullptr
                              ? std::vector<gui2_backend::file_entry>()
                              : file_manager->list(page_state.file_manager_path);
+  sort_file_entries(&file_manager_entries, file_sort_order());
+  filter_file_entries(&file_manager_entries, page_state.file_search);
   if (file_manager_entries.size() > std::size(file_manager_indices))
     file_manager_entries.resize(std::size(file_manager_indices));
 
@@ -2162,6 +2385,8 @@ static void build_file_manager_body(int direction) {
   options.show_parent_row = page_state.file_manager_path != "/";
   options.parent_label = strings().fm_parent;
   options.parent_callback = file_manager_parent_cb;
+  options.show_sizes = true;
+  options.empty_text = page_state.file_search.empty() ? nullptr : strings().search_empty;
   options.press_guard_callback = press_cancel_guard_cb;
   file_manager_view = gui2_pages::build_file_manager_page(options);
   if (direction != 0) gui2_pages::animate_file_list(file_manager_view, ui, direction > 0);
@@ -2180,6 +2405,7 @@ static void clear_file_manager_view(void) {
 static void change_file_manager_folder(const std::string& path, int direction) {
   if (path.empty()) return;
   page_state.file_manager_path = path;
+  reset_file_search(file_manager_toolbar, page_state.file_search);
   clear_file_manager_view();
   build_file_manager_body(direction);
   page_host.settle();
@@ -2203,11 +2429,13 @@ static void show_file_manager_page(page_transition transition) {
   // Straight from the metrics: the box has not been laid out yet, so asking it
   // for its height here gives zero.
   const int bar = gui2_pages::crumb_bar_height(ui);
+  const int toolbar = gui2_pages::file_toolbar_height(ui);
   const int scroll_top = ui.heading_top + ui.heading_height + ui.cards_top_gap;
-  lv_obj_set_pos(main_content, 0, scroll_top + bar);
+  lv_obj_set_pos(main_content, 0, scroll_top + bar + toolbar);
   lv_obj_set_height(main_content,
-                    std::max(1, ui.height - ui.status_height - scroll_top - bar));
+                    std::max(1, ui.height - ui.status_height - scroll_top - bar - toolbar));
   file_manager_view = {};
+  build_search_toolbar(&file_manager_toolbar, page_state.file_search, true, scroll_top + bar);
   build_file_manager_body(0);
 
   // Legacy's floating button acts on the folder you are standing in; once
@@ -2289,6 +2517,7 @@ static void build_install_body(int direction) {
         install_entries.push_back(std::move(entry));
     }
   }
+  filter_file_entries(&install_entries, page_state.install_search);
   if (install_entries.size() > std::size(file_manager_indices))
     install_entries.resize(std::size(file_manager_indices));
 
@@ -2325,6 +2554,7 @@ static void build_install_body(int direction) {
   options.show_parent_row = page_state.install_path != "/";
   options.parent_label = strings().fm_parent;
   options.parent_callback = install_parent_cb;
+  options.empty_text = page_state.install_search.empty() ? nullptr : strings().search_empty;
   options.press_guard_callback = press_cancel_guard_cb;
   install_view = gui2_pages::build_file_manager_page(options);
   if (direction != 0) gui2_pages::animate_file_list(install_view, ui, direction > 0);
@@ -2339,6 +2569,7 @@ static void clear_install_view(void) {
 static void change_install_folder(const std::string& path, int direction) {
   if (path.empty()) return;
   page_state.install_path = path;
+  reset_file_search(install_toolbar, page_state.install_search);
   clear_install_view();
   build_install_body(direction);
   page_host.settle();
@@ -2359,11 +2590,13 @@ static void show_install_page(page_transition transition) {
   // Straight from the metrics: the box has not been laid out yet, so asking it
   // for its height here gives zero.
   const int bar = gui2_pages::crumb_bar_height(ui);
+  const int toolbar = gui2_pages::file_toolbar_height(ui);
   const int scroll_top = ui.heading_top + ui.heading_height + ui.cards_top_gap;
-  lv_obj_set_pos(main_content, 0, scroll_top + bar);
+  lv_obj_set_pos(main_content, 0, scroll_top + bar + toolbar);
   lv_obj_set_height(main_content,
-                    std::max(1, ui.height - ui.status_height - scroll_top - bar));
+                    std::max(1, ui.height - ui.status_height - scroll_top - bar - toolbar));
   install_view = {};
+  build_search_toolbar(&install_toolbar, page_state.install_search, false, scroll_top + bar);
   build_install_body(0);
 }
 
