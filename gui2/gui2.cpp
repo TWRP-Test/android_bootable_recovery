@@ -357,6 +357,7 @@ static void action_card_event_cb(lv_event_t* event) {
   // page only to leave it at once, and it showed while the next one slid in.
   if (definition->id == action_id::INSTALL) {
     page_state.install_queue.clear();
+    page_state.install_from_file_manager = false;
     navigate_to(page_kind::INSTALL, nullptr, page_transition::PUSH);
     return;
   }
@@ -572,12 +573,14 @@ static void navigate_back(void) {
     // Legacy calls cancelzip here, which drops the zip that was just added.
     if (!page_state.install_image && !page_state.install_queue.empty())
       page_state.install_queue.pop_back();
-    navigate_to(page_kind::INSTALL, nullptr, page_transition::POP);
+    navigate_to(page_state.install_from_file_manager ? page_kind::FILE_MANAGER : page_kind::INSTALL,
+                nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::INSTALL_PROGRESS) {
     if (install == nullptr ||
         install->status().state != gui2_backend::install_state::RUNNING) {
       if (install != nullptr) install->acknowledge();
-      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+      navigate_to(page_state.install_from_file_manager ? page_kind::FILE_MANAGER : page_kind::HOME,
+                  nullptr, page_transition::POP);
     }
   } else if (page_router.current() == page_kind::INSTALL) {
     navigate_to(page_kind::HOME, nullptr, page_transition::POP);
@@ -1238,8 +1241,11 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::HAPTICS);
   else if (*target == settings_target::RECORDING)
     navigate_to(page_kind::RECORDING);
-  else if (*target == settings_target::FILE_MANAGER)
+  else if (*target == settings_target::FILE_MANAGER) {
+    page_state.install_queue.clear();
+    page_state.install_from_file_manager = false;
     navigate_to(page_kind::FILE_MANAGER);
+  }
   else if (*target == settings_target::WIFI)
     navigate_to(page_kind::WIFI);
   else if (*target == settings_target::SIDELOAD)
@@ -1585,23 +1591,43 @@ static void file_manager_crumb_cb(lv_event_t* event) {
   change_file_manager_folder(path.empty() ? "/" : path, -1);
 }
 
-static void file_manager_entry_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+static const gui2_backend::file_entry* file_manager_event_entry(lv_event_t* event) {
   const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
   if (index == nullptr || *index < 0 ||
       static_cast<size_t>(*index) >= file_manager_entries.size())
-    return;
+    return nullptr;
+  return &file_manager_entries[*index];
+}
 
-  const auto& entry = file_manager_entries[*index];
-  if (entry.directory) {
-    change_file_manager_folder(file_manager_join(page_state.file_manager_path, entry.name), 1);
-    return;
-  }
-  // Legacy opens its options page the moment a file is picked.
+static void open_file_actions(const gui2_backend::file_entry& entry) {
   page_state.file_selection = file_manager_join(page_state.file_manager_path, entry.name);
-  page_state.file_selection_is_folder = false;
+  page_state.file_selection_is_folder = entry.directory;
   page_state.file_selection_mode = entry.mode;
   navigate_to(page_kind::FILE_ACTIONS);
+}
+
+static bool flash_from_file_manager(const gui2_backend::file_entry& entry);
+
+// A tap opens a folder and takes a zip or an image straight to the flash
+// confirmation; anything else, and a hold on any row, opens its actions.
+static void file_manager_entry_cb(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if ((code != LV_EVENT_SHORT_CLICKED && code != LV_EVENT_CLICKED) || !accept_click(event)) return;
+  const auto* entry = file_manager_event_entry(event);
+  if (entry == nullptr) return;
+  if (entry->directory) {
+    change_file_manager_folder(file_manager_join(page_state.file_manager_path, entry->name), 1);
+    return;
+  }
+  if (flash_from_file_manager(*entry)) return;
+  open_file_actions(*entry);
+}
+
+static void file_manager_entry_long_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_LONG_PRESSED || !accept_click(event)) return;
+  const auto* entry = file_manager_event_entry(event);
+  if (entry == nullptr) return;
+  open_file_actions(*entry);
 }
 
 
@@ -2104,14 +2130,6 @@ static void show_file_actions_page(page_transition transition) {
   gui2_pages::build_file_actions_page(options);
 }
 
-static void file_folder_action_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  page_state.file_selection = page_state.file_manager_path;
-  page_state.file_selection_is_folder = true;
-  page_state.file_selection_mode = "0755";
-  navigate_to(page_kind::FILE_ACTIONS);
-}
-
 static void file_paste_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   if (file_manager == nullptr || page_state.file_clipboard.empty()) return;
@@ -2380,6 +2398,7 @@ static void build_file_manager_body(int direction) {
   options.entry_count = file_manager_entries.size();
   options.entry_indices = file_manager_indices;
   options.entry_callback = file_manager_entry_cb;
+  options.entry_long_press_callback = file_manager_entry_long_cb;
   options.crumb_parent = page_layer;
   options.crumb_y = ui.heading_top + ui.heading_height + ui.cards_top_gap;
   options.show_parent_row = page_state.file_manager_path != "/";
@@ -2421,7 +2440,11 @@ static void show_file_manager_page(page_transition transition) {
     page_state.file_manager_path =
         file_manager == nullptr ? "/" : file_manager->start_directory();
 
-  const int bottom_reserved = ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2;
+  // Holding a row reaches every action, so the floating button is only
+  // needed as the place to paste into.
+  const bool pasting = !page_state.file_clipboard.empty();
+  const int bottom_reserved =
+      pasting ? ui.nav_height + single_line_card_height() + ui.cards_top_gap * 2 : 0;
   // No subtitle: the trail right below it already says where we are.
   create_page_scaffold(page_kind::FILE_MANAGER, false, strings().file_manager_title, "",
                        bottom_reserved, transition);
@@ -2438,13 +2461,9 @@ static void show_file_manager_page(page_transition transition) {
   build_search_toolbar(&file_manager_toolbar, page_state.file_search, true, scroll_top + bar);
   build_file_manager_body(0);
 
-  // Legacy's floating button acts on the folder you are standing in; once
-  // something is waiting to be pasted, that is the more useful thing to offer.
-  gui2_components::create_apply_button(
-      page_layer, ui,
-      page_state.file_clipboard.empty() ? file_folder_action_cb : file_paste_cb,
-      page_state.file_clipboard.empty() ? strings().fm_this_folder : strings().fm_destination,
-      press_cancel_guard_cb);
+  if (pasting)
+    gui2_components::create_apply_button(page_layer, ui, file_paste_cb, strings().fm_destination,
+                                         press_cancel_guard_cb);
 }
 
 
@@ -2483,6 +2502,7 @@ static void install_entry_cb(lv_event_t* event) {
     change_install_folder(file_manager_join(page_state.install_path, entry.name), 1);
     return;
   }
+  page_state.install_from_file_manager = false;
   page_state.install_selection = file_manager_join(page_state.install_path, entry.name);
   page_state.install_image = install_has_suffix(entry.name, ".img");
   if (!page_state.install_image) {
@@ -2492,6 +2512,23 @@ static void install_entry_cb(lv_event_t* event) {
       queue.push_back(page_state.install_selection);
   }
   navigate_to(page_kind::INSTALL_CONFIRM);
+}
+
+// The install browser's own pick, reached from a file manager row.
+static bool flash_from_file_manager(const gui2_backend::file_entry& entry) {
+  const bool image = install_has_suffix(entry.name, ".img");
+  if (!image && !install_has_suffix(entry.name, ".zip")) return false;
+  page_state.install_from_file_manager = true;
+  page_state.install_selection = file_manager_join(page_state.file_manager_path, entry.name);
+  page_state.install_image = image;
+  if (!image) {
+    auto& queue = page_state.install_queue;
+    if (std::find(queue.begin(), queue.end(), page_state.install_selection) == queue.end() &&
+        queue.size() < kInstallQueueLimit)
+      queue.push_back(page_state.install_selection);
+  }
+  navigate_to(page_kind::INSTALL_CONFIRM);
+  return true;
 }
 
 static void install_crumb_cb(lv_event_t* event) {
@@ -2691,13 +2728,15 @@ static void install_option_event_cb(lv_event_t* event) {
 
 static void install_add_zip_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  navigate_to(page_kind::INSTALL, nullptr, page_transition::POP);
+  navigate_to(page_state.install_from_file_manager ? page_kind::FILE_MANAGER : page_kind::INSTALL,
+              nullptr, page_transition::POP);
 }
 
 static void install_clear_queue_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   page_state.install_queue.clear();
-  navigate_to(page_kind::INSTALL, nullptr, page_transition::POP);
+  navigate_to(page_state.install_from_file_manager ? page_kind::FILE_MANAGER : page_kind::INSTALL,
+              nullptr, page_transition::POP);
 }
 
 static void show_install_confirm_page(page_transition transition) {

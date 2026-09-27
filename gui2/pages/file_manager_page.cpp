@@ -189,7 +189,8 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
   const int icon_size = row_height * 5 / 9;
 
   const auto add_row = [&](const char* text, const lv_image_dsc_t* glyph_asset, lv_color_t tint,
-                           lv_event_cb_t callback, const void* target) {
+                           lv_event_cb_t callback, const void* target,
+                           lv_event_cb_t long_press = nullptr) {
     lv_obj_t* row = lv_obj_create(view.list);
     lv_obj_set_size(row, metrics.content_width, row_height);
     lv_obj_set_clickable(row, true);
@@ -209,7 +210,11 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
     if (options.press_guard_callback != nullptr)
       lv_obj_add_event_cb(row, options.press_guard_callback, LV_EVENT_ALL, nullptr);
     if (callback != nullptr)
-      lv_obj_add_event_cb(row, callback, LV_EVENT_CLICKED, const_cast<void*>(target));
+      lv_obj_add_event_cb(row, callback,
+                          long_press != nullptr ? LV_EVENT_SHORT_CLICKED : LV_EVENT_CLICKED,
+                          const_cast<void*>(target));
+    if (long_press != nullptr)
+      lv_obj_add_event_cb(row, long_press, LV_EVENT_LONG_PRESSED, const_cast<void*>(target));
 
     // The text font is a TTF without LVGL's symbol code points, so these have
     // to be the project's own art rather than LV_SYMBOL_*.
@@ -245,7 +250,8 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
         add_row(entry.name.c_str(), entry.directory ? &kGui2IconFolder : &kGui2IconFile,
                 entry.directory ? lv_color_hex(kAccent) : metrics.primary_text,
                 options.entry_indices == nullptr ? nullptr : options.entry_callback,
-                options.entry_indices == nullptr ? nullptr : &options.entry_indices[i]);
+                options.entry_indices == nullptr ? nullptr : &options.entry_indices[i],
+                options.entry_indices == nullptr ? nullptr : options.entry_long_press_callback);
     if (options.show_sizes && !entry.directory) {
       lv_obj_set_style_pad_right(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
       lv_obj_t* size = lv_label_create(row);

@@ -108,6 +108,9 @@ struct page_state {
   // Zips queue up the way legacy queues them; images never do.
   std::vector<std::string> install_queue;
   bool install_image = false;
+  // The confirm page was reached from the file manager, so its way back and
+  // "add more" lead there instead of to the install browser.
+  bool install_from_file_manager = false;
   size_t install_target_index = 0;
   bool install_both_slots = false;
   gui2_components::swipe_slider install_confirm;
