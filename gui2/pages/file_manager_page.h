@@ -35,6 +35,9 @@ struct file_manager_page_options {
   size_t entry_count = 0;
   const int* entry_indices = nullptr;
   lv_event_cb_t entry_callback = nullptr;
+  // Set: a tap arrives as LV_EVENT_SHORT_CLICKED, which LVGL skips once a
+  // long press fired, and a hold as LV_EVENT_LONG_PRESSED.
+  lv_event_cb_t entry_long_press_callback = nullptr;
 
   // File sizes on the right of each row, and what an empty list says.
   bool show_sizes = false;
