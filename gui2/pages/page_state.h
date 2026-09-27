@@ -100,6 +100,10 @@ struct page_state {
   lv_obj_t* file_input = nullptr;
   // Install browses the same way the file manager does, with its own path.
   std::string install_path;
+  // What the search field of each list holds; a folder change clears it.
+  std::string file_search;
+  std::string install_search;
+  gui2_components::keyboard search_keyboard;
   std::string install_selection;
   // Zips queue up the way legacy queues them; images never do.
   std::vector<std::string> install_queue;

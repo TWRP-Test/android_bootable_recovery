@@ -49,6 +49,7 @@ std::vector<file_entry> twrp_file_manager_backend::list(const std::string& path)
     if (lstat(join(path, name).c_str(), &info) == 0) {
       item.directory = S_ISDIR(info.st_mode);
       item.size = static_cast<uint64_t>(info.st_size);
+      item.modified = static_cast<int64_t>(info.st_mtime);
       char mode[8];
       snprintf(mode, sizeof(mode), "%04o", info.st_mode & 07777);
       item.mode = mode;

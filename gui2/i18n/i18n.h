@@ -254,6 +254,17 @@ struct language_pack {
   const char* fastbootd_title;
   const char* fastbootd_summary;
   const char* usb_mode;
+  const char* search_hint;
+  const char* search_empty;
+  const char* sort_name;
+  const char* sort_time;
+  const char* sort_size;
+  const char* sort_name_asc;
+  const char* sort_name_desc;
+  const char* sort_time_desc;
+  const char* sort_time_asc;
+  const char* sort_size_desc;
+  const char* sort_size_asc;
   const char* install_reboot_in;
   const char* no_os_warning;
   const char* repair_change_title;
