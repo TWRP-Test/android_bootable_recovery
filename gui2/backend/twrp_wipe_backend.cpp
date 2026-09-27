@@ -3,6 +3,8 @@
 #include <utility>
 
 #include "data.hpp"
+#include "gui/gui.hpp"
+#include "gui/twmsg.h"
 #include "partitions.hpp"
 #include "variables.h"
 
@@ -75,9 +77,21 @@ void twrp_wipe_backend::run(job kind, std::vector<std::string> mount_points) {
     ok = PartitionManager.Format_Data() != 0;
   } else {
     ok = true;
+    // GUIAction::wipe's LIST: three rows of the list are not partitions.
     for (const std::string& path : mount_points) {
-      const bool wiped = path == "DALVIK" ? PartitionManager.Wipe_Dalvik_Cache() != 0
-                                          : PartitionManager.Wipe_By_Path(path) != 0;
+      bool wiped = false;
+      if (path == "/and-sec") {
+        wiped = PartitionManager.Wipe_Android_Secure() != 0;
+        if (!wiped) gui_msg("and_sec_wipe_err=Unable to wipe android secure");
+      } else if (path == "DALVIK") {
+        wiped = PartitionManager.Wipe_Dalvik_Cache() != 0;
+        if (!wiped) gui_err("dalvik_wipe_err=Failed to wipe dalvik");
+      } else if (path == "INTERNAL") {
+        wiped = PartitionManager.Wipe_Media_From_Data() != 0;
+      } else {
+        wiped = PartitionManager.Wipe_By_Path(path) != 0;
+        if (!wiped) gui_msg(Msg(msg::kError, "unable_to_wipe=Unable to wipe {1}.")(path));
+      }
       if (!wiped) {
         ok = false;
         break;
@@ -87,8 +101,8 @@ void twrp_wipe_backend::run(job kind, std::vector<std::string> mount_points) {
     }
   }
 
+  PartitionManager.Update_System_Details();
   if (ok) {
-    PartitionManager.Update_System_Details();
     std::lock_guard<std::mutex> lock(mutex_);
     status_.done = status_.total;
   }
