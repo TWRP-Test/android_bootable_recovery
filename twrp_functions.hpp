@@ -227,9 +227,6 @@ public:
   // return true if number, false if not a number
   static bool IsNumber(const std::string& str_to_check);
 
-  // Tell ADB Backup to Stream to TWRP from GUI selection
-  static int StreamAdbBackup(const std::string& restore_name);
-
   // return recovery log storage directory
   static std::string GetLogDir();
 

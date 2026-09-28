@@ -42,7 +42,6 @@
 #include "twrpTar.hpp"
 #include "twcommon.h"
 #include "variables.h"
-#include "twrpadbbu/libtwrpadbbu.hpp"
 #include "twrp_functions.hpp"
 #include "gui/gui.hpp"
 #include "progresstracking.hpp"
@@ -123,12 +122,6 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 	if (backup_exclusions == nullptr) {
 		LOGINFO("backup_exclusions is NULL\n");
 		return -1;
-	}
-
-	if (part_settings->adbbackup) {
-		std::string Backup_FileName(tarfn);
-		if (!twadbbu::Write_TWFN(Backup_FileName, Total_Backup_Size, use_compression))
-			return -1;
 	}
 
 	if (pipe2(progress_pipe, O_CLOEXEC) < 0) {
@@ -396,7 +389,7 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 			reg.setsize(Total_Backup_Size);
 			reg.progress_pipe_fd = progress_pipe_fd;
 			reg.part_settings = part_settings;
-			if (Total_Backup_Size > MAX_ARCHIVE_SIZE && !part_settings->adbbackup) {
+			if (Total_Backup_Size > MAX_ARCHIVE_SIZE) {
 				gui_msg("split_backup=Breaking backup file into multiple archives...");
 				reg.split_archives = 1;
 			} else {
@@ -446,20 +439,18 @@ int twrpTar::createTarFork(pid_t *tar_fork_pid) {
 		part_settings->progress->DisplayFileCount(false);
 		part_settings->progress->UpdateDisplayDetails(true);
 
-		if (!part_settings->adbbackup) {
-			InfoManager backup_info(backup_folder + "/" + partition_name + ".info");
-			backup_info["backup_size"] = size_backup;
-			if (use_compression && use_encryption)
-				backup_info["backup_type"] = COMPRESSED_ENCRYPTED;
-			else if (use_encryption)
-				backup_info["backup_type"] = ENCRYPTED;
-			else if (use_compression)
-				backup_info["backup_type"] = COMPRESSED;
-			else
-				backup_info["backup_type"] = UNCOMPRESSED;
-			backup_info["file_count"] = files_backup;
-			backup_info.SaveValues();
-		}
+		InfoManager backup_info(backup_folder + "/" + partition_name + ".info");
+		backup_info["backup_size"] = size_backup;
+		if (use_compression && use_encryption)
+			backup_info["backup_type"] = COMPRESSED_ENCRYPTED;
+		else if (use_encryption)
+			backup_info["backup_type"] = ENCRYPTED;
+		else if (use_compression)
+			backup_info["backup_type"] = COMPRESSED;
+		else
+			backup_info["backup_type"] = UNCOMPRESSED;
+		backup_info["file_count"] = files_backup;
+		backup_info.SaveValues();
 		if (TWFunc::WaitForChild(*tar_fork_pid, &status, "createTarFork()") != 0)
 			return -1;
 	}
@@ -484,7 +475,7 @@ int twrpTar::extractTarFork() {
 		{
 			close(progress_pipe[0]);
 			progress_pipe_fd = progress_pipe[1];
-			if (TWFunc::IsPathExists(tarfn) || part_settings->adbbackup) {
+			if (TWFunc::IsPathExists(tarfn)) {
 				LOGINFO("Single archive\n");
 				if (extract() != 0)
 					_exit(-1);
@@ -698,24 +689,12 @@ int twrpTar::extractTar() {
 		gui_err("restore_error=Error during restore process.");
 		return -1;
 	}
-	if (part_settings->adbbackup) {
-		if (!twadbbu::Write_TWEOF())
-			return -1;
-	}
 	return 0;
 }
 
 int twrpTar::extract() {
-	if (!part_settings->adbbackup)  {
-		LOGINFO("Setting archive type\n");
-		Set_Archive_Type(TWFunc::GetFileType(tarfn));
-	}
-	else {
-		if (part_settings->adb_compression == 1) 
-			current_archive_type = COMPRESSED;
-		else
-			current_archive_type = UNCOMPRESSED;
-	}
+	LOGINFO("Setting archive type\n");
+	Set_Archive_Type(TWFunc::GetFileType(tarfn));
 
 	if (current_archive_type == COMPRESSED) {
 		//if you return the extractTGZ function directly, stack crashes happen
@@ -763,10 +742,7 @@ int twrpTar::tarList(std::vector<TarListStruct> *TarList, unsigned thread_id) {
 		include_root_dir = false;
 	}
 
-	if (part_settings->adbbackup)
-	    LOGINFO("Writing tar file '%s' to adb backup\n", tarfn.c_str());
-	else
-	    LOGINFO("Creating tar file '%s'\n", tarfn.c_str());
+	LOGINFO("Creating tar file '%s'\n", tarfn.c_str());
 
 	if (createTar() != 0) {
 		LOGINFO("Error creating tar '%s' for thread %i\n", tarfn.c_str(), thread_id);
@@ -958,13 +934,7 @@ int twrpTar::createTar() {
 		current_archive_type = COMPRESSED;
 		LOGINFO("Using compression...\n");
 		int pigzfd[2];
-		if (part_settings->adbbackup) {
-			LOGINFO("opening TW_ADB_BACKUP compressed stream\n");
-			output_fd = open(TW_ADB_BACKUP, O_WRONLY);
-		}
-		else {
-			output_fd = open(tarfn.c_str(), O_CLOEXEC | O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-		}
+		output_fd = open(tarfn.c_str(), O_CLOEXEC | O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 		if (output_fd < 0) {
 			gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(tarfn)(strerror(errno)));
 			return -1;
@@ -1055,23 +1025,11 @@ int twrpTar::createTar() {
 		// Not compressed or encrypted
 		current_archive_type = UNCOMPRESSED;
 		init_libtar_buffer(0, progress_pipe_fd);
-		if (part_settings->adbbackup) {
-			LOGINFO("Opening TW_ADB_BACKUP uncompressed stream\n");
-			tar_type.writefunc = write_tar_no_buffer;
-			output_fd = open(TW_ADB_BACKUP, O_WRONLY);
-			if(tar_fdopen(&t, output_fd, charRootDir, &tar_type, O_CLOEXEC | O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) != 0) {
-				close(output_fd);
-				LOGERR("tar_fdopen failed\n");
-				return -1;
-			}
-		}
-		else {
-			tar_type.writefunc = write_tar;
-			if (tar_open(&t, charTarFile, &tar_type, O_CLOEXEC | O_WRONLY | O_CREAT | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) == -1) {
-				LOGERR("tar_open error opening '%s'\n", tarfn.c_str());
-				gui_err("backup_error=Error creating backup.");
-				return -1;
-			}
+		tar_type.writefunc = write_tar;
+		if (tar_open(&t, charTarFile, &tar_type, O_CLOEXEC | O_WRONLY | O_CREAT | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) == -1) {
+			LOGERR("tar_open error opening '%s'\n", tarfn.c_str());
+			gui_err("backup_error=Error creating backup.");
+			return -1;
 		}
 	}
 	return 0;
@@ -1198,12 +1156,7 @@ int twrpTar::openTar() {
 		int pigzfd[2];
 
 		LOGINFO("Opening gzip compressed tar...\n");
-		if (part_settings->adbbackup)  {
-			LOGINFO("opening TW_ADB_RESTORE compressed stream\n");
-			input_fd = open(TW_ADB_RESTORE, O_CLOEXEC | O_RDONLY | O_LARGEFILE);
-		}
-		else
-			input_fd = open(tarfn.c_str(), O_CLOEXEC | O_RDONLY | O_LARGEFILE);
+		input_fd = open(tarfn.c_str(), O_CLOEXEC | O_RDONLY | O_LARGEFILE);
 
 		if (input_fd < 0) {
 			gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(tarfn)(strerror(errno)));
@@ -1246,21 +1199,10 @@ int twrpTar::openTar() {
 			}
 		}
 	} else  {
-		if (part_settings->adbbackup) {
-			LOGINFO("Opening TW_ADB_RESTORE uncompressed stream\n");
-			input_fd = open(TW_ADB_RESTORE, O_RDONLY);
-			if (tar_fdopen(&t, input_fd, charRootDir, NULL, O_CLOEXEC | O_RDONLY | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) != 0) {
-				LOGERR("Unable to open tar archive '%s'\n", charTarFile);
-				gui_err("restore_error=Error during restore process.");
-				return -1;
-			}
-		}
-		else {
-			if (tar_open(&t, charTarFile, NULL, O_CLOEXEC | O_RDONLY | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) != 0) {
-				LOGERR("Unable to open tar archive '%s'\n", charTarFile);
-				gui_err("restore_error=Error during restore process.");
-				return -1;
-			}
+		if (tar_open(&t, charTarFile, NULL, O_CLOEXEC | O_RDONLY | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, TWTAR_FLAGS) != 0) {
+			LOGERR("Unable to open tar archive '%s'\n", charTarFile);
+			gui_err("restore_error=Error during restore process.");
+			return -1;
 		}
 	}
 	return 0;
@@ -1320,23 +1262,17 @@ int twrpTar::closeTar() {
 			return -1;
 	}
 	free_libtar_buffer();
-	if (!part_settings->adbbackup) {
-		if (use_compression && !use_encryption) {
-			string gzname = tarfn + ".gz";
-			if (TWFunc::IsPathExists(gzname)) {
-				rename(gzname.c_str(), tarfn.c_str());
-			}
+	if (use_compression && !use_encryption) {
+		string gzname = tarfn + ".gz";
+		if (TWFunc::IsPathExists(gzname)) {
+			rename(gzname.c_str(), tarfn.c_str());
 		}
-		if (TWFunc::GetFileSize(tarfn) == 0) {
-			gui_msg(Msg(msg::kError, "backup_size=Backup file size for '{1}' is 0 bytes.")(tarfn));
-			return -1;
-		}
-		tw_set_default_metadata(tarfn.c_str());
 	}
-	else {
-		if (!twadbbu::Write_TWEOF())
-			return -1;
+	if (TWFunc::GetFileSize(tarfn) == 0) {
+		gui_msg(Msg(msg::kError, "backup_size=Backup file size for '{1}' is 0 bytes.")(tarfn));
+		return -1;
 	}
+	tw_set_default_metadata(tarfn.c_str());
 	if (input_fd >= 0)
 		close(input_fd);
 	if (output_fd >= 0)
@@ -1377,7 +1313,7 @@ int twrpTar::entryExists(string entry) {
 }
 
 uint64_t twrpTar::get_size() {
-	if (part_settings->adbbackup || TWFunc::IsPathExists(tarfn)) {
+	if (TWFunc::IsPathExists(tarfn)) {
 		LOGINFO("Single archive\n");
 		return uncompressedSize(tarfn);
 	} else {
@@ -1392,27 +1328,23 @@ uint64_t twrpTar::get_size() {
 		tarfn += "000";
 		thread_id = 0;
 		snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), thread_id, archive_count);
-		if (!part_settings->adbbackup) {
-			if (!TWFunc::IsPathExists(actual_filename)) {
-				LOGERR("Unable to locate '%s' or '%s'\n", basefn.c_str(), tarfn.c_str());
-				return 0;
-			}
-			for (int i = 0; i < 9; i++) {
-				archive_count = 0;
-				snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
-				while (TWFunc::IsPathExists(actual_filename)) {
-					total_restore_size += uncompressedSize(actual_filename);
-					archive_count++;
-					snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
-				}
-			}
-	        if (!part_settings->adbbackup) {
-				InfoManager backup_info(tarfn + ".info");
-				backup_info.SetValue("backup_size", total_restore_size);
-				backup_info.SetValue("backup_type", current_archive_type);
-				backup_info.SaveValues();
-	        }
+		if (!TWFunc::IsPathExists(actual_filename)) {
+			LOGERR("Unable to locate '%s' or '%s'\n", basefn.c_str(), tarfn.c_str());
+			return 0;
 		}
+		for (int i = 0; i < 9; i++) {
+			archive_count = 0;
+			snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
+			while (TWFunc::IsPathExists(actual_filename)) {
+				total_restore_size += uncompressedSize(actual_filename);
+				archive_count++;
+				snprintf(actual_filename, sizeof(actual_filename), temp.c_str(), i, archive_count);
+			}
+		}
+		InfoManager backup_info(tarfn + ".info");
+		backup_info.SetValue("backup_size", total_restore_size);
+		backup_info.SetValue("backup_type", current_archive_type);
+		backup_info.SaveValues();
 		return total_restore_size;
 	}
 	return 0;

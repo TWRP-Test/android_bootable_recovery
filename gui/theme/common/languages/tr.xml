@@ -651,9 +651,6 @@
 		<string name="theme_ver_err">Özel tema sürümü TWRP sürümü ile eşleşmiyor. Stok tema kullanılıyor.</string>
 		<string name="up_a_level">(Üst Dizin)</string>
 		<string name="install_reboot" version="2">%tw_sleep% saniye içinde yeniden başlatılıyor</string>
-		<string name="adbbackup_error">ADB Yedekleme Hatası. Çıkılıyor..."</string>
-		<string name="adbbackup_control_error">Adb kontrol kanalına yazılamıyor</string>
-		<string name="twrp_adbbu_option">--twrp adb yedeklemeyi etkinleştirmek için twrp seçeneği gerekiyor</string>
 		<string name="partition_not_found">yol: {1} bölüm listesinde bulunamadı</string>
 		<string name="copy_kernel_log">Kernel kaydı şuraya kopyalandı: {1}</string>
 		<string name="include_kernel_log">Kernel Kaydını Dahil Et</string>

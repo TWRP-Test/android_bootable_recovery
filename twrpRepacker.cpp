@@ -60,7 +60,6 @@ bool twrpRepacker::Backup_Image_For_Repack(TWPartition* Part, const std::string&
 			return false;
 	} else
 		part_settings.Backup_Folder = Temp_Folder_Destination;
-	part_settings.adbbackup = false;
 	part_settings.generate_digest = false;
 	part_settings.generate_md5 = false;
 	part_settings.PM_Method = PartitionManagerOp::PM_BACKUP;

@@ -634,9 +634,6 @@
         <string name="theme_ver_err">Η έκδοση του θέματος δεν ταιριάζει με αυτή του TWRP. Χρήση προεπιλεγμένου θέματος.</string>
         <string name="up_a_level">(Προηγ. Επίπεδο)</string>
         <string name="install_reboot" version="2">Επανεκκίνηση σε %tw_sleep% δευτ.</string>
-        <string name="adbbackup_error">Σφάλμα με την αντιγρ. ασφ. με το ADB. Ακύρωση..."</string>
-        <string name="adbbackup_control_error">Δεν είναι δυνατή η εγγραφή στο κανάλι ελέγχου του adb</string>
-        <string name="twrp_adbbu_option">--η επιλογή twrp απαιτείτε για την ενεργοποίηση των αντ. ασφ. twrp adb</string>
         <string name="partition_not_found">διαδρομή: {1} δεν βρέθηκε στην λίστα τομέων</string>
         <string name="copy_kernel_log">Το log του kernel αντιγράφηκε στο {1}</string>
         <string name="include_kernel_log">Εισαγωγή Kernel Log</string>

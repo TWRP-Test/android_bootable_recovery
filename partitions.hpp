@@ -104,8 +104,6 @@ class TWPartition;
 struct PartitionSettings {
     TWPartition *Part; // Partition to pass to the partition backup loop
     std::string Backup_Folder; // Path to restore folder
-    bool adbbackup; // tell the system we are backing up over adb
-    bool adb_compression; // 0 == uncompressed, 1 == compressed
     bool generate_digest; // tell system to create digest for partitions
     bool generate_md5; // tell system to create md5 for partitions
     uint64_t total_restore_size; // Total size of restored backup
@@ -389,10 +387,8 @@ public:
     int Check_Backup_Name(const std::string &Backup_Name, bool Display_Error, bool Must_Be_Unique);
 
     // Checks the current backup name to ensure that it is valid and optionally that a backup with that name doesn't already exist
-    bool Run_Backup(bool adbbackup); // Initiates a backup in the current storage
+    bool Run_Backup(); // Initiates a backup in the current storage
     int Run_Restore(const std::string &Restore_Name); // Restores a backup
-    // bool Write_ADB_Stream_Header(uint64_t partition_count); // Write ADB header over twrpbu FIFO
-    // bool Write_ADB_Stream_Trailer(); // Write ADB trailer over twrpbu FIFO
     void Set_Restore_Files(std::string Restore_Name);
 
     // Used to gather a list of available backup partitions for the user to select for a restore

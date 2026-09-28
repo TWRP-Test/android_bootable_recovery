@@ -679,9 +679,6 @@
 		<string name="theme_ver_err">A versão do tema personalizado não é compatível com a versão da TWRP. A o usar o tema padrão.</string>
 		<string name="up_a_level">(Nível acima)</string>
 		<string name="install_reboot" version="2">A reiniciar daqui a %tw_sleep% segundo(s)</string>
-		<string name="adbbackup_error">Erro no Backup ADB. A sair..."</string>
-		<string name="adbbackup_control_error">Não é possível escrever no canal de controlo adb</string>
-		<string name="twrp_adbbu_option">A opção --twrp é requerida para ativar o twrp adb backup</string>
 		<string name="partition_not_found">caminho: {1} não encontrado na lista de partições</string>
 		<string name="copy_kernel_log">Log do Kernel copiado para {1}</string>
 		<string name="include_kernel_log">Incluir log do Kernel</string>

@@ -592,7 +592,7 @@ int OpenRecoveryScript::Backup_Command(string Options) {
 		}
 	}
 	DataManager::SetValue("tw_backup_list", Backup_List);
-	if (!PartitionManager.Run_Backup(false)) {
+	if (!PartitionManager.Run_Backup()) {
 		gui_err("backup_fail=Backup Failed");
 		return 1;
 	}

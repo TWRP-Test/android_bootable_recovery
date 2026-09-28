@@ -31,7 +31,6 @@
 #include "rapidxml.hpp"
 #include "twcommon.h"
 #include "twrp_functions.hpp"
-#include "twrpadbbu/libtwrpadbbu.hpp"
 #include "twrpminui/minui.h"
 
 namespace fs = std::filesystem;
@@ -297,17 +296,12 @@ int GUIFileSelector::GetFileList(const std::string folder)
 		} else {
 			data.fileType = st.st_mode & S_IFMT;
 
-			const auto path = fs::path(folder) / file_name;
-
 			// Try extension matching first
 			bool matched = false;
 			for (const std::string& ext : android::base::Split(mExtn, ";")) {
 				const std::string trimmed = android::base::Trim(ext);
 				if (trimmed.empty() || file_name.ends_with(trimmed)) {
-					if (trimmed == ".ab" && twadbbu::Check_ADB_Backup_File(path))
-						mFolderList.push_back(data);
-					else
-						mFileList.push_back(data);
+					mFileList.push_back(data);
 					matched = true;
 					break;
 				}
@@ -403,7 +397,7 @@ void GUIFileSelector::NotifySelect(size_t item_selected)
 				cwd += str;
 			}
 
-			if (mShowNavFolders == 0 && (mShowFiles == 0 || mExtn == ".ab")) {
+			if (mShowNavFolders == 0 && mShowFiles == 0) {
 				// this is probably the restore list and we need to save chosen location to mVariable instead of mPathVar
 				DataManager::SetValue(mVariable, cwd);
 			} else {

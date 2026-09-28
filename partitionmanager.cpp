@@ -68,7 +68,6 @@
 #include "progresstracking.hpp"
 #include "twrp_digest_driver.hpp"
 #include "twrpRepacker.hpp"
-#include "twrpadbbu/libtwrpadbbu.hpp"
 #include "unit_conversion.hpp"
 
 #ifdef TW_LOAD_VENDOR_MODULES
@@ -924,7 +923,7 @@ bool TWPartitionManager::Backup_Partition(PartitionSettings *part_settings) {
         sync();
         sync();
         std::string full = part_settings->Backup_Folder + "/" + part->Backup_FileName;
-        if (!part_settings->adbbackup && part_settings->generate_digest) {
+        if (part_settings->generate_digest) {
             if (!TwrpDigestDriver::MakeDigest(full))
                 return false;
         }
@@ -1017,7 +1016,7 @@ int TWPartitionManager::Cancel_Backup() {
     return 0;
 }
 
-bool TWPartitionManager::Run_Backup(bool adbbackup) {
+bool TWPartitionManager::Run_Backup() {
     PartitionSettings part_settings;
     int partition_count = 0, disable_free_space_check = 0, skip_digest = 0;
     std::string Backup_Name, Backup_List, backup_path;
@@ -1039,7 +1038,6 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
     part_settings.file_bytes = 0;
     part_settings.PM_Method = PartitionManagerOp::PM_BACKUP;
 
-    part_settings.adbbackup = adbbackup;
     time(&total_start);
 
     Update_System_Details();
@@ -1110,11 +1108,6 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
         gui_msg("no_partition_selected=No partitions selected for backup.");
         return false;
     }
-    if (adbbackup) {
-        if (!twadbbu::Write_ADB_Stream_Header(partition_count)) {
-            return false;
-        }
-    }
     total_bytes = part_settings.file_bytes + part_settings.img_bytes;
     ProgressTracking progress(total_bytes);
     part_settings.progress = &progress;
@@ -1131,9 +1124,6 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
     }
 
     DataManager::GetValue(TW_DISABLE_FREE_SPACE_VAR, disable_free_space_check);
-
-    if (adbbackup)
-        disable_free_space_check = true;
 
     if (!disable_free_space_check) {
         if (free_space - (32 * 1024 * 1024) < total_bytes) {
@@ -1152,7 +1142,7 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
 
     DataManager::GetValue(TW_IS_DECRYPTED, is_decrypted);
     DataManager::GetValue(TW_IS_ENCRYPTED, is_encrypted);
-    if (!adbbackup || (!is_encrypted || (is_encrypted && is_decrypted))) {
+    if (!is_encrypted || (is_encrypted && is_decrypted)) {
         gui_msg(Msg("backup_folder= * Backup Folder: {1}")(part_settings.Backup_Folder));
         if (!TWFunc::RecursiveMkdir(part_settings.Backup_Folder)) {
             gui_err("fail_backup_folder=Failed to make backup folder.");
@@ -1210,11 +1200,8 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
     int total_time = static_cast<int>(difftime(total_stop, total_start));
 
     uint64_t actual_backup_size;
-    if (!adbbackup) {
-        TWExclude twe;
-        actual_backup_size = twe.Get_Folder_Size(part_settings.Backup_Folder);
-    } else
-        actual_backup_size = part_settings.file_bytes + part_settings.img_bytes;
+    TWExclude twe;
+    actual_backup_size = twe.Get_Folder_Size(part_settings.Backup_Folder);
 
     int prev_img_bps = 0, use_compression = 0;
     uint64_t prev_file_bps = 0;
@@ -1244,26 +1231,11 @@ bool TWPartitionManager::Run_Backup(bool adbbackup) {
     TWFunc::CopyFile("/tmp/recovery.log", backup_log, 0644);
     tw_set_default_metadata(backup_log.c_str());
 
-    if (part_settings.adbbackup) {
-        if (!twadbbu::Write_ADB_Stream_Trailer()) {
-            return false;
-        }
-    }
-    part_settings.adbbackup = false;
-    DataManager::SetValue("tw_enable_adb_backup", 0);
-
     return true;
 }
 
 bool TWPartitionManager::Restore_Partition(PartitionSettings *part_settings) {
     time_t Start, Stop;
-
-    if (part_settings->adbbackup) {
-        std::string partName = std::format("{}.{}.win", part_settings->Part->Backup_Name,
-            part_settings->Part->Current_File_System);
-        LOGINFO("setting backup name: %s\n", partName.c_str());
-        part_settings->Part->Set_Backup_FileName(partName);
-    }
 
     TWFunc::SetPerformanceMode(true);
 
@@ -1273,7 +1245,7 @@ bool TWPartitionManager::Restore_Partition(PartitionSettings *part_settings) {
         TWFunc::SetPerformanceMode(false);
         return false;
     }
-    if (part_settings->Part->Has_SubPartition && !part_settings->adbbackup) {
+    if (part_settings->Part->Has_SubPartition) {
         TWPartition *parentPart = part_settings->Part;
 
         for (TWPartition *subpart: Partitions) {
@@ -1310,7 +1282,6 @@ int TWPartitionManager::Run_Restore(const std::string &Restore_Name) {
     part_settings.Part = nullptr;
     part_settings.partition_count = 0;
     part_settings.total_restore_size = 0;
-    part_settings.adbbackup = false;
     part_settings.PM_Method = PartitionManagerOp::PM_RESTORE;
 
     gui_msg("restore_started=[RESTORE STARTED]");
@@ -1427,103 +1398,78 @@ void TWPartitionManager::Set_Restore_Files(std::string Restore_Name) {
     // Start with the default values
     std::string Restore_List;
     bool get_date = true, check_encryption = true;
-    bool adbbackup = false;
 
     DataManager::SetValue("tw_restore_encrypted", 0);
-    if (twadbbu::Check_ADB_Backup_File(Restore_Name)) {
-        std::vector<std::string> adb_files;
-        adb_files = twadbbu::Get_ADB_Backup_Files(Restore_Name);
-        for (const std::string &adb_restore_file: adb_files) {
-            std::size_t pos = adb_restore_file.find_first_of(".");
-            std::string path = "/" + adb_restore_file.substr(0, pos);
-            TWPartition *Part = Find_Partition_By_Path(path);
-            if (Part == nullptr) {
-                gui_msg(Msg(msg::kError,
-                            "restore_unable_locate=Unable to locate '{1}' partition for restoring.")(path));
-                continue;
-            }
-            Restore_List = path + ";";
-            Part->Backup_FileName = fs::path(adb_restore_file).filename().string();
-            adbbackup = true;
-        }
-        DataManager::SetValue("tw_enable_adb_backup", 1);
-    } else {
-        std::error_code ec;
-        std::filesystem::directory_iterator it(Restore_Name, ec);
-        if (ec) {
-            gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Restore_Name)(
-                ec.message().c_str()));
-            return;
-        }
-
-        for (const std::filesystem::directory_entry &entry: it) {
-            std::string name = entry.path().filename().string();
-            if (name.size() <= 2)
-                continue;
-
-            if (get_date) {
-                struct stat st;
-                std::string file_path = Restore_Name + "/" + name;
-                stat(file_path.c_str(), &st);
-                std::string backup_date = ctime(reinterpret_cast<const time_t *>(&st.st_mtime));
-                DataManager::SetValue(TW_RESTORE_FILE_DATE, backup_date);
-                get_date = false;
-            }
-
-            // Strip off three components: label.fstype.extn (split on the first two '.')
-            std::string::size_type first_dot = name.find('.');
-            if (first_dot == std::string::npos)
-                continue;
-            std::string::size_type second_dot = name.find('.', first_dot + 1);
-            if (second_dot == std::string::npos)
-                continue;
-            std::string label = name.substr(0, first_dot);
-            std::string fstype = name.substr(first_dot + 1, second_dot - first_dot - 1);
-            std::string extn = name.substr(second_dot + 1);
-
-            if (fstype == "log")
-                continue;
-            int extnlength = extn.size();
-            if (extnlength != 3 && extnlength != 6)
-                continue;
-            if (extnlength >= 3 && extn.compare(0, 3, "win") != 0)
-                continue;
-            //if (extnlength == 6 && strncmp(extn, "win000", 6) != 0) continue;
-
-            if (check_encryption) {
-                std::string filename = Restore_Name + "/" + name;
-                if (TWFunc::GetFileType(filename) == 2) {
-                    LOGINFO("'%s' is encrypted\n", filename.c_str());
-                    DataManager::SetValue("tw_restore_encrypted", 1);
-                }
-            }
-            if (extnlength == 6 && extn != "win000")
-                continue;
-
-            TWPartition *Part = Find_Partition_By_Path(label);
-            if (Part == nullptr) {
-                gui_msg(Msg(msg::kError,
-                            "unable_locate_part_backup_name=Unable to locate partition by backup name: '{1}'")(label));
-                continue;
-            }
-
-            Part->Backup_FileName = name;
-            if (extn.size() > 3) {
-                Part->Backup_FileName.resize(Part->Backup_FileName.size() - extn.size() + 3);
-            }
-
-            if (!Part->Is_SubPartition) {
-                if (Part->Backup_Path == Get_Android_Root_Path())
-                    Restore_List += "/system;";
-                else
-                    Restore_List += Part->Backup_Path + ";";
-            }
-        }
+    std::error_code ec;
+    std::filesystem::directory_iterator it(Restore_Name, ec);
+    if (ec) {
+        gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(Restore_Name)(
+            ec.message().c_str()));
+        return;
     }
 
-    if (adbbackup) {
-        Restore_List = "ADB_Backup;";
-        adbbackup = false;
+    for (const std::filesystem::directory_entry &entry: it) {
+        std::string name = entry.path().filename().string();
+        if (name.size() <= 2)
+            continue;
+
+        if (get_date) {
+            struct stat st;
+            std::string file_path = Restore_Name + "/" + name;
+            stat(file_path.c_str(), &st);
+            std::string backup_date = ctime(reinterpret_cast<const time_t *>(&st.st_mtime));
+            DataManager::SetValue(TW_RESTORE_FILE_DATE, backup_date);
+            get_date = false;
+        }
+
+        // Strip off three components: label.fstype.extn (split on the first two '.')
+        std::string::size_type first_dot = name.find('.');
+        if (first_dot == std::string::npos)
+            continue;
+        std::string::size_type second_dot = name.find('.', first_dot + 1);
+        if (second_dot == std::string::npos)
+            continue;
+        std::string label = name.substr(0, first_dot);
+        std::string fstype = name.substr(first_dot + 1, second_dot - first_dot - 1);
+        std::string extn = name.substr(second_dot + 1);
+
+        if (fstype == "log")
+            continue;
+        int extnlength = extn.size();
+        if (extnlength != 3 && extnlength != 6)
+            continue;
+        if (extnlength >= 3 && extn.compare(0, 3, "win") != 0)
+            continue;
+        //if (extnlength == 6 && strncmp(extn, "win000", 6) != 0) continue;
+
+        if (check_encryption) {
+            std::string filename = Restore_Name + "/" + name;
+            if (TWFunc::GetFileType(filename) == 2) {
+                LOGINFO("'%s' is encrypted\n", filename.c_str());
+                DataManager::SetValue("tw_restore_encrypted", 1);
+            }
+        }
+        if (extnlength == 6 && extn != "win000")
+            continue;
+
+        TWPartition *Part = Find_Partition_By_Path(label);
+        if (Part == nullptr) {
+            gui_msg(Msg(msg::kError,
+                        "unable_locate_part_backup_name=Unable to locate partition by backup name: '{1}'")(label));
+            continue;
+        }
+
+        Part->Backup_FileName = name;
+        if (extn.size() > 3) {
+            Part->Backup_FileName.resize(Part->Backup_FileName.size() - extn.size() + 3);
+        }
+
+        if (!Part->Is_SubPartition) {
+            if (Part->Backup_Path == Get_Android_Root_Path())
+                Restore_List += "/system;";
+            else
+                Restore_List += Part->Backup_Path + ";";
+        }
     }
 
     // Set the final value
@@ -2521,14 +2467,6 @@ void TWPartitionManager::Get_Partition_List(std::string ListType, std::vector<Pa
         DataManager::GetValue("tw_restore_list", Restore_List);
         if (!Restore_List.empty()) {
             for (const std::string &restore_path: android::base::Tokenize(Restore_List, ";")) {
-                if (restore_path == "ADB_Backup") {
-                    Partition_List->push_back({
-                        .Display_Name = "ADB Backup",
-                        .Mount_Point = "ADB Backup",
-                        .selected = true,
-                    });
-                    break;
-                }
                 TWPartition *restore_part = Find_Partition_By_Path(restore_path);
                 if (restore_part == nullptr) {
                     gui_msg(
@@ -2910,7 +2848,6 @@ bool TWPartitionManager::Flash_Image(std::string &path, std::string &filename) {
     unsigned long long total_bytes = TWFunc::GetFileSize(full_filename);
     ProgressTracking progress(total_bytes);
     part_settings.progress = &progress;
-    part_settings.adbbackup = false;
     part_settings.PM_Method = PartitionManagerOp::PM_RESTORE;
     gui_msg("calc_restore=Calculating restore details...");
     if (!Flash_List.empty()) {

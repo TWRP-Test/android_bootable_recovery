@@ -707,9 +707,6 @@
 		<string name="theme_ver_err">自訂主題和 TWRP 版本不匹配，正在使用原版主題。</string>
 		<string name="up_a_level">（上級目錄）</string>
 		<string name="install_reboot" version="2">將會在 %tw_sleep% 秒內重啟</string>
-		<string name="adbbackup_error">ADB 備份錯誤。正在退出…"</string>
-		<string name="adbbackup_control_error">無法寫入 adb 控制通道</string>
-		<string name="twrp_adbbu_option">啟用 TWRP ADB 備份需使用 -- TWRP 選項</string>
 		<string name="partition_not_found">分割區列表中未發現路徑: {1}</string>
 		<string name="copy_kernel_log">已匯出 Kernel 日誌到 {1}</string>
 		<string name="copy_logcat">已匯出 Logcat 日誌到 {1}</string>

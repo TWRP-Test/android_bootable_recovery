@@ -769,8 +769,6 @@ void DataManager::SetDefaultValues() {
   data_["tw_flash_both_slots"] = false;
   data_["tw_is_slot_part"] = false;
 
-  data_["tw_enable_adb_backup"] = false;
-
   consts_["tw_logcat_exists"] = TWFunc::IsPathExists("/system/bin/logcat");
   consts_["tw_has_repack_tools"] = TWFunc::IsPathExists("/system/bin/magiskboot");
 

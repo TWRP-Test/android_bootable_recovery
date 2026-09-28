@@ -1709,7 +1709,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="0"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -1723,7 +1722,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="1"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -1749,7 +1747,6 @@
 			</fill>
 
 			<button>
-				<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				<placement x="indent" y="%row3a_y%" w="%content_width%" h="%navbar_height%"/>
 				<fill color="%transparent%"/>
 				<actions>
@@ -1766,7 +1763,6 @@
 			</partitionlist>
 
 			<button style="main_button_half_height">
-				<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				<placement x="%indent%" y="%row18a_y%"/>
 				<text>{@select_storage_btn=Select Storage}</text>
 				<actions>
@@ -1865,7 +1861,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="0"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -1879,7 +1874,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="1"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -1990,7 +1984,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="0"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2004,7 +1997,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="1"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2100,7 +2092,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="0"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2114,7 +2105,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="1"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2206,7 +2196,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="0"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2220,7 +2209,6 @@
 			<button style="tab">
 				<conditions>
 					<condition var1="tw_encrypt_backup" var2="1"/>
-					<condition var1="tw_enable_adb_backup" op="!=" var2="1"/>
 				</conditions>
 				<placement x="%tab3_col3_x%" y="%row1_y%" w="%tab3_width%" h="%tab_height%"/>
 				<text>{@encryption_tab=ENCRYPTION}</text>
@@ -2401,7 +2389,7 @@
 			<fileselector>
 				<placement x="%indent%" y="%row3_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>{@restore_sel_pack_fs=Select Package to Restore:}</text>
-				<filter folders="1" files="1" nav="0" extn=".ab"/>
+				<filter folders="1" files="0" nav="0"/>
 				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
@@ -2473,7 +2461,7 @@
 			<fileselector>
 				<placement x="%indent%" y="%row3_y%" w="%content_width%" h="%fileselector_install_height%"/>
 				<text>{@restore_sel_pack_fs=Select Package to Restore:}</text>
-				<filter folders="1" files="1" nav="0" extn=".ab"/>
+				<filter folders="1" files="0" nav="0"/>
 				<path name="tw_backups_folder" create="1"/>
 				<data name="tw_restore" default=""/>
 				<selection name="tw_restore_name"/>
@@ -2693,7 +2681,6 @@
 			</partitionlist>
 
 			<checkbox>
-				<condition var1="tw_enable_adb_backup" op="=" var2="0"/>
 				<placement x="%indent%" y="%row17_y%"/>
 				<text>{@restore_enable_digest_chk=Enable Digest Verification of Backup Files}</text>
 				<data variable="tw_skip_digest_check"/>

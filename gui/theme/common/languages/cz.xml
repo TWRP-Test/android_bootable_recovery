@@ -704,9 +704,6 @@
 		<string name="theme_ver_err">Téma vlastní verze nesedí s verzí TWRP. Použije se výchozí téma.</string>
 		<string name="up_a_level">(O úroveň výš)</string>
 		<string name="install_reboot" version="2">Restartování do %tw_sleep% sekund(s)</string>
-		<string name="adbbackup_error">Chyba při ADB zálohování. Ukončuji..."</string>
-		<string name="adbbackup_control_error">Nelze zapisovat na ovládací kanál ADB</string>
-		<string name="twrp_adbbu_option">--nutné pro povolení TWRP ADB zálohování</string>
 		<string name="partition_not_found">cesta: {1} nebyl nalezen v seznamu oddílů</string>
 		<string name="copy_kernel_log">Log kernelu zkopírován do {1}</string>
 		<string name="copy_logcat">Zkopírován logcat do {1}</string>

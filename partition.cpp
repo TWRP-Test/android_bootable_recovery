@@ -65,7 +65,6 @@
 #include "infomanager.hpp"
 #include "set_metadata.h"
 #include "gui/gui.hpp"
-#include "twrpadbbu/libtwrpadbbu.hpp"
 #include "unit_conversion.hpp"
 
 #ifdef TW_INCLUDE_CRYPTO
@@ -2446,33 +2445,17 @@ bool TWPartition::Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_p
 }
 
 bool TWPartition::Backup_Image(PartitionSettings *part_settings) {
-    std::string Full_FileName, adb_file_name;
-
     TWFunc::GuiOperationText(TW_BACKUP_TEXT, Display_Name, gui_parse_text("{@backing}"));
     gui_msg(Msg("backing_up=Backing up {1}...")(Backup_Display_Name));
 
     Backup_FileName = Backup_Name + "." + Current_File_System + ".win";
 
-    if (part_settings->adbbackup) {
-        Full_FileName = TW_ADB_BACKUP;
-        adb_file_name = part_settings->Backup_Folder + "/" + Backup_FileName;
-    } else
-        Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
+    std::string Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
 
     part_settings->total_restore_size = Backup_Size;
 
-    if (part_settings->adbbackup) {
-        if (!twadbbu::Write_TWIMG(adb_file_name, Backup_Size))
-            return false;
-    }
-
     if (!Raw_Read_Write(part_settings))
         return false;
-
-    if (part_settings->adbbackup) {
-        if (!twadbbu::Write_TWEOF())
-            return false;
-    }
     return true;
 }
 
@@ -2484,22 +2467,14 @@ bool TWPartition::Raw_Read_Write(PartitionSettings *part_settings) {
 
     if (part_settings->PM_Method == PartitionManagerOp::PM_BACKUP) {
         srcfn = Actual_Block_Device;
-        if (part_settings->adbbackup)
-            destfn = TW_ADB_BACKUP;
-        else {
-            destfn = part_settings->Backup_Folder + "/" + Backup_FileName;
-        }
+        destfn = part_settings->Backup_Folder + "/" + Backup_FileName;
     } else {
 #ifdef TW_ENABLE_BLKDISCARD
         BlkDiscard();
 #endif
         destfn = Actual_Block_Device;
-        if (part_settings->adbbackup) {
-            srcfn = TW_ADB_RESTORE;
-        } else {
-            srcfn = part_settings->Backup_Folder + "/" + Backup_FileName;
-            Remain = TWFunc::GetFileSize(srcfn);
-        }
+        srcfn = part_settings->Backup_Folder + "/" + Backup_FileName;
+        Remain = TWFunc::GetFileSize(srcfn);
     }
 
     android::base::unique_fd src_fd(open(srcfn.c_str(), O_RDONLY | O_LARGEFILE));
@@ -2517,13 +2492,8 @@ bool TWPartition::Raw_Read_Write(PartitionSettings *part_settings) {
 
     LOGINFO("Reading '%s', writing '%s'\n", srcfn.c_str(), destfn.c_str());
 
-    if (part_settings->adbbackup) {
-        RW_Block_Size = MAX_ADB_READ;
-        bs = MAX_ADB_READ;
-    } else {
-        RW_Block_Size = kMiB; // 1MB
-        bs = static_cast<ssize_t>(RW_Block_Size);
-    }
+    RW_Block_Size = kMiB; // 1MB
+    bs = static_cast<ssize_t>(RW_Block_Size);
 
     std::unique_ptr<char[]> buffer(new(std::nothrow) char[static_cast<size_t>(bs)]());
     if (!buffer) {
@@ -2556,7 +2526,7 @@ bool TWPartition::Raw_Read_Write(PartitionSettings *part_settings) {
         part_settings->progress->UpdateDisplayDetails(true);
     fsync(dest_fd.get());
 
-    if (!part_settings->adbbackup && part_settings->PM_Method == PartitionManagerOp::PM_BACKUP) {
+    if (part_settings->PM_Method == PartitionManagerOp::PM_BACKUP) {
         tw_set_default_metadata(destfn.c_str());
         LOGINFO("Restored default metadata for %s\n", destfn.c_str());
     }
@@ -2565,13 +2535,11 @@ bool TWPartition::Raw_Read_Write(PartitionSettings *part_settings) {
 }
 
 unsigned long long TWPartition::Get_Restore_Size(PartitionSettings *part_settings) {
-    if (!part_settings->adbbackup) {
-        if (InfoManager restore_info(part_settings->Backup_Folder + "/" + Backup_Name + ".info"); restore_info.LoadValues() == 0) {
-            if (const std::optional<uint64_t> restore_size = restore_info["backup_size"]) {
-                Restore_Size = restore_size.value();
-                LOGINFO("Read info file, restore size is %lu\n", Restore_Size);
-                return Restore_Size;
-            }
+    if (InfoManager restore_info(part_settings->Backup_Folder + "/" + Backup_Name + ".info"); restore_info.LoadValues() == 0) {
+        if (const std::optional<uint64_t> restore_size = restore_info["backup_size"]) {
+            Restore_Size = restore_size.value();
+            LOGINFO("Read info file, restore size is %lu\n", Restore_Size);
+            return Restore_Size;
         }
     }
 
@@ -2675,22 +2643,14 @@ bool TWPartition::Restore_Image(PartitionSettings *part_settings) {
     TWFunc::GuiOperationText(TW_RESTORE_TEXT, Backup_Display_Name, gui_parse_text("{@restoring_hdr}"));
     gui_msg(Msg("restoring=Restoring {1}...")(Backup_Display_Name));
 
-    if (part_settings->adbbackup)
-        Full_FileName = TW_ADB_RESTORE;
-    else
-        Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
+    Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
 
     if (Restore_File_System == "emmc") {
-        if (!part_settings->adbbackup)
-            part_settings->total_restore_size = static_cast<uint64_t>(TWFunc::GetFileSize(Full_FileName));
+        part_settings->total_restore_size = static_cast<uint64_t>(TWFunc::GetFileSize(Full_FileName));
         if (!Raw_Read_Write(part_settings))
             return false;
     }
 
-    if (part_settings->adbbackup) {
-        if (!twadbbu::Write_TWEOF())
-            return false;
-    }
     return true;
 }
 
@@ -3083,10 +3043,8 @@ bool TWPartition::Flash_Image(PartitionSettings *part_settings) {
         return false;
     }
     if (Backup_Method == BackupMethod::BM_DD) {
-        if (!part_settings->adbbackup) {
-            if (Is_Sparse_Image(full_filename)) {
-                return Flash_Sparse_Image(full_filename);
-            }
+        if (Is_Sparse_Image(full_filename)) {
+            return Flash_Sparse_Image(full_filename);
         }
         return Raw_Read_Write(part_settings);
     }

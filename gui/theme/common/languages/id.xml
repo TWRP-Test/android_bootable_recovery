@@ -695,9 +695,6 @@
 		<string name="theme_ver_err">Versi tema kustom tidak cocok dengan versi TWRP. Gunakan tema stok.</string>
 		<string name="up_a_level">(Kembali)</string>
 		<string name="install_reboot" version="2">Mereboot dalam %tw_sleep% detik(s)</string>
-		<string name="adbbackup_error">Kesalahan dengan pencadangan ADB. Mengeluarkan..."</string>
-		<string name="adbbackup_control_error">Tidak dapat menulis ke saluran kontrol adb</string>
-		<string name="twrp_adbbu_option">--opsi twrp diperlukan untuk mengaktifkan twrp adb backup</string>
 		<string name="partition_not_found">lokasi: {1} tidak ditemukan dalam daftar partisi</string>
 		<string name="copy_kernel_log">Salin log kernel ke {1}</string>
 		<string name="include_kernel_log">Termasuk log kernel</string>

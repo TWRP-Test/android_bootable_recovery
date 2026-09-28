@@ -693,9 +693,6 @@
 		<string name="theme_ver_err">Versie maatwerkthema past niet bij deze versie van TWRP. Standaardthema wordt gebruikt.</string>
 		<string name="up_a_level">(Niveau omhoog)</string>
 		<string name="install_reboot" version="2">Herstarten over %tw_sleep% seconden</string>
-		<string name="adbbackup_error">Fout bij ADB-back-up. Afgebroken...&quot;</string>
-		<string name="adbbackup_control_error">Kan niet schrijven naar adb-beheerskanaal</string>
-		<string name="twrp_adbbu_option">--twrp optie vereist voor inschakelen twrp adb-backup</string>
 		<string name="partition_not_found">pad: {1} niet gevonden in partitielijst</string>
 		<string name="copy_kernel_log">Kernellogbestand gekopieerd naar {1}</string>
 		<string name="include_kernel_log">Kernellog bijvoegen</string>

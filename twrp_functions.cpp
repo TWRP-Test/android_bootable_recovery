@@ -1089,14 +1089,6 @@ bool TWFunc::IsNumber(const std::string& str_to_check) {
   return ec == std::errc{} && end == s.data() + s.size();  // full-consumption, no trailing characters
 }
 
-int TWFunc::StreamAdbBackup(const std::string& restore_name) {
-  const std::string cmd = "/system/bin/bu --twrp stream " + restore_name;
-  LOGINFO("StreamAdbBackup: %s\n", cmd.c_str());
-  const int ret = ExecCmd(cmd);
-  if (ret != 0) return -1;
-  return ret;
-}
-
 std::string TWFunc::GetLogDir() {
   if (!PartitionManager.Find_Partition_By_Path(CACHE_LOGS_DIR)) {
     if (!PartitionManager.Find_Partition_By_Path(DATA_LOGS_DIR)) {

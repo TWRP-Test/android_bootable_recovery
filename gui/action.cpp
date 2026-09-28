@@ -1227,7 +1227,7 @@ int GUIAction::nandroid(std::string arg)
 			DataManager::GetValue(TW_BACKUP_NAME, Backup_Name);
 			std::string auto_gen = gui_lookup("auto_generate", "(Auto Generate)");
 			if (Backup_Name == auto_gen || Backup_Name == gui_lookup("curr_date", "(Current Date)") || Backup_Name == "0" || Backup_Name == "(" || PartitionManager.Check_Backup_Name(Backup_Name, true, true) == 0) {
-				ret = PartitionManager.Run_Backup(false);
+				ret = PartitionManager.Run_Backup();
 				DataManager::SetValue("tw_encrypt_backup", 0); // reset value so we don't encrypt every subsequent backup
 				if (!PartitionManager.stop_backup) {
 					if (ret == false)
@@ -1247,24 +1247,12 @@ int GUIAction::nandroid(std::string arg)
 			DataManager::SetValue(TW_BACKUP_NAME, auto_gen);
 		} else if (arg == "restore") {
 			std::string Restore_Name;
-			int gui_adb_backup;
 
 			DataManager::GetValue("tw_restore", Restore_Name);
-			DataManager::GetValue("tw_enable_adb_backup", gui_adb_backup);
-			if (gui_adb_backup) {
-				DataManager::SetValue("tw_operation_state", 1);
-				if (TWFunc::StreamAdbBackup(Restore_Name) == 0)
-					ret = 0; // success
-				else
-					ret = 1; // failure
-				DataManager::SetValue("tw_enable_adb_backup", 0);
-				ret = 0; // assume success???
-			} else {
-				if (PartitionManager.Run_Restore(Restore_Name))
-					ret = 0; // success
-				else
-					ret = 1; // failure
-			}
+			if (PartitionManager.Run_Restore(Restore_Name))
+				ret = 0; // success
+			else
+				ret = 1; // failure
 		} else {
 			operation_end(1); // invalid arg specified, fail
 			return -1;

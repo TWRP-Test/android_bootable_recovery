@@ -39,7 +39,6 @@
 #include "partitions.hpp"
 #include "set_metadata.h"
 #include "twcommon.h"
-#include "twrpAdbBuFifo.hpp"
 #include "twrp_functions.hpp"
 #include "variables.h"
 #include "gui/gui.hpp"
@@ -99,7 +98,7 @@ static void ProcessFastbootdMode() {
   }
 }
 
-static void ProcessRecoveryMode(twrpAdbBuFifo* adb_bu_fifo, const bool skip_decryption) {
+static void ProcessRecoveryMode(const bool skip_decryption) {
   const int crash_counter = std::stoi(android::base::GetProperty("twrp.crash_counter", "-1")) + 1;
   android::base::SetProperty("twrp.crash_counter", std::to_string(crash_counter));
 
@@ -276,8 +275,6 @@ static void ProcessRecoveryMode(twrpAdbBuFifo* adb_bu_fifo, const bool skip_decr
 
   TWFunc::UpdateLogFile();
 
-  adb_bu_fifo->threadAdbBuFifo();
-
   // Disable flashing of stock recovery
   TWFunc::DisableStockRecoveryReplace();
 }
@@ -429,23 +426,20 @@ int main(int argc, char* argv[]) {
   // Create a thread for battery monitoring
   std::thread(MonitorBattery).detach();
 
-  auto* adb_bu_fifo = new twrpAdbBuFifo();
   TWFunc::ClearBootloaderMessage();
 
   if (startup.GetFastbootMode()) {
     ProcessFastbootdMode();
-    delete adb_bu_fifo;
     TWFunc::UpdateIntentFile(startup.GetIntent());
     Reboot();
     return 0;
   }
-  ProcessRecoveryMode(adb_bu_fifo, startup.ShouldSkipDecryption());
+  ProcessRecoveryMode(startup.ShouldSkipDecryption());
 
   GUIConsole::Translate_Now();
 
   // Launch the main GUI
   gui_start();
-  delete adb_bu_fifo;
   TWFunc::UpdateIntentFile(startup.GetIntent());
   Reboot();
 

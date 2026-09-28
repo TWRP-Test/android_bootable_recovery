@@ -704,9 +704,6 @@
 		<string name="theme_ver_err">Različica teme po meri se ne ujema z različico TWRP-ja.  Uporabljena bo tovarniška tema.</string>
 		<string name="up_a_level">(Gor eno raven)</string>
 		<string name="install_reboot" version="2">Ponovni zagon čez %tw_sleep% s.</string>
-		<string name="adbbackup_error">Napaka pri varnostnem kopiranju ADB.  Končevanje …"</string>
-		<string name="adbbackup_control_error">Pisanje v nadzorni kanal adb ni mogoč.</string>
-		<string name="twrp_adbbu_option">--za omogočanje varnostnega kopiranja twrp adb je zahtevana možnost twrp.</string>
 		<string name="partition_not_found">pot: na seznamu razdelkov ni mogoče najti {1}.</string>
 		<string name="copy_kernel_log">Dnevnik jedra je bil kopiran v {1}.</string>
 		<string name="copy_logcat">logcat je bil kopiran v {1}.</string>
