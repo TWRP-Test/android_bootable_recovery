@@ -477,6 +477,9 @@ cc_binary {
         "gui2/backend/twrp_tools_backend.cpp",
         "gui2/backend/twrp_wifi_backend.cpp",
         "gui2/backend/twrp_wipe_backend.cpp",
+        "gui2/backend/twrp_operation.cpp",
+        "gui2/backend/twrp_file_list.cpp",
+        "gui2/backend/twrp_background_backend.cpp",
     ] + select(soong_config_variable("twrpGlobalVars", "exclude_apex"), {
         false: [
             "twrpApex.cpp"

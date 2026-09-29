@@ -84,6 +84,12 @@ class keyboard {
     return root_;
   }
 
+  // The keyboard on screen, which a hardware keyboard types through.
+  static keyboard* current();
+  // HardwareKeyboard's characters (8 backspace, 13 enter) and the arrow keys.
+  void type(int ch);
+  void move_cursor(bool right);
+
  private:
   enum class key_kind {
     CHARACTER,

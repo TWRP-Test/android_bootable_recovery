@@ -16,6 +16,9 @@
 #include "backend/hardware_settings.h"
 #include "backend/screen_backend.h"
 #include "components/apply_button.h"
+#include "components/check_row.h"
+#include "components/setting_card.h"
+#include "components/flat_button.h"
 #include "components/choice_card.h"
 #include "components/icon.h"
 #include "components/quick_action_button.h"
@@ -28,12 +31,13 @@
 #include "core/ui_metrics.h"
 #include "core/wheel_scroll.h"
 #include "gui2.h"
+
+#include <linux/input.h>
 #include "gui2_display.h"
 #include "gui2_input.h"
 #include "gui2_svg_assets.h"
 #include "gui2_svg_cache.h"
 #include "gui/twmsg.h"
-#include "i18n/console_strings.h"
 #include "i18n/i18n.h"
 #include "lvgl.h"
 #include "pages/action_definitions.h"
@@ -113,6 +117,7 @@ static gui2_backend::install_backend*& install = runtime.install;
 static gui2_backend::startup_backend*& startup = runtime.startup;
 static gui2_backend::sideload_backend*& sideload = runtime.sideload;
 static gui2_backend::tools_backend*& tools = runtime.tools;
+static gui2_backend::background_backend*& background = runtime.background;
 static gui2_shell::status_bar_controller status_controller;
 
 using gui2_core::card_inner_padding;
@@ -176,6 +181,8 @@ static bool page_is_progress(page_kind page) {
     case page_kind::BACKUP_PROGRESS:
     case page_kind::RESTORE_PROGRESS:
     case page_kind::STARTUP_SCRIPT:
+    case page_kind::CLI_COMMAND:
+    case page_kind::USB_STORAGE:
     case page_kind::SIDELOAD_PROGRESS:
     case page_kind::TOOL_PROGRESS:
       return true;
@@ -216,12 +223,10 @@ static const language_pack& strings(void) {
   return gui2_i18n::get_language_pack(current_language);
 }
 
-// Installed into the legacy message catalogue so console output follows the UI
-// language. Loading the legacy language XML instead walks into its font
-// overrides, which no longer have a font stack to override.
+// Installed into the legacy message catalogue: console output is written in
+// the strings of the legacy language files.
 static std::string console_translator(const std::string& name) {
-  const char* text = gui2_i18n::console_string_for(current_language, name);
-  return text == nullptr ? std::string() : std::string(text);
+  return console == nullptr ? std::string() : console->translate(name);
 }
 
 using gui2_components::create_svg_image;
@@ -279,6 +284,11 @@ static void show_select_storage_page(page_transition transition);
 static void show_restore_list_page(page_transition transition);
 static void show_restore_page(page_transition transition);
 static void show_restore_progress_page(page_transition transition);
+static void show_cli_command_page(page_transition transition);
+static void show_usb_storage_page(page_transition transition);
+static std::string format_text(const char* format, const std::string& first,
+                               const std::string& second = std::string());
+static const void* advanced_definition(void);
 static void refresh_restore_progress(void);
 static void refresh_backup_progress(void);
 static void create_gui2_shell(lv_obj_t* screen);
@@ -358,6 +368,7 @@ static void action_card_event_cb(lv_event_t* event) {
   if (definition->id == action_id::INSTALL) {
     page_state.install_queue.clear();
     page_state.install_from_file_manager = false;
+    page_state.install_repack = false;
     navigate_to(page_kind::INSTALL, nullptr, page_transition::PUSH);
     return;
   }
@@ -435,10 +446,16 @@ enum class settings_target {
   WIFI,
   SIDELOAD,
   FORMAT_DATA,
+  WIPE_ENCRYPTION,
   TWRP_FOLDER,
   FIX_BOOTLOOP,
   MERGE_SNAPSHOTS,
   DISABLE_AVB2,
+  FIX_CONTEXTS,
+  INSTALL_RAMDISK,
+  REFLASH_TWRP,
+  INSTALL_KERNEL,
+  UNMAP_SUPER,
 };
 
 static constexpr settings_target language_target = settings_target::LANGUAGE;
@@ -456,14 +473,28 @@ static constexpr settings_target file_manager_target = settings_target::FILE_MAN
 static constexpr settings_target wifi_target = settings_target::WIFI;
 static constexpr settings_target sideload_target = settings_target::SIDELOAD;
 static constexpr settings_target format_data_target = settings_target::FORMAT_DATA;
+static constexpr settings_target wipe_encryption_target = settings_target::WIPE_ENCRYPTION;
 static constexpr settings_target twrp_folder_target = settings_target::TWRP_FOLDER;
 static constexpr settings_target fix_bootloop_target = settings_target::FIX_BOOTLOOP;
 static constexpr settings_target merge_snapshots_target = settings_target::MERGE_SNAPSHOTS;
 static constexpr settings_target disable_avb2_target = settings_target::DISABLE_AVB2;
-static constexpr int wipe_target_indices[24] = {
-  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
-  12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-};
+static constexpr settings_target fix_contexts_target = settings_target::FIX_CONTEXTS;
+static constexpr settings_target install_ramdisk_target = settings_target::INSTALL_RAMDISK;
+static constexpr settings_target reflash_twrp_target = settings_target::REFLASH_TWRP;
+static constexpr settings_target install_kernel_target = settings_target::INSTALL_KERNEL;
+static constexpr settings_target unmap_super_target = settings_target::UNMAP_SUPER;
+// 0..count-1 for the rows of a list to carry as their user data. A longer list
+// gets a new table; the old ones stay, so rows already built keep theirs.
+static const int* row_indices(size_t count) {
+  static std::vector<std::unique_ptr<int[]>> tables;
+  static size_t capacity = 0;
+  if (count > capacity) {
+    capacity = std::max<size_t>(count, capacity * 2 + 64);
+    tables.push_back(std::make_unique<int[]>(capacity));
+    for (size_t i = 0; i < capacity; ++i) tables.back()[i] = static_cast<int>(i);
+  }
+  return tables.back().get();
+}
 
 // ---- Legacy tools: shared state --------------------------------------------
 // One confirm page and one progress page serve every job; the request says
@@ -481,8 +512,15 @@ struct tool_request {
   const char* done = nullptr;
   gui2_pages::page_request back{ page_kind::HOME };
   gui2_pages::page_request after{ page_kind::HOME };
+  // Set: the swipe starts this wipe instead of a tools job, and the wipe
+  // progress page follows.
+  bool (*wipe_start)() = nullptr;
+  // A checkbox on the confirm page, bound to this variable.
+  const char* check_label = nullptr;
+  const char* check_variable = nullptr;
 };
 static tool_request tool_job_request;
+static void open_tool_confirm(const tool_request& request);
 
 enum class tool_input_kind {
   RENAME_BACKUP,
@@ -555,7 +593,7 @@ static void navigate_back(void) {
              page_router.current() == page_kind::FORMAT_DATA) {
     navigate_to(page_kind::WIPE, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::SELECT_STORAGE) {
-    navigate_to(page_kind::MOUNT, nullptr, page_transition::POP);
+    navigate_to(page_state.select_storage_back, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::BACKUP_PROGRESS) {
     if (backup == nullptr || backup->status().state != gui2_backend::backup_state::RUNNING) {
       if (backup != nullptr) backup->acknowledge();
@@ -583,15 +621,24 @@ static void navigate_back(void) {
                   nullptr, page_transition::POP);
     }
   } else if (page_router.current() == page_kind::INSTALL) {
-    navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+    if (page_state.install_repack) {
+      page_state.install_repack = false;
+      page_state.install_path.clear();
+      navigate_to(page_kind::ACTION, advanced_definition(), page_transition::POP);
+    } else {
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
+    }
   } else if (page_router.current() == page_kind::FILE_INPUT) {
     navigate_to(page_kind::FILE_ACTIONS, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::FILE_ACTIONS) {
     navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::WIFI_PASSWORD) {
     navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
-  } else if (page_router.current() == page_kind::FASTBOOTD) {
-    // Legacy has no way back from here either.
+  } else if (page_router.current() == page_kind::FASTBOOTD ||
+             page_router.current() == page_kind::CLI_COMMAND ||
+             page_router.current() == page_kind::USB_STORAGE ||
+             page_router.current() == page_kind::SYSTEM_READ_ONLY) {
+    // Legacy has no way back from these either.
   } else if (page_router.current() == page_kind::SIDELOAD) {
     navigate_to(page_kind::ACTION,
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
@@ -719,6 +766,7 @@ static void apply_language_event_cb(lv_event_t* event) {
     return;
 
   current_language = pending_language;
+  if (console != nullptr) console->retranslate(language_code(current_language));
   status_controller.refresh();
   if (page_state.language_from_decrypt) {
     page_state.language_from_decrypt = false;
@@ -770,15 +818,12 @@ static void apply_timezone_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || settings == nullptr)
     return;
 
+  // The page's listbox, offset buttons and checkboxes, then "Set Time Zone".
   const bool saved =
-      settings->set_persistent("tw_military_time", pending_military_time ? "1" : "0") &&
-      settings->set_persistent("tw_time_zone_guisel", timezone_values[pending_timezone_index]) &&
-      settings->set_persistent("tw_time_zone_guioffset", timezone_offsets[pending_offset_index]) &&
-      settings->set_persistent("tw_time_zone_guidst", pending_dst ? "1" : "0") &&
-      settings->set_persistent("tw_time_zone",
-                               gui2_pages::build_timezone_value(timezone_values, timezone_offsets,
-                                                                pending_timezone_index,
-                                                                pending_offset_index, pending_dst));
+      settings->set("tw_military_time", pending_military_time ? "1" : "0") &&
+      settings->set("tw_time_zone_guisel", timezone_values[pending_timezone_index]) &&
+      settings->set("tw_time_zone_guioffset", timezone_offsets[pending_offset_index]) &&
+      settings->set("tw_time_zone_guidst", pending_dst ? "1" : "0");
   if (saved) {
     settings->update_timezone();
     if (!settings->flush()) return;
@@ -846,13 +891,6 @@ static void set_quick_feedback(const char* title, const char* detail = nullptr) 
   }
 }
 
-static void screenshot_result_cb(void*, const gui2_backend::capture_result& result) {
-  if (result.success)
-    set_quick_feedback(strings().screenshot_saved, result.path.c_str());
-  else
-    set_quick_feedback(strings().screenshot_failed);
-}
-
 static void quick_action_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   if (quick_panel_controller.gesture_moved()) {
@@ -877,21 +915,11 @@ static void quick_action_event_cb(lv_event_t* event) {
     return;
   }
 
-  if (screen->is_recording()) {
-    const gui2_backend::capture_result result = screen->stop_recording();
-    if (result.success) {
-      set_quick_feedback(strings().recording_saved, result.path.c_str());
-    } else {
-      set_quick_feedback(strings().recording_failed);
-    }
-  } else {
-    const gui2_backend::capture_result result = screen->start_recording();
-    if (result.success) {
-      set_quick_feedback(strings().recording_started);
-    } else {
-      set_quick_feedback(strings().recording_failed);
-    }
-  }
+  // Both report to the console.
+  if (screen->is_recording())
+    screen->stop_recording();
+  else
+    screen->start_recording();
   refresh_recording_ui();
 }
 
@@ -1143,7 +1171,6 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.wipe_confirm.detach();
   page_state.kernel_log_card = nullptr;
   page_state.logcat_card = nullptr;
-  page_state.export_result_label = nullptr;
   home_page_active = is_home;
   home_navigation_active = true;
   const bool keeps_navigation = page_keeps_navigation(page);
@@ -1227,6 +1254,8 @@ static void show_reboot_page(page_transition transition) {
   gui2_pages::build_reboot_page(options);
 }
 
+static void open_wipe_encryption(void);
+
 static void settings_option_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   const auto* target = static_cast<const settings_target*>(lv_event_get_user_data(event));
@@ -1244,6 +1273,7 @@ static void settings_option_event_cb(lv_event_t* event) {
   else if (*target == settings_target::FILE_MANAGER) {
     page_state.install_queue.clear();
     page_state.install_from_file_manager = false;
+    page_state.install_repack = false;
     navigate_to(page_kind::FILE_MANAGER);
   }
   else if (*target == settings_target::WIFI)
@@ -1262,9 +1292,24 @@ static void settings_option_event_cb(lv_event_t* event) {
     navigate_to(page_kind::ADVANCED_WIPE);
   else if (*target == settings_target::FORMAT_DATA)
     navigate_to(page_kind::FORMAT_DATA);
-  else if (*target == settings_target::TWRP_FOLDER || *target == settings_target::FIX_BOOTLOOP ||
-           *target == settings_target::MERGE_SNAPSHOTS ||
-           *target == settings_target::DISABLE_AVB2)
+  else if (*target == settings_target::WIPE_ENCRYPTION)
+    open_wipe_encryption();
+  else if (*target == settings_target::INSTALL_RAMDISK ||
+           *target == settings_target::INSTALL_KERNEL) {
+    // repackselect: the install list, images only, with tw_repack_kernel set.
+    if (settings != nullptr)
+      settings->set("tw_repack_kernel",
+                    *target == settings_target::INSTALL_KERNEL ? "1" : "0");
+    page_state.install_repack = true;
+    page_state.install_path.clear();
+    navigate_to(page_kind::INSTALL);
+  } else if (*target == settings_target::TWRP_FOLDER ||
+             *target == settings_target::FIX_BOOTLOOP ||
+             *target == settings_target::MERGE_SNAPSHOTS ||
+             *target == settings_target::DISABLE_AVB2 ||
+             *target == settings_target::FIX_CONTEXTS ||
+             *target == settings_target::REFLASH_TWRP ||
+             *target == settings_target::UNMAP_SUPER)
     open_advanced_tool(*target);
   else
     request_legacy_gui_event_cb(event);
@@ -1508,6 +1553,10 @@ static void restore_defaults_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || settings == nullptr)
     return;
   if (!settings->restore_defaults()) return;
+  // tw_language went back to its default as well.
+  current_language = language_from_code(settings->get_string("tw_language", "en"));
+  pending_language = current_language;
+  if (console != nullptr) console->retranslate(language_code(current_language));
   status_controller.refresh();
   navigate_to(page_kind::GENERAL_SETTINGS, nullptr, page_transition::REPLACE);
 }
@@ -1565,12 +1614,6 @@ static void show_keyboard_settings_page(page_transition transition) {
 static std::vector<gui2_backend::file_entry> file_manager_entries;
 static std::vector<std::string> file_manager_crumbs;
 static const char* file_manager_crumb_text[16];
-static constexpr int file_manager_indices[64] = {
-  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
-  16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-  48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
-};
 
 static std::string file_manager_join(const std::string& directory, const std::string& name) {
   if (directory.empty() || directory == "/") return "/" + name;
@@ -1634,6 +1677,7 @@ static void file_manager_entry_long_cb(lv_event_t* event) {
 // The legacy options page, as cards. Copy and move are two steps there as
 // well: pick the file, then walk to the destination and paste.
 enum class file_action {
+  EDIT,
   OPEN_TERMINAL,
   COPY,
   MOVE,
@@ -1644,6 +1688,7 @@ enum class file_action {
 };
 
 static constexpr file_action file_action_terminal = file_action::OPEN_TERMINAL;
+static constexpr file_action file_action_edit = file_action::EDIT;
 static constexpr file_action file_action_copy = file_action::COPY;
 static constexpr file_action file_action_move = file_action::MOVE;
 static constexpr file_action file_action_chmod755 = file_action::CHMOD_755;
@@ -1651,35 +1696,70 @@ static constexpr file_action file_action_chmod = file_action::CHMOD;
 static constexpr file_action file_action_rename = file_action::RENAME;
 static constexpr file_action file_action_delete = file_action::DELETE;
 
+// filemanageraction: cmd "%tw_filemanager_command% "%tw_filename1%"", and
+// with tw_include_text3 the destination after it. filemanagerconfirm asks
+// first, and action_complete goes back to the list.
+static void open_file_command(const char* label, const std::string& command,
+                              const std::string& filename, const std::string* text3,
+                              bool danger) {
+  std::string line = command + " \"" + filename + "\"";
+  if (text3 != nullptr) line += " \"" + *text3 + "\"";
+  tool_request request;
+  request.job = gui2_backend::tool_job::COMMAND;
+  request.value = line;
+  request.title = label;
+  request.summary = filename;
+  request.text = text3 == nullptr ? filename : filename + "\n\xE2\x86\x92 " + *text3;
+  request.tone = danger ? gui2_pages::confirm_tone::DANGER : gui2_pages::confirm_tone::INFO;
+  request.swipe = danger ? strings().fm_delete_confirm : strings().swipe_confirm;
+  request.running = strings().fm_running;
+  request.done = strings().fm_complete;
+  request.back = { page_router.current() };
+  request.after = { page_kind::FILE_MANAGER };
+  open_tool_confirm(request);
+}
+
+// GUIAction::changeterminal
+static void change_terminal(const std::string& arg) {
+  if (terminal == nullptr || arg.empty()) return;
+  if (settings != nullptr) settings->set("tw_terminal_location", arg);
+  if (terminal->running()) {
+    terminal->send_line("cd " + arg);
+  } else if (chdir(arg.c_str()) != 0) {
+    return;
+  }
+  terminal->start();
+  page_state.console_tab = 1;
+  navigate_to(page_kind::CONSOLE);
+}
+
 static void file_action_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   const auto* action = static_cast<const file_action*>(lv_event_get_user_data(event));
   if (action == nullptr || file_manager == nullptr) return;
 
   const std::string& target = page_state.file_selection;
-  bool done = false;
   switch (*action) {
-    case file_action::OPEN_TERMINAL: {
-      // The shell starts where the file lives, which is what the legacy
-      // "Open Terminal Here" does.
-      const size_t slash = target.find_last_of('/');
-      const std::string directory = slash == 0 || slash == std::string::npos
-                                        ? "/"
-                                        : target.substr(0, slash);
-      if (terminal != nullptr && terminal->start()) terminal->send_line("cd '" + directory + "'");
+    case file_action::EDIT:
+      // editfile: nano "<file>" typed into the terminal.
+      if (terminal == nullptr || !terminal->start()) return;
+      terminal->send_line("nano \"" + target + "\"");
       page_state.console_tab = 1;
       navigate_to(page_kind::CONSOLE);
       return;
-    }
+    case file_action::OPEN_TERMINAL:
+      change_terminal(target);
+      return;
     case file_action::COPY:
     case file_action::MOVE:
       page_state.file_clipboard = target;
+      page_state.file_clipboard_is_folder = page_state.file_selection_is_folder;
       page_state.file_clipboard_move = *action == file_action::MOVE;
       navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
       return;
     case file_action::CHMOD_755:
-      done = file_manager->set_mode(target, "755");
-      break;
+      open_file_command(strings().fm_chmod755, "chmod 755", target, nullptr, false);
+      return;
     case file_action::CHMOD:
       page_state.file_input_is_mode = true;
       navigate_to(page_kind::FILE_INPUT);
@@ -1689,25 +1769,34 @@ static void file_action_event_cb(lv_event_t* event) {
       navigate_to(page_kind::FILE_INPUT);
       return;
     case file_action::DELETE:
-      done = file_manager->remove(target);
-      break;
+      open_file_command(strings().fm_delete, "rm -rf", target, nullptr, true);
+      return;
   }
-  if (!done) return;
-  navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
 }
 
 
+// filemanagerchmod (3-4 digits) and the two rename pages (1-128 characters).
 static void file_input_accept_cb(void*) {
-  if (file_manager == nullptr || page_state.file_input == nullptr) return;
+  if (page_state.file_input == nullptr) return;
   const char* text = lv_textarea_get_text(page_state.file_input);
   const std::string value = text == nullptr ? std::string() : text;
-  if (value.empty()) return;
+  const std::string& target = page_state.file_selection;
 
-  const bool done = page_state.file_input_is_mode
-                        ? file_manager->set_mode(page_state.file_selection, value)
-                        : file_manager->rename(page_state.file_selection, value);
-  if (!done) return;
-  navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
+  if (page_state.file_input_is_mode) {
+    if (value.size() < 3 || value.size() > 4 ||
+        value.find_first_not_of("0123456789") != std::string::npos)
+      return;
+    open_file_command(strings().fm_chmod, "chmod " + value, target, nullptr, false);
+    return;
+  }
+  if (value.empty() || value.size() > 128) return;
+  if (page_state.file_selection_is_folder) {
+    open_file_command(strings().fm_rename,
+                      "cd \"" + target + "\" && cd .. && mv", target, &value, false);
+  } else {
+    const std::string text3 = "\"" + page_state.file_manager_path + "/" + value + "\"";
+    open_file_command(strings().fm_rename, "mv", target, &text3, false);
+  }
 }
 
 static void show_file_input_page(page_transition transition) {
@@ -1969,7 +2058,6 @@ static void sideload_confirmed(void*) {
     page_state.sideload_confirm.reset();
     return;
   }
-  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
   navigate_to(page_kind::SIDELOAD_PROGRESS, nullptr, page_transition::PUSH);
 }
 
@@ -2118,6 +2206,8 @@ static void show_file_actions_page(page_transition transition) {
   options.metrics = &ui;
   options.strings = &strings();
   options.is_folder = page_state.file_selection_is_folder;
+  options.can_edit = settings != nullptr && settings->get_int("tw_include_nano", 0) != 0;
+  options.edit_target = &file_action_edit;
   options.callback = file_action_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   options.terminal_target = &file_action_terminal;
@@ -2130,19 +2220,23 @@ static void show_file_actions_page(page_transition transition) {
   gui2_pages::build_file_actions_page(options);
 }
 
+// choosedestinationfolder's button: cp, cp -R from the folder's parent, or mv,
+// with the folder on screen as tw_fm_text3.
 static void file_paste_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  if (file_manager == nullptr || page_state.file_clipboard.empty()) return;
-  const bool done = page_state.file_clipboard_move
-                        ? file_manager->move(page_state.file_clipboard,
-                                             page_state.file_manager_path)
-                        : file_manager->copy(page_state.file_clipboard,
-                                             page_state.file_manager_path);
-  if (!done) return;
+  if (page_state.file_clipboard.empty()) return;
+  const std::string source = page_state.file_clipboard;
+  const std::string destination = page_state.file_manager_path;
+  std::string command = "mv";
+  const char* label = strings().fm_move;
+  if (!page_state.file_clipboard_move) {
+    label = strings().fm_copy;
+    command = page_state.file_clipboard_is_folder
+                  ? "cd \"" + source + "\" && cd .. && cp -R"
+                  : std::string("cp");
+  }
   page_state.file_clipboard.clear();
-  navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::REPLACE);
-  // The floating button changes with the clipboard, so this one rebuilds the
-  // whole page on purpose.
+  open_file_command(label, command, source, &destination, false);
 }
 
 static gui2_pages::file_manager_page_view file_manager_view;
@@ -2175,24 +2269,6 @@ static const char* sort_key_label(int order) {
     default:
       return strings().sort_name;
   }
-}
-
-// Folders stay on top whatever the order, as in legacy; a size order leaves
-// folders by name, since their size says nothing about what they hold.
-static void sort_file_entries(std::vector<gui2_backend::file_entry>* entries, int order) {
-  const int key = order < 0 ? -order : order;
-  const bool ascending = order > 0;
-  std::stable_sort(entries->begin(), entries->end(),
-                   [key, ascending](const gui2_backend::file_entry& a,
-                                    const gui2_backend::file_entry& b) {
-                     if (a.directory != b.directory) return a.directory;
-                     if (key == 3 && !a.directory && a.size != b.size)
-                       return ascending ? a.size < b.size : a.size > b.size;
-                     if (key == 2 && a.modified != b.modified)
-                       return ascending ? a.modified < b.modified : a.modified > b.modified;
-                     const int by_name = strcasecmp(a.name.c_str(), b.name.c_str());
-                     return key == 1 && !ascending ? by_name > 0 : by_name < 0;
-                   });
 }
 
 static void filter_file_entries(std::vector<gui2_backend::file_entry>* entries,
@@ -2361,13 +2437,20 @@ static void build_search_toolbar(gui2_pages::file_toolbar_view* view, const std:
 
 // direction: 1 going deeper, -1 coming back up, 0 for a plain refresh.
 static void build_file_manager_body(int direction) {
-  file_manager_entries = file_manager == nullptr
-                             ? std::vector<gui2_backend::file_entry>()
-                             : file_manager->list(page_state.file_manager_path);
-  sort_file_entries(&file_manager_entries, file_sort_order());
+  file_manager_entries.clear();
+  if (file_manager != nullptr) {
+    auto listing = file_manager->list(page_state.file_manager_path, {});
+    // GetFileList: a folder that will not open sends the list to its parent.
+    while (!listing.opened && page_state.file_manager_path != "/") {
+      const std::string parent = parent_path(page_state.file_manager_path);
+      page_state.file_manager_path = parent.empty() ? "/" : parent;
+      listing = file_manager->list(page_state.file_manager_path, {});
+    }
+    file_manager_entries = std::move(listing.folders);
+    for (auto& entry : listing.files) file_manager_entries.push_back(std::move(entry));
+    if (settings != nullptr) settings->set("tw_file_location1", page_state.file_manager_path);
+  }
   filter_file_entries(&file_manager_entries, page_state.file_search);
-  if (file_manager_entries.size() > std::size(file_manager_indices))
-    file_manager_entries.resize(std::size(file_manager_indices));
 
   // The root is a crumb of its own so there is always something to go back to.
   file_manager_crumbs.clear();
@@ -2392,11 +2475,11 @@ static void build_file_manager_body(int direction) {
   options.strings = &strings();
   options.crumbs = file_manager_crumb_text;
   options.crumb_count = file_manager_crumbs.size();
-  options.crumb_indices = file_manager_indices;
+  options.crumb_indices = row_indices(file_manager_crumbs.size());
   options.crumb_callback = file_manager_crumb_cb;
   options.entries = file_manager_entries.data();
   options.entry_count = file_manager_entries.size();
-  options.entry_indices = file_manager_indices;
+  options.entry_indices = row_indices(file_manager_entries.size());
   options.entry_callback = file_manager_entry_cb;
   options.entry_long_press_callback = file_manager_entry_long_cb;
   options.crumb_parent = page_layer;
@@ -2436,9 +2519,11 @@ static void file_manager_parent_cb(lv_event_t* event) {
 }
 
 static void show_file_manager_page(page_transition transition) {
+  // tw_file_location1, default "/".
   if (page_state.file_manager_path.empty())
     page_state.file_manager_path =
-        file_manager == nullptr ? "/" : file_manager->start_directory();
+        settings == nullptr ? "/" : settings->get_string("tw_file_location1", "/");
+  if (page_state.file_manager_path.empty()) page_state.file_manager_path = "/";
 
   // Holding a row reaches every action, so the floating button is only
   // needed as the place to paste into.
@@ -2489,7 +2574,65 @@ static bool install_has_suffix(const std::string& name, const char* suffix) {
   return strcasecmp(name.c_str() + name.size() - length, suffix) == 0;
 }
 
+// The install page's <filter> and <prfxfilter>.
+static const gui2_backend::file_filter install_filter{
+  ".zip;.ozip;.ZIP;.OZIP;.img;.IMG", "Magisk-;Magisk.apk;app-release.apk;app-debug.apk" };
+
+// Whether a ';' list of the filter has an entry the name ends (or starts) with.
+static bool install_filter_has(const std::string& list, const std::string& name, bool suffix) {
+  size_t start = 0;
+  while (start <= list.size()) {
+    const size_t end = std::min(list.find(';', start), list.size());
+    const std::string item = list.substr(start, end - start);
+    if (!item.empty() && name.size() >= item.size() &&
+        name.compare(suffix ? name.size() - item.size() : 0, item.size(), item) == 0)
+      return true;
+    start = end + 1;
+  }
+  return false;
+}
+
+static bool install_filter_matches(const std::string& name) {
+  return install_filter_has(install_filter.extn, name, true) ||
+         install_filter_has(install_filter.prfx, name, false);
+}
+
 static void change_install_folder(const std::string& path, int direction);
+
+// A file picked in the install list: GUIFileSelector::NotifySelect decides
+// between image and zip, and the install page's action queues a zip
+// (queuezip) before its confirm page.
+static void select_install_file(const std::string& folder, const std::string& name) {
+  page_state.install_selection = file_manager_join(folder, name);
+  page_state.install_image = install_has_suffix(name, ".img");
+  page_state.install_target_mount.clear();
+  if (page_state.install_image) {
+    if (install != nullptr) page_state.install_target_mount = install->image_target_for(name);
+  } else if (page_state.install_queue.size() < kInstallQueueLimit) {
+    page_state.install_queue.push_back(page_state.install_selection);
+  }
+  navigate_to(page_kind::INSTALL_CONFIRM);
+}
+
+// repackconfirm, with repackselect's pick in tw_filename.
+static void open_repack_confirm(const std::string& path) {
+  if (settings != nullptr) settings->set("tw_filename", path);
+  const bool kernel = settings != nullptr && settings->get_int("tw_repack_kernel", 0) == 1;
+  tool_request request;
+  request.job = gui2_backend::tool_job::REPACK_IMAGE;
+  request.title = kernel ? strings().kernel_title : strings().ramdisk_title;
+  request.summary = path;
+  request.text = path;
+  request.tone = gui2_pages::confirm_tone::DANGER;
+  request.swipe = strings().swipe_confirm;
+  request.running = strings().installing;
+  request.done = strings().install_complete;
+  request.check_label = strings().repack_backup_first;
+  request.check_variable = "tw_repack_backup_first";
+  request.back = { page_kind::INSTALL };
+  request.after = { page_kind::ACTION, advanced_definition() };
+  open_tool_confirm(request);
+}
 
 static void install_entry_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
@@ -2502,32 +2645,19 @@ static void install_entry_cb(lv_event_t* event) {
     change_install_folder(file_manager_join(page_state.install_path, entry.name), 1);
     return;
   }
-  page_state.install_from_file_manager = false;
-  page_state.install_selection = file_manager_join(page_state.install_path, entry.name);
-  page_state.install_image = install_has_suffix(entry.name, ".img");
-  if (!page_state.install_image) {
-    auto& queue = page_state.install_queue;
-    if (std::find(queue.begin(), queue.end(), page_state.install_selection) == queue.end() &&
-        queue.size() < kInstallQueueLimit)
-      queue.push_back(page_state.install_selection);
+  if (page_state.install_repack) {
+    open_repack_confirm(file_manager_join(page_state.install_path, entry.name));
+    return;
   }
-  navigate_to(page_kind::INSTALL_CONFIRM);
+  page_state.install_from_file_manager = false;
+  select_install_file(page_state.install_path, entry.name);
 }
 
-// The install browser's own pick, reached from a file manager row.
+// The install list's own pick, reached from a file manager row.
 static bool flash_from_file_manager(const gui2_backend::file_entry& entry) {
-  const bool image = install_has_suffix(entry.name, ".img");
-  if (!image && !install_has_suffix(entry.name, ".zip")) return false;
+  if (!install_filter_matches(entry.name)) return false;
   page_state.install_from_file_manager = true;
-  page_state.install_selection = file_manager_join(page_state.file_manager_path, entry.name);
-  page_state.install_image = image;
-  if (!image) {
-    auto& queue = page_state.install_queue;
-    if (std::find(queue.begin(), queue.end(), page_state.install_selection) == queue.end() &&
-        queue.size() < kInstallQueueLimit)
-      queue.push_back(page_state.install_selection);
-  }
-  navigate_to(page_kind::INSTALL_CONFIRM);
+  select_install_file(page_state.file_manager_path, entry.name);
   return true;
 }
 
@@ -2548,15 +2678,20 @@ static void install_parent_cb(lv_event_t* event);
 static void build_install_body(int direction) {
   install_entries.clear();
   if (file_manager != nullptr) {
-    for (auto& entry : file_manager->list(page_state.install_path)) {
-      if (entry.directory || install_has_suffix(entry.name, ".zip") ||
-          install_has_suffix(entry.name, ".img"))
-        install_entries.push_back(std::move(entry));
+    static const gui2_backend::file_filter repack_filter{ ".img", "" };
+    const auto& filter = page_state.install_repack ? repack_filter : install_filter;
+    auto listing = file_manager->list(page_state.install_path, filter);
+    while (!listing.opened && page_state.install_path != "/") {
+      const std::string parent = parent_path(page_state.install_path);
+      page_state.install_path = parent.empty() ? "/" : parent;
+      listing = file_manager->list(page_state.install_path, filter);
     }
+    install_entries = std::move(listing.folders);
+    for (auto& entry : listing.files) install_entries.push_back(std::move(entry));
+    // The selector's path variable, which the next visit starts from.
+    if (settings != nullptr) settings->set_persistent("tw_zip_location", page_state.install_path);
   }
   filter_file_entries(&install_entries, page_state.install_search);
-  if (install_entries.size() > std::size(file_manager_indices))
-    install_entries.resize(std::size(file_manager_indices));
 
   install_crumbs.clear();
   install_crumbs.push_back("/");
@@ -2580,11 +2715,11 @@ static void build_install_body(int direction) {
   options.strings = &strings();
   options.crumbs = install_crumb_text;
   options.crumb_count = install_crumbs.size();
-  options.crumb_indices = file_manager_indices;
+  options.crumb_indices = row_indices(install_crumbs.size());
   options.crumb_callback = install_crumb_cb;
   options.entries = install_entries.data();
   options.entry_count = install_entries.size();
-  options.entry_indices = file_manager_indices;
+  options.entry_indices = row_indices(install_entries.size());
   options.entry_callback = install_entry_cb;
   options.crumb_parent = page_layer;
   options.crumb_y = ui.heading_top + ui.heading_height + ui.cards_top_gap;
@@ -2618,12 +2753,18 @@ static void install_parent_cb(lv_event_t* event) {
 }
 
 static void show_install_page(page_transition transition) {
+  // SetPageFocus: the path variable, or the selector's default.
   if (page_state.install_path.empty())
-    page_state.install_path = file_manager == nullptr ? "/" : file_manager->start_directory();
+    page_state.install_path =
+        settings == nullptr ? "/sdcard" : settings->get_string("tw_zip_location", "/sdcard");
+  if (page_state.install_path.empty()) page_state.install_path = "/sdcard";
 
-  create_page_scaffold(page_kind::INSTALL, false,
-                       strings().actions[static_cast<int>(action_id::INSTALL)].title,
-                       "", 0, transition);
+  const char* install_title =
+      !page_state.install_repack ? strings().actions[static_cast<int>(action_id::INSTALL)].title
+      : settings != nullptr && settings->get_int("tw_repack_kernel", 0) == 1
+          ? strings().kernel_title
+          : strings().ramdisk_title;
+  create_page_scaffold(page_kind::INSTALL, false, install_title, "", 0, transition);
   // Straight from the metrics: the box has not been laid out yet, so asking it
   // for its height here gives zero.
   const int bar = gui2_pages::crumb_bar_height(ui);
@@ -2639,25 +2780,19 @@ static void show_install_page(page_transition transition) {
 
 static void install_confirmed(void*) {
   if (install == nullptr) return;
-  const bool verify = settings == nullptr ||
-                      settings->get_int("tw_skip_digest_check_zip", 0) == 0;
   bool started = false;
   if (page_state.install_image) {
-    const std::string mount_point =
-        page_state.install_target_index < install_targets.size()
-            ? install_targets[page_state.install_target_index].mount_point
-            : std::string();
-    if (!mount_point.empty())
-      started = install->start_image(page_state.install_selection, mount_point,
+    if (!page_state.install_target_mount.empty())
+      started = install->start_image(page_state.install_selection,
+                                     page_state.install_target_mount,
                                      page_state.install_both_slots);
-  } else {
-    const std::vector<std::string> queue =
-        page_state.install_queue.empty()
-            ? std::vector<std::string>{ page_state.install_selection }
-            : page_state.install_queue;
-    started = install->start_zip(queue, verify);
+  } else if (!page_state.install_queue.empty()) {
+    started = install->start_zip(page_state.install_queue);
   }
-  if (!started) return;
+  if (!started) {
+    page_state.install_confirm.reset();
+    return;
+  }
   page_state.install_queue.clear();
   page_state.install_countdown_start_ms = 0;
   page_state.install_countdown_done = false;
@@ -2669,7 +2804,7 @@ static void install_target_event_cb(lv_event_t* event) {
   const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
   if (index == nullptr || *index < 0 || static_cast<size_t>(*index) >= install_targets.size())
     return;
-  page_state.install_target_index = static_cast<size_t>(*index);
+  page_state.install_target_mount = install_targets[*index].mount_point;
   navigate_to(page_kind::INSTALL_CONFIRM, nullptr, page_transition::REPLACE);
 }
 
@@ -2687,9 +2822,13 @@ static void rebuild_install_options(void) {
   };
 
   if (page_state.install_image) {
-    if (page_state.install_target_index < install_targets.size() &&
-        install_targets[page_state.install_target_index].slot_partition)
-      add(text.install_both_slots, nullptr, page_state.install_both_slots);
+    // flashimage_confirm: tw_is_slot_part and tw_has_boot_slots, over
+    // tw_flash_both_slots.
+    page_state.install_both_slots = flag("tw_flash_both_slots", 0) != 0;
+    for (const auto& target : install_targets)
+      if (target.mount_point == page_state.install_target_mount && target.slot_partition &&
+          flag("tw_has_boot_slots", 0) != 0)
+        add(text.install_both_slots, nullptr, page_state.install_both_slots);
     return;
   }
 
@@ -2713,6 +2852,7 @@ static void install_option_event_cb(lv_event_t* event) {
   const bool wanted = lv_obj_has_state(toggle, LV_STATE_CHECKED);
   if (item.key == nullptr) {
     page_state.install_both_slots = wanted;
+    if (settings != nullptr) settings->set("tw_flash_both_slots", wanted ? "1" : "0");
   } else if (settings == nullptr ||
              !settings->set_persistent(item.key, wanted ? "1" : "0") || !settings->flush()) {
     // The row keeps its old state unless the value actually reached the disk.
@@ -2759,10 +2899,10 @@ static void show_install_confirm_page(page_transition transition) {
   install_targets = page_state.install_image && install != nullptr
                         ? install->image_targets()
                         : std::vector<gui2_backend::image_target>();
-  if (install_targets.size() > std::size(file_manager_indices))
-    install_targets.resize(std::size(file_manager_indices));
-  if (page_state.install_target_index >= install_targets.size())
-    page_state.install_target_index = 0;
+  // No row is chosen until the name picked one or the user does.
+  size_t selected_target = install_targets.size();
+  for (size_t i = 0; i < install_targets.size(); ++i)
+    if (install_targets[i].mount_point == page_state.install_target_mount) selected_target = i;
 
   rebuild_install_options();
   size_t queued = std::min(page_state.install_queue.size(), std::size(install_queue_text));
@@ -2791,8 +2931,8 @@ static void show_install_confirm_page(page_transition transition) {
   options.clear_queue_callback = install_clear_queue_cb;
   options.targets = install_targets.data();
   options.target_count = install_targets.size();
-  options.target_indices = file_manager_indices;
-  options.selected_target = page_state.install_target_index;
+  options.target_indices = row_indices(install_targets.size());
+  options.selected_target = selected_target;
   options.target_callback = install_target_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_install_confirm_page(options);
@@ -2848,6 +2988,8 @@ static void refresh_install_progress(void) {
     const uint64_t now = monotonic_ms();
     if (page_state.install_countdown_start_ms == 0) {
       page_state.install_countdown_start_ms = now;
+      // sleepcounter: make sure the countdown can be seen and cancelled.
+      if (screen != nullptr) screen->screen_on();
       if (page_state.install_progress.running_action != nullptr)
         lv_obj_set_hidden(page_state.install_progress.running_action, false);
     }
@@ -2871,11 +3013,39 @@ static void refresh_install_progress(void) {
 
 static void install_countdown_cancel_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  // The legacy cancel button: set tw_install_reboot=0.
+  if (settings != nullptr) settings->set_persistent("tw_install_reboot", "0");
   page_state.install_countdown_done = true;
   if (page_state.install_progress.running_action != nullptr)
     lv_obj_set_hidden(page_state.install_progress.running_action, true);
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
   refresh_install_progress();
+}
+
+static bool start_cache_dalvik_wipe() {
+  return wipe != nullptr && wipe->start_cache_dalvik();
+}
+
+// flash_done: "Wipe Cache/Dalvik", or "Wipe Dalvik" on A/B, through the
+// legacy confirm_action page.
+static void flash_done_wipe_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  const bool ab_device = settings != nullptr && settings->get_int("tw_ab_device", 0) != 0;
+  tool_request request;
+  request.title = ab_device ? strings().flash_wipe_dalvik : strings().flash_wipe_cache_dalvik;
+  request.text = ab_device ? strings().flash_wipe_dalvik_confirm
+                           : strings().flash_wipe_cache_dalvik_confirm;
+  request.tone = gui2_pages::confirm_tone::DANGER;
+  request.swipe = strings().swipe_wipe;
+  request.back = { page_kind::INSTALL_PROGRESS };
+  request.wipe_start = start_cache_dalvik_wipe;
+  open_tool_confirm(request);
+}
+
+// On A/B the button is "Reboot" and opens the reboot page.
+static void flash_done_reboot_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  navigate_to(page_kind::REBOOT, nullptr, page_transition::PUSH);
 }
 
 static void show_install_progress_page(page_transition transition) {
@@ -2893,8 +3063,17 @@ static void show_install_progress_page(page_transition transition) {
   options.initial_text = strings().installing;
   options.subtitle = page_summary;
   options.page_layer = page_layer;
-  options.left_action = { strings().action_back, progress_back_cb };
-  options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
+  const bool ab_device = settings != nullptr && settings->get_int("tw_ab_device", 0) != 0;
+  if (page_state.install_image) {
+    options.left_action = { strings().action_back, progress_back_cb };
+    options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
+  } else {
+    options.left_action = { ab_device ? strings().flash_wipe_dalvik
+                                      : strings().flash_wipe_cache_dalvik,
+                            flash_done_wipe_cb };
+    options.right_action = { ab_device ? strings().reboot_title : strings().action_reboot_system,
+                             ab_device ? flash_done_reboot_cb : progress_reboot_system_cb };
+  }
   options.running_action = { strings().cancel, install_countdown_cancel_cb };
   options.press_guard_callback = press_cancel_guard_cb;
   page_state.install_progress = gui2_pages::build_progress_page(options);
@@ -3304,6 +3483,22 @@ static void format_data_confirmed(void*) {
   start_wipe_job(wipe->start_format_data());
 }
 
+static bool start_format_data_wipe() {
+  return wipe != nullptr && wipe->start_format_data();
+}
+
+// wipe DATAMEDIA through confirm_action.
+static void open_wipe_encryption(void) {
+  tool_request request;
+  request.title = strings().wipe_encryption_title;
+  request.text = strings().wipe_encryption_confirm;
+  request.tone = gui2_pages::confirm_tone::DANGER;
+  request.swipe = strings().swipe_format_data;
+  request.back = { page_kind::WIPE };
+  request.wipe_start = start_format_data_wipe;
+  open_tool_confirm(request);
+}
+
 static void show_wipe_page(page_transition transition) {
   const int bottom_reserved = ui.nav_height + gui2_pages::wipe_track_height() +
                               gui2_pages::wipe_hint_height(ui, strings().factory_reset_detail) +
@@ -3330,6 +3525,9 @@ static void show_wipe_page(page_transition transition) {
   options.advanced_target = &advanced_wipe_target;
   options.format_data_target = &format_data_target;
   options.has_data_media = wipe != nullptr && wipe->has_data_media();
+  options.show_wipe_encryption =
+      !options.has_data_media && decrypt != nullptr && decrypt->is_encrypted();
+  options.wipe_encryption_target = &wipe_encryption_target;
   options.confirm = &page_state.wipe_confirm;
   options.confirm_callback = factory_reset_confirmed;
   gui2_pages::build_wipe_page(options);
@@ -3353,7 +3551,7 @@ static void show_advanced_wipe_page(page_transition transition) {
   options.target_count = page_state.wipe_target_count;
   options.selected = page_state.wipe_selected;
   options.option_event_callback = wipe_selection_event_cb;
-  options.target_indices = wipe_target_indices;
+  options.target_indices = row_indices(std::size(page_state.wipe_selected));
   options.repair_callback = wipe_repair_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_advanced_wipe_page(options);
@@ -3407,7 +3605,7 @@ static void poll_decrypt_console(void) {
 }
 
 static void refresh_decrypt_progress(void) {
-  if (decrypt == nullptr) return;
+  if (decrypt == nullptr || page_state.decrypt_during_startup) return;
   const auto state = decrypt->state();
 
   gui2_pages::operation_status progress;
@@ -3442,13 +3640,19 @@ static void refresh_decrypt_progress(void) {
   const uint64_t now_ms = monotonic_ms();
   if (page_state.progress_settled_ms == 0) {
     page_state.progress_settled_ms = now_ms;
-    if (hardware != nullptr)
-      hardware->vibrate(state == gui2_backend::decrypt_state::DONE
-                            ? gui2_backend::haptic_channel::ACTION
-                            : gui2_backend::haptic_channel::BUTTON);
     return;
   }
   if (now_ms - page_state.progress_settled_ms < 900) return;
+
+  const bool succeeded = page_state.decrypt_refreshing || state == gui2_backend::decrypt_state::DONE;
+  if (succeeded && startup != nullptr &&
+      startup->status().pause == gui2_backend::startup_pause::DECRYPT) {
+    // Legacy leaves the page with tw_page_done and lets startup go on; the
+    // rest of it may still show a page, and home comes when it is done.
+    page_state.decrypt_during_startup = true;
+    startup->finish_decrypt();
+    return;
+  }
 
   const bool refreshing = page_state.decrypt_refreshing;
   decrypt->acknowledge();
@@ -3517,7 +3721,7 @@ static void decrypt_language_event_cb(lv_event_t* event) {
 static constexpr const char* kDefaultCryptoPassword = "!";
 
 // A device with no lock screen has nothing to ask for, so the attempt runs
-// straight away and only the progress is shown, the way legacy does it.
+// straight away and only the progress is shown.
 static void enter_decrypt_flow(page_transition transition) {
   if (decrypt == nullptr) return;
   if (decrypt->kind() == gui2_backend::lock_kind::DEFAULT &&
@@ -3528,8 +3732,11 @@ static void enter_decrypt_flow(page_transition transition) {
   navigate_to(page_kind::DECRYPT, nullptr, transition);
 }
 
+// The legacy "Decrypt Data" button.
 static void home_notice_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (decrypt != nullptr) decrypt->select_user();
+  page_state.decrypt_failed = false;
   enter_decrypt_flow(page_transition::PUSH);
 }
 
@@ -3543,6 +3750,7 @@ static constexpr int kRestoreSkipDigestTarget = 111;
 static constexpr int kRestoreRenameTarget = 112;
 static constexpr int kRestoreDeleteTarget = 113;
 static constexpr int kBackupEncryptTarget = 103;
+static constexpr int kBackupFreeSpaceTarget = 104;
 static constexpr int kMountSystemTarget = 102;
 
 // What legacy asked on its multiuser_warning and restore_keymaster pages.
@@ -3564,6 +3772,10 @@ static void backup_selection_event_cb(lv_event_t* event) {
   if (*index < 0 || static_cast<size_t>(*index) >= std::size(page_state.backup_selected)) return;
 
   page_state.backup_selected[*index] = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  std::string list;
+  for (size_t i = 0; i < backup_targets.size() && i < std::size(page_state.backup_selected); ++i)
+    if (page_state.backup_selected[i]) list += backup_targets[i].mount_point + ";";
+  if (settings != nullptr) settings->set("tw_backup_list", list);
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
@@ -3574,10 +3786,13 @@ static void backup_option_event_cb(lv_event_t* event) {
   if (target == nullptr || toggle == nullptr) return;
 
   const bool checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
-  if (*target == kBackupCompressTarget)
-    page_state.backup_compress = checked;
-  else if (*target == kBackupSkipDigestTarget)
-    page_state.backup_skip_digest = checked;
+  const char* value = checked ? "1" : "0";
+  if (settings != nullptr && *target == kBackupCompressTarget)
+    settings->set("tw_use_compression", value);
+  else if (settings != nullptr && *target == kBackupSkipDigestTarget)
+    settings->set("tw_skip_digest_generate", value);
+  else if (settings != nullptr && *target == kBackupFreeSpaceTarget)
+    settings->set("tw_disable_free_space", value);
   else if (*target == kBackupEncryptTarget) {
     page_state.backup_encrypt = checked;
     gui2_pages::show_backup_password(page_state.backup_view, checked);
@@ -3591,35 +3806,113 @@ static void backup_tab_changed(size_t index, void*) {
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
+static std::string textarea_text(lv_obj_t* input) {
+  const char* text = input == nullptr ? nullptr : lv_textarea_get_text(input);
+  return text == nullptr ? std::string() : std::string(text);
+}
+
+static constexpr const char* kAutoBackupName = "(Auto Generate)";
+
+// backupname1: opening the name with "(Auto Generate)" in it generates one.
+static void backup_name_focus_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_FOCUSED || backup == nullptr) return;
+  lv_obj_t* input = page_state.backup_view.name_input;
+  if (input == nullptr || !textarea_text(input).empty()) return;
+  lv_textarea_set_text(input, backup->generate_name().c_str());
+}
+
+static void backup_append_date_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || backup == nullptr)
+    return;
+  lv_obj_t* input = page_state.backup_view.name_input;
+  if (input == nullptr) return;
+  lv_textarea_set_text(input, backup->append_date(textarea_text(input)).c_str());
+}
+
+static void backup_select_storage_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  page_state.backup_name = textarea_text(page_state.backup_view.name_input);
+  page_state.select_storage_back = page_kind::BACKUP;
+  navigate_to(page_kind::SELECT_STORAGE);
+}
+
+// "Refresh Sizes" runs refreshsizes and comes back to the page it was on.
+static void backup_refresh_sizes_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || tools == nullptr)
+    return;
+  page_state.backup_name = textarea_text(page_state.backup_view.name_input);
+  tool_request request;
+  request.job = gui2_backend::tool_job::REFRESH_SIZES;
+  request.title = strings().refresh_sizes_button;
+  request.running = strings().refreshing_sizes;
+  request.done = strings().refresh_sizes_done;
+  request.back = { page_router.current() };
+  request.after = { page_router.current() };
+  tool_job_request = request;
+  if (!tools->start(request.job, request.target, request.value)) return;
+  navigate_to(page_kind::TOOL_PROGRESS, nullptr, page_transition::PUSH);
+}
+
 static void backup_confirmed(void*) {
-  if (backup == nullptr) return;
+  if (backup == nullptr || settings == nullptr) return;
 
-  std::vector<std::string> selected;
-  for (size_t i = 0; i < backup_targets.size() && i < std::size(page_state.backup_selected); ++i) {
-    if (page_state.backup_selected[i]) selected.push_back(backup_targets[i].mount_point);
+  const std::string name = textarea_text(page_state.backup_view.name_input);
+  page_state.backup_name = name;
+  settings->set("tw_backup_name", name.empty() ? kAutoBackupName : name);
+
+  // checkbackuppassword: the two entries have to agree.
+  if (page_state.backup_encrypt) {
+    const std::string password = textarea_text(page_state.backup_view.password_input);
+    const std::string again = textarea_text(page_state.backup_view.password_confirm_input);
+    if (password.empty() || password != again) {
+      settings->set("tw_encrypt_backup", "0");
+      page_state.backup_password_mismatch = true;
+      page_state.backup_active_tab = 1;
+      navigate_to(page_kind::BACKUP, nullptr, page_transition::REPLACE);
+      return;
+    }
+    settings->set("tw_backup_password", password);
+    settings->set("tw_encrypt_backup", "1");
+  } else {
+    settings->set("tw_encrypt_backup", "0");
   }
-  if (selected.empty()) {
+  page_state.backup_password_mismatch = false;
+
+  if (!backup->start()) {
     page_state.backup_confirm.reset();
     return;
   }
-
-  std::string name;
-  if (page_state.backup_view.name_input != nullptr) {
-    const char* text = lv_textarea_get_text(page_state.backup_view.name_input);
-    if (text != nullptr) name = text;
-  }
-  std::string password;
-  if (page_state.backup_view.password_input != nullptr) {
-    const char* text = lv_textarea_get_text(page_state.backup_view.password_input);
-    if (text != nullptr) password = text;
-  }
-  if (!backup->start(selected, name, page_state.backup_compress, page_state.backup_skip_digest,
-                     page_state.backup_encrypt, password)) {
-    page_state.backup_confirm.reset();
-    return;
-  }
+  page_state.backup_name.clear();
+  page_state.backup_encrypt = false;
   navigate_to(page_kind::BACKUP_PROGRESS, nullptr, page_transition::PUSH);
 }
+
+// backup_options: setbootslot A or B, then back to the options.
+static void backup_set_slot(gui2_backend::boot_slot slot) {
+  if (reboot == nullptr) return;
+  page_state.backup_name = textarea_text(page_state.backup_view.name_input);
+  reboot->set_active_slot(slot);
+  page_state.backup_active_tab = 1;
+  navigate_to(page_kind::BACKUP, nullptr, page_transition::REPLACE);
+}
+
+static void backup_slot_a_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED && accept_click(event))
+    backup_set_slot(gui2_backend::boot_slot::A);
+}
+
+static void backup_slot_b_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED && accept_click(event))
+    backup_set_slot(gui2_backend::boot_slot::B);
+}
+
+static void backup_cancel_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (backup != nullptr) backup->cancel();
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
+static bool system_ro_never_show = false;
 
 static void mount_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
@@ -3629,6 +3922,13 @@ static void mount_event_cb(lv_event_t* event) {
 
   const bool wanted = lv_obj_has_state(toggle, LV_STATE_CHECKED);
   if (*index == kMountSystemTarget) {
+    if (wanted && mount->system_needs_warning()) {
+      page_state.system_ro_from_mount = true;
+      system_ro_never_show =
+          settings != nullptr && settings->get_int("tw_never_show_system_ro_page", 0) != 0;
+      navigate_to(page_kind::SYSTEM_READ_ONLY, nullptr, page_transition::PUSH);
+      return;
+    }
     if (!mount->set_system_writable(wanted)) {
       if (wanted)
         lv_obj_remove_state(toggle, LV_STATE_CHECKED);
@@ -3662,6 +3962,16 @@ static void show_backup_page(page_transition transition) {
                                      : backup->targets();
   page_state.backup_target_count =
       std::min(backup_targets.size(), std::size(page_state.backup_selected));
+  // GUIPartitionList::MatchList over tw_backup_list.
+  const std::string selected_list =
+      settings == nullptr ? std::string() : settings->get_string("tw_backup_list", "");
+  for (size_t i = 0; i < page_state.backup_target_count; ++i)
+    page_state.backup_selected[i] =
+        (";" + selected_list).find(";" + backup_targets[i].mount_point + ";") != std::string::npos;
+  if (page_state.backup_name.empty() && settings != nullptr) {
+    const std::string name = settings->get_string("tw_backup_name", kAutoBackupName);
+    if (name != kAutoBackupName) page_state.backup_name = name;
+  }
 
   gui2_pages::action_page_options action_options;
   action_options.content = main_content;
@@ -3682,12 +3992,31 @@ static void show_backup_page(page_transition transition) {
   options.targets = backup_targets.data();
   options.target_count = page_state.backup_target_count;
   options.selected = page_state.backup_selected;
-  options.target_indices = wipe_target_indices;
+  options.target_indices = row_indices(std::size(page_state.wipe_selected));
   options.selection_callback = backup_selection_event_cb;
-  options.compress = page_state.backup_compress;
-  options.skip_digest = page_state.backup_skip_digest;
+  options.select_storage_callback = backup_select_storage_cb;
+  options.refresh_sizes_callback = backup_refresh_sizes_cb;
+  options.press_guard_callback = press_cancel_guard_cb;
+  options.name = page_state.backup_name.c_str();
+  options.name_focus_callback = backup_name_focus_cb;
+  options.append_date_callback = backup_append_date_cb;
+  const auto flag = [](const char* key) {
+    return settings != nullptr && settings->get_int(key, 0) != 0;
+  };
+  options.compress = flag("tw_use_compression");
+  options.skip_digest = flag("tw_skip_digest_generate");
+  options.disable_free_space = flag("tw_disable_free_space");
   options.compress_target = &kBackupCompressTarget;
   options.skip_digest_target = &kBackupSkipDigestTarget;
+  options.disable_free_space_target = &kBackupFreeSpaceTarget;
+  options.password_mismatch = page_state.backup_password_mismatch;
+  static std::string backup_slot_text;
+  if (reboot != nullptr && reboot->capabilities().boot_slots) {
+    backup_slot_text = format_text(strings().backup_slot_label, reboot->active_slot());
+    options.slot_label = backup_slot_text.c_str();
+    options.slot_a_callback = backup_slot_a_cb;
+    options.slot_b_callback = backup_slot_b_cb;
+  }
   options.encrypt = page_state.backup_encrypt;
   options.encrypt_target = &kBackupEncryptTarget;
   options.option_callback = backup_option_event_cb;
@@ -3754,6 +4083,7 @@ static void show_backup_progress_page(page_transition transition) {
   options.initial_text = strings().backing_up;
   options.subtitle = page_summary;
   add_progress_actions(&options);
+  options.running_action = { strings().cancel, backup_cancel_cb };
   page_state.backup_progress = gui2_pages::build_progress_page(options);
   page_state.backup_console_consumed = 0;
   page_state.backup_last_poll_ms = 0;
@@ -3793,7 +4123,9 @@ static void restore_option_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
   lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
   if (toggle == nullptr) return;
-  page_state.restore_check_digest = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+  // "Enable Digest Verification of Backup Files" is tw_skip_digest_check.
+  if (settings != nullptr)
+    settings->set("tw_skip_digest_check", lv_obj_has_state(toggle, LV_STATE_CHECKED) ? "1" : "0");
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
@@ -3832,11 +4164,17 @@ static void restore_confirmed(void*) {
     }
     page_state.restore_wrong_password = false;
   }
-  if (!restore->start(selected, page_state.restore_check_digest)) {
+  if (!restore->start(selected)) {
     page_state.restore_confirm.reset();
     return;
   }
   navigate_to(page_kind::RESTORE_PROGRESS, nullptr, page_transition::PUSH);
+}
+
+static void restore_select_storage_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  page_state.select_storage_back = page_kind::RESTORE_LIST;
+  navigate_to(page_kind::SELECT_STORAGE);
 }
 
 static void show_restore_list_page(page_transition transition) {
@@ -3861,9 +4199,10 @@ static void show_restore_list_page(page_transition transition) {
   options.metrics = &ui;
   options.strings = &strings();
   options.backups = restore_backups.data();
-  options.backup_count = std::min(restore_backups.size(), std::size(wipe_target_indices));
-  options.backup_indices = wipe_target_indices;
+  options.backup_count = restore_backups.size();
+  options.backup_indices = row_indices(restore_backups.size());
   options.select_callback = restore_select_event_cb;
+  options.select_storage_callback = restore_select_storage_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_restore_list_page(options);
 }
@@ -3888,9 +4227,9 @@ static void show_restore_page(page_transition transition) {
   options.targets = restore_targets.data();
   options.target_count = page_state.restore_target_count;
   options.selected = page_state.restore_selected;
-  options.target_indices = wipe_target_indices;
+  options.target_indices = row_indices(std::size(page_state.wipe_selected));
   options.selection_callback = restore_selection_event_cb;
-  options.check_digest = page_state.restore_check_digest;
+  options.check_digest = settings != nullptr && settings->get_int("tw_skip_digest_check", 0) != 0;
   options.check_digest_target = &kRestoreSkipDigestTarget;
   options.wrong_password = page_state.restore_wrong_password;
   options.option_callback = restore_option_event_cb;
@@ -3968,7 +4307,7 @@ static void show_restore_progress_page(page_transition transition) {
 
 // ---- Legacy tools ------------------------------------------------------------
 static std::string format_text(const char* format, const std::string& first,
-                               const std::string& second = std::string()) {
+                               const std::string& second) {
   char buffer[512];
   std::snprintf(buffer, sizeof(buffer), format, first.c_str(), second.c_str());
   return buffer;
@@ -4001,6 +4340,14 @@ static void open_tool_confirm(const tool_request& request) {
 }
 
 static void start_tool_job(gui2_components::swipe_slider* slider) {
+  if (tool_job_request.wipe_start != nullptr) {
+    if (!tool_job_request.wipe_start()) {
+      slider->reset();
+      return;
+    }
+    navigate_to(page_kind::WIPE_PROGRESS, nullptr, page_transition::PUSH);
+    return;
+  }
   if (tools == nullptr ||
       !tools->start(tool_job_request.job, tool_job_request.target, tool_job_request.value)) {
     slider->reset();
@@ -4013,6 +4360,16 @@ static void tool_confirmed(void*) {
   start_tool_job(&page_state.tool_confirm);
 }
 
+static void tool_check_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED || settings == nullptr ||
+      tool_job_request.check_variable == nullptr)
+    return;
+  lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  settings->set(tool_job_request.check_variable,
+                toggle != nullptr && lv_obj_has_state(toggle, LV_STATE_CHECKED) ? "1" : "0");
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+}
+
 static void show_tool_confirm_page(page_transition transition) {
   create_page_scaffold(page_kind::TOOL_CONFIRM, false, tool_job_request.title.c_str(),
                        tool_job_request.summary.c_str(), bottom_swipe_reserved(), transition);
@@ -4023,6 +4380,15 @@ static void show_tool_confirm_page(page_transition transition) {
     options.text = tool_job_request.text.c_str();
     options.tone = tool_job_request.tone;
     gui2_pages::build_confirm_page(options);
+  }
+  if (tool_job_request.check_variable != nullptr) {
+    // GUICheckbox: a variable that does not exist yet starts at 0.
+    if (settings != nullptr && settings->get_string(tool_job_request.check_variable, "").empty())
+      settings->set(tool_job_request.check_variable, "0");
+    gui2_components::create_check_row(
+        main_content, ui, tool_job_request.check_label,
+        settings != nullptr && settings->get_int(tool_job_request.check_variable, 0) != 0,
+        tool_check_event_cb, nullptr);
   }
   create_bottom_swipe(&page_state.tool_confirm, tool_job_request.swipe, tool_confirmed,
                       tool_job_request.tone == gui2_pages::confirm_tone::DANGER);
@@ -4397,6 +4763,27 @@ static void open_advanced_tool(settings_target target) {
     request.tone = gui2_pages::confirm_tone::DANGER;
     request.running = strings().fixing_bootloop;
     request.done = strings().fix_bootloop_complete;
+  } else if (target == settings_target::FIX_CONTEXTS) {
+    request.job = gui2_backend::tool_job::FIX_CONTEXTS;
+    request.title = strings().fix_contexts_title;
+    request.summary = strings().fix_contexts_summary;
+    request.running = strings().fix_contexts_running;
+    request.done = strings().fix_contexts_done;
+  } else if (target == settings_target::REFLASH_TWRP) {
+    // tw_repack_kernel=0 first, as the list item sets it.
+    if (settings != nullptr) settings->set("tw_repack_kernel", "0");
+    request.job = gui2_backend::tool_job::REFLASH_TWRP;
+    request.title = strings().reflash_title;
+    request.summary = strings().reflash_summary;
+    request.tone = gui2_pages::confirm_tone::DANGER;
+    request.running = strings().reflash_running;
+    request.done = strings().reflash_done;
+  } else if (target == settings_target::UNMAP_SUPER) {
+    request.job = gui2_backend::tool_job::UNMAP_SUPER_DEVICES;
+    request.title = strings().unmap_title;
+    request.summary = strings().unmap_summary;
+    request.running = strings().unmap_running;
+    request.done = strings().unmap_done;
   } else if (target == settings_target::MERGE_SNAPSHOTS) {
     request.job = gui2_backend::tool_job::MERGE_SNAPSHOTS;
     request.title = strings().merge_title;
@@ -4422,7 +4809,6 @@ static constexpr int kMountMtpTarget = -4;
 static constexpr int kMountUsbStorageTarget = -5;
 
 static std::vector<gui2_backend::storage_device> storage_devices;
-static constexpr int storage_indices[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 static std::string mount_storage_name;
 static std::string mount_storage_free;
 
@@ -4430,10 +4816,15 @@ static void mount_card_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   const auto* target = static_cast<const int*>(lv_event_get_user_data(event));
   if (target == nullptr) return;
-  if (*target == kMountStorageTarget)
+  if (*target == kMountStorageTarget) {
+    page_state.select_storage_back = page_kind::MOUNT;
     navigate_to(page_kind::SELECT_STORAGE);
-  else if (*target == kMountDecryptTarget)
+  } else if (*target == kMountDecryptTarget) {
+    // The legacy "Decrypt Data" button.
+    if (decrypt != nullptr) decrypt->select_user();
+    page_state.decrypt_failed = false;
     enter_decrypt_flow(page_transition::PUSH);
+  }
 }
 
 static void mount_toggle_event_cb(lv_event_t* event) {
@@ -4446,8 +4837,11 @@ static void mount_toggle_event_cb(lv_event_t* event) {
   bool ok = false;
   if (*target == kMountMtpTarget)
     ok = mount->set_mtp_enabled(wanted);
-  else if (*target == kMountUsbStorageTarget)
-    ok = mount->set_usb_storage_enabled(wanted);
+  else if (*target == kMountUsbStorageTarget && wanted) {
+    mount->set_usb_storage_enabled(true);
+    navigate_to(page_kind::USB_STORAGE, nullptr, page_transition::PUSH);
+    return;
+  }
   // The row only earns its new state once the recovery actually switched.
   if (!ok) {
     if (wanted)
@@ -4458,6 +4852,26 @@ static void mount_toggle_event_cb(lv_event_t* event) {
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
+static void usb_storage_unmount_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (mount != nullptr) mount->set_usb_storage_enabled(false);
+  navigate_to(page_kind::MOUNT, nullptr, page_transition::POP);
+}
+
+static void show_usb_storage_page(page_transition transition) {
+  create_page_scaffold(page_kind::USB_STORAGE, false, strings().mount_usb_storage, "", 0,
+                       transition);
+  gui2_pages::confirm_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.text = strings().usb_storage_mounted;
+  options.tone = gui2_pages::confirm_tone::INFO;
+  gui2_pages::build_confirm_page(options);
+  gui2_components::create_flat_button(main_content, ui, ui.content_width,
+                                      strings().usb_storage_unmount, usb_storage_unmount_cb,
+                                      press_cancel_guard_cb);
+}
+
 static void storage_select_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || mount == nullptr)
     return;
@@ -4465,7 +4879,7 @@ static void storage_select_event_cb(lv_event_t* event) {
   if (index == nullptr || *index < 0 || static_cast<size_t>(*index) >= storage_devices.size())
     return;
   if (!mount->select_storage(storage_devices[*index].path)) return;
-  navigate_to(page_kind::MOUNT, nullptr, page_transition::POP);
+  navigate_to(page_state.select_storage_back, nullptr, page_transition::POP);
 }
 
 static void show_select_storage_page(page_transition transition) {
@@ -4474,8 +4888,6 @@ static void show_select_storage_page(page_transition transition) {
 
   storage_devices =
       mount == nullptr ? std::vector<gui2_backend::storage_device>() : mount->storages();
-  if (storage_devices.size() > std::size(storage_indices))
-    storage_devices.resize(std::size(storage_indices));
 
   gui2_pages::select_storage_page_options options;
   options.content = main_content;
@@ -4483,7 +4895,7 @@ static void show_select_storage_page(page_transition transition) {
   options.strings = &strings();
   options.storages = storage_devices.data();
   options.storage_count = storage_devices.size();
-  options.storage_indices = storage_indices;
+  options.storage_indices = row_indices(storage_devices.size());
   options.select_callback = storage_select_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_select_storage_page(options);
@@ -4495,7 +4907,7 @@ static void show_mount_page(page_transition transition) {
 
   mount_targets = mount == nullptr ? std::vector<gui2_backend::mount_target>() : mount->targets();
   page_state.mount_target_count =
-      std::min(mount_targets.size(), std::size(wipe_target_indices));
+      std::min(mount_targets.size(), std::size(page_state.wipe_selected));
 
   gui2_pages::action_page_options action_options;
   action_options.content = main_content;
@@ -4512,9 +4924,9 @@ static void show_mount_page(page_transition transition) {
   options.strings = &strings();
   options.targets = mount_targets.data();
   options.target_count = page_state.mount_target_count;
-  options.target_indices = wipe_target_indices;
+  options.target_indices = row_indices(std::size(page_state.wipe_selected));
   options.mount_callback = mount_event_cb;
-  options.has_system = mount != nullptr;
+  options.has_system = mount != nullptr && mount->system_toggle_visible();
   options.system_writable = mount != nullptr && mount->system_writable();
   options.system_target = &kMountSystemTarget;
   options.system_callback = mount_event_cb;
@@ -4526,11 +4938,12 @@ static void show_mount_page(page_transition transition) {
   options.storage_callback = mount_card_event_cb;
   options.storage_target = &kMountStorageTarget;
   options.press_guard_callback = press_cancel_guard_cb;
-  options.has_decrypt = decrypt != nullptr && decrypt->is_encrypted();
+  options.has_decrypt = decrypt != nullptr && decrypt->is_encrypted() &&
+                        (settings == nullptr || settings->get_int("tw_is_decrypted", 0) == 0);
   options.decrypt_callback = mount_card_event_cb;
   options.decrypt_target = &kMountDecryptTarget;
   options.mtp_enabled = mount != nullptr && mount->mtp_enabled();
-  options.mtp_target = &kMountMtpTarget;
+  options.mtp_target = mount != nullptr && mount->has_mtp() ? &kMountMtpTarget : nullptr;
   options.has_usb_storage = mount != nullptr && mount->has_usb_storage();
   options.usb_storage_enabled = mount != nullptr && mount->usb_storage_enabled();
   options.usb_storage_target = &kMountUsbStorageTarget;
@@ -4599,38 +5012,27 @@ static void log_option_event_cb(lv_event_t* event) {
   lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
   if (target == nullptr || toggle == nullptr) return;
 
-  const bool checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
-  if (*target == kKernelLogTarget)
-    page_state.include_kernel_log = checked;
-  else
-    page_state.include_logcat = checked;
+  const char* value = lv_obj_has_state(toggle, LV_STATE_CHECKED) ? "1" : "0";
+  if (settings != nullptr)
+    settings->set(*target == kKernelLogTarget ? "tw_include_kernel_log" : "tw_include_logcat",
+                  value);
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
+// The copylog page's button runs copylog on action_page.
 static void export_log_event_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  if (page_state.export_result_label == nullptr) return;
-
-  if (log_export == nullptr) {
-    lv_label_set_text(page_state.export_result_label, strings().export_log_failed);
-    lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
-                                LV_PART_MAIN);
-    lv_obj_set_hidden(page_state.export_result_label, false);
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || tools == nullptr)
     return;
-  }
-
-  const auto result = log_export->export_logs(page_state.include_kernel_log,
-                                              page_state.include_logcat);
-  if (result.success) {
-    lv_label_set_text_fmt(page_state.export_result_label, "%s: %s", strings().export_log_done,
-                          result.path.c_str());
-    lv_obj_set_style_text_color(page_state.export_result_label, ui.secondary_text, LV_PART_MAIN);
-  } else {
-    lv_label_set_text(page_state.export_result_label, strings().export_log_failed);
-    lv_obj_set_style_text_color(page_state.export_result_label, lv_color_hex(0xF0443E),
-                                LV_PART_MAIN);
-  }
-  lv_obj_set_hidden(page_state.export_result_label, false);
+  tool_request request;
+  request.job = gui2_backend::tool_job::COPY_LOG;
+  request.title = strings().export_log_title;
+  request.running = strings().export_log;
+  request.done = strings().export_log_done;
+  request.back = { page_kind::EXPORT_LOG };
+  request.after = { page_kind::EXPORT_LOG };
+  tool_job_request = request;
+  if (!tools->start(request.job, request.target, request.value)) return;
+  navigate_to(page_kind::TOOL_PROGRESS, nullptr, page_transition::PUSH);
 }
 
 static void show_timezone_page(page_transition transition) {
@@ -4783,6 +5185,15 @@ static void show_action_page(const action_definition& definition, page_transitio
     advanced_options.merge_snapshots_target =
         available.merge_snapshots ? &merge_snapshots_target : nullptr;
     advanced_options.disable_avb2_target = available.disable_avb2 ? &disable_avb2_target : nullptr;
+    advanced_options.fix_contexts_target = available.fix_contexts ? &fix_contexts_target : nullptr;
+    advanced_options.install_ramdisk_target =
+        available.install_ramdisk ? &install_ramdisk_target : nullptr;
+    advanced_options.reflash_twrp_target = available.reflash_twrp ? &reflash_twrp_target : nullptr;
+    advanced_options.install_kernel_target =
+        available.install_kernel ? &install_kernel_target : nullptr;
+    advanced_options.unmap_super_target =
+        available.unmap_super_devices ? &unmap_super_target : nullptr;
+    if (!available.sideload) advanced_options.sideload_target = nullptr;
     gui2_pages::build_advanced_page(advanced_options);
   }
 }
@@ -4793,7 +5204,9 @@ static void show_export_log_page(page_transition transition) {
                        "", bottom_reserved, transition);
 
   const bool has_logcat = log_export != nullptr && log_export->has_logcat();
-  if (!has_logcat) page_state.include_logcat = false;
+  // GUICheckbox: a variable that does not exist yet starts at 0.
+  for (const char* key : { "tw_include_kernel_log", "tw_include_logcat" })
+    if (settings != nullptr && settings->get_string(key, "").empty()) settings->set(key, "0");
 
   gui2_pages::export_log_page_options options;
   options.content = main_content;
@@ -4803,13 +5216,13 @@ static void show_export_log_page(page_transition transition) {
   options.press_guard_callback = press_cancel_guard_cb;
   options.kernel_log_target = &kKernelLogTarget;
   options.logcat_target = &kLogcatTarget;
-  options.include_kernel_log = page_state.include_kernel_log;
-  options.include_logcat = page_state.include_logcat;
+  options.include_kernel_log =
+      settings != nullptr && settings->get_int("tw_include_kernel_log", 0) != 0;
+  options.include_logcat = settings != nullptr && settings->get_int("tw_include_logcat", 0) != 0;
   options.has_logcat = has_logcat;
   const auto view = gui2_pages::build_export_log_page(options);
   page_state.kernel_log_card = view.kernel_log_card;
   page_state.logcat_card = view.logcat_card;
-  page_state.export_result_label = view.result_label;
 
   gui2_components::create_apply_button(page_layer, ui, export_log_event_cb, strings().export_log,
                                        press_cancel_guard_cb);
@@ -4958,6 +5371,12 @@ static void build_page(const gui2_pages::page_request& request) {
     case page_kind::STARTUP_SCRIPT:
       show_startup_script_page(request.transition);
       return;
+    case page_kind::CLI_COMMAND:
+      show_cli_command_page(request.transition);
+      return;
+    case page_kind::USB_STORAGE:
+      show_usb_storage_page(request.transition);
+      return;
     case page_kind::SIDELOAD:
       show_sideload_page(request.transition);
       return;
@@ -5038,14 +5457,12 @@ static uint64_t splash_started_ms = 0;
 static bool splash_dismiss_pending = false;
 static gui2_pages::progress_page_view startup_script_view;
 static size_t startup_script_consumed = 0;
-static bool system_ro_never_show = false;
 
 static bool create_pages(void) {
   if (shell_ready) return true;
   create_gui2_shell(lv_screen_active());
   screen_lock.create(ui, "", strings().swipe_to_unlock, screen_lock_unlocked, nullptr);
   screen_actions.initialize(screen, &screen_feedback, screen_lock_before_screen_off, nullptr);
-  screen_actions.set_screenshot_result_callback(screenshot_result_cb);
   shell_ready = true;
   if (splash_view.root != nullptr) lv_obj_move_foreground(splash_view.root);
   return status_controller.start(settings, ui, status_view, refresh_recording_ui);
@@ -5128,6 +5545,7 @@ static void poll_startup(uint64_t now_ms) {
   if (!startup_language_known && status.step > gui2_backend::startup_step::SETTINGS) {
     current_language = language_from_code(settings->get_string("tw_language", "en"));
     pending_language = current_language;
+    if (console != nullptr) console->load_strings(settings->get_string("tw_language", "en"));
     startup_language_known = true;
   }
 
@@ -5135,6 +5553,9 @@ static void poll_startup(uint64_t now_ms) {
     enter_startup_pause(page_kind::STARTUP_SCRIPT);
   else if (status.pause == gui2_backend::startup_pause::SYSTEM_READ_ONLY)
     enter_startup_pause(page_kind::SYSTEM_READ_ONLY);
+  else if (status.pause == gui2_backend::startup_pause::DECRYPT &&
+           !page_state.decrypt_during_startup && !shell_ready)
+    enter_startup_pause(page_kind::DECRYPT);
   poll_startup_script();
 
   // A normal start is over before any of this could be read.
@@ -5149,21 +5570,28 @@ static void poll_startup(uint64_t now_ms) {
 
   startup->finish();
   startup = nullptr;
-  const bool locked = !fastboot_mode && decrypt != nullptr && decrypt->is_encrypted();
-  const bool needs_credential = locked && decrypt->kind() != gui2_backend::lock_kind::DEFAULT;
-  gui2_shell::update_splash(&splash_view,
-                            needs_credential ? strings().startup_unlock
-                                             : strings().startup_finishing,
-                            1.0f);
+  gui2_shell::update_splash(&splash_view, strings().startup_finishing, 1.0f);
 
   const bool from_pause = shell_ready;
   if (!create_pages()) switch_to_legacy = true;
+  if (page_state.decrypt_during_startup) {
+    page_state.decrypt_during_startup = false;
+    page_state.decrypt_refreshing = false;
+    page_state.progress_settled_ms = 0;
+    if (decrypt != nullptr) decrypt->acknowledge();
+  }
   if (fastboot_mode)
     navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::REPLACE);
   else if (from_pause)
     navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
-  if (locked) enter_decrypt_flow(page_transition::NONE);
-  // The unlock keyboard lives on the top layer too.
+  // Data can be locked again by the time startup ends (Mark_Data_Locked after
+  // Setup_Data_Media's unmount), which skips Decrypt_Data's default password.
+  if (!fastboot_mode && decrypt != nullptr && decrypt->is_encrypted()) {
+    decrypt->select_user();
+    if (decrypt->kind() == gui2_backend::lock_kind::DEFAULT)
+      enter_decrypt_flow(page_transition::NONE);
+  }
+  if (background != nullptr) background->start();
   if (splash_view.root != nullptr) lv_obj_move_foreground(splash_view.root);
   splash_dismiss_pending = splash_view.root != nullptr;
 }
@@ -5186,6 +5614,65 @@ static void show_startup_script_page(page_transition transition) {
   poll_startup_script();
 }
 
+// singleaction_page for a command from the "twrp" tool: shown while it runs,
+// then back to the page it came in on.
+static gui2_pages::page_request cli_return_page{ page_kind::HOME, nullptr };
+static gui2_pages::progress_page_view cli_view;
+static size_t cli_consumed = 0;
+
+static void poll_cli_command(void) {
+  if (background == nullptr) return;
+  const bool running = background->command_running();
+  if (running && page_router.current() != page_kind::CLI_COMMAND) {
+    cli_return_page = page_router.current_request();
+    navigate_to(page_kind::CLI_COMMAND, nullptr, page_transition::PUSH);
+  }
+  if (page_router.current() != page_kind::CLI_COMMAND || cli_view.body == nullptr) return;
+  if (console != nullptr) {
+    std::vector<gui2_backend::console_line> lines;
+    cli_consumed = console->fetch(cli_consumed, &lines);
+    if (!lines.empty()) {
+      gui2_pages::append_console_lines(&cli_view.console, ui, lines);
+      gui2_pages::scroll_console_to_end(cli_view.console);
+    }
+  }
+  if (!running) {
+    cli_view = {};
+    navigate_to(cli_return_page.id, cli_return_page.payload, page_transition::POP);
+  }
+}
+
+static void show_cli_command_page(page_transition transition) {
+  create_page_scaffold(page_kind::CLI_COMMAND, false, strings().cli_title, strings().cli_running,
+                       gui2_core::navigation_safe_area(), transition);
+  page_state.console_font_index =
+      settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
+
+  gui2_pages::progress_page_options options;
+  options.content = main_content;
+  options.metrics = &ui;
+  options.strings = &strings();
+  options.console_font = runtime_console_fonts[page_state.console_font_index];
+  options.initial_text = strings().cli_running;
+  options.subtitle = page_summary;
+  cli_view = gui2_pages::build_progress_page(options);
+  cli_consumed = 0;
+  gui2_pages::operation_status progress;
+  progress.total = 0;
+  progress.state = gui2_pages::operation_state::RUNNING;
+  gui2_pages::operation_labels labels;
+  labels.running = strings().cli_running;
+  labels.done = strings().cli_done;
+  labels.failed = strings().cli_done;
+  gui2_pages::update_progress(&cli_view, labels, progress);
+}
+
+// The checkbox is only there while data is not encrypted.
+static bool startup_can_hide_system_ro(void) {
+  if (startup != nullptr) return startup->can_hide_system_read_only();
+  return decrypt == nullptr || !decrypt->is_encrypted();
+}
+
 static void system_ro_never_show_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
   lv_obj_t* toggle = static_cast<lv_obj_t*>(lv_event_get_target(event));
@@ -5194,9 +5681,17 @@ static void system_ro_never_show_cb(lv_event_t* event) {
 }
 
 static void answer_system_read_only(bool keep_read_only) {
+  if (page_state.system_ro_from_mount) {
+    // The page's buttons: its checkbox, mountsystemtoggle, back to %tw_back%.
+    page_state.system_ro_from_mount = false;
+    if (settings != nullptr && startup_can_hide_system_ro())
+      settings->set("tw_never_show_system_ro_page", system_ro_never_show ? "1" : "0");
+    if (mount != nullptr) mount->set_system_writable(!keep_read_only);
+    navigate_to(page_kind::MOUNT, nullptr, page_transition::POP);
+    return;
+  }
   if (startup == nullptr) return;
   startup->answer_system_read_only(keep_read_only, system_ro_never_show);
-  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
 }
 
 static void system_ro_keep_cb(lv_event_t* event) {
@@ -5217,7 +5712,7 @@ static void show_system_read_only_page(page_transition transition) {
   options.content = main_content;
   options.metrics = &ui;
   options.strings = &strings();
-  options.show_never_show = startup != nullptr && startup->can_hide_system_read_only();
+  options.show_never_show = startup_can_hide_system_ro();
   options.never_show = system_ro_never_show;
   options.never_show_callback = system_ro_never_show_cb;
   options.keep_callback = system_ro_keep_cb;
@@ -5278,6 +5773,12 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     splash_dismiss_pending = false;
   }
   if (!shell_ready) return;
+  // The legacy page loop runs whenever a page is up, which during startup is
+  // only while it waits on one.
+  if (background != nullptr &&
+      (startup == nullptr || startup->status().pause != gui2_backend::startup_pause::NONE))
+    background->poll();
+  poll_cli_command();
   advance_wheel_scroll(now_ms);
   screen_feedback.update(now_ms);
   if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 100) {
@@ -5338,20 +5839,62 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
   }
 }
 
+static bool input_locked(void) {
+  return screen_lock.visible() || (screen != nullptr && screen->is_screen_off());
+}
+
 static void gui2_loop_key_action(void*, gui2_key_action key_action) {
   if (!shell_ready) return;
+  if ((key_action == gui2_key_action::BACK || key_action == gui2_key_action::HOME) &&
+      input_locked())
+    return;
   if (key_action == gui2_key_action::SCREENSHOT) {
     close_quick_menu();
     screen_actions.request_screenshot();
   } else if (key_action == gui2_key_action::BACK) {
     navigate_back();
+  } else if (key_action == gui2_key_action::HOME) {
+    // The pages' <touch key="home"/>: back to main, unless a job owns the screen.
+    if (page_is_progress(page_router.current()) ||
+        page_router.current() == page_kind::SYSTEM_READ_ONLY ||
+        page_router.current() == page_kind::DECRYPT ||
+        page_router.current() == page_kind::FASTBOOTD)
+      return;
+    if (fastboot_mode)
+      navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::POP);
+    else
+      navigate_to(page_kind::HOME, nullptr, page_transition::POP);
   } else if (key_action == gui2_key_action::TOGGLE_SCREEN) {
     if (screen_actions.toggle_screen()) screen_lock.show();
   }
 }
 
-static void gui2_loop_activity(void*, bool was_screen_off) {
-  if (was_screen_off && shell_ready) screen_lock.show();
+static bool terminal_has_focus(void) {
+  return terminal != nullptr && page_router.current() == page_kind::CONSOLE &&
+         page_state.console_tab == 1;
+}
+
+// HardwareKeyboard -> PageManager::NotifyCharInput: the terminal, or the field
+// the on-screen keyboard is typing into.
+static void gui2_loop_char(void*, int ch) {
+  if (!shell_ready || input_locked()) return;
+  if (terminal_has_focus()) {
+    terminal->send_char(ch);
+    return;
+  }
+  if (auto* keyboard = gui2_components::keyboard::current()) keyboard->type(ch);
+}
+
+static void gui2_loop_key(void*, int key_code) {
+  if (!shell_ready || input_locked()) return;
+  if (terminal_has_focus()) {
+    terminal->send_key(key_code);
+    return;
+  }
+  auto* keyboard = gui2_components::keyboard::current();
+  if (keyboard == nullptr) return;
+  if (key_code == KEY_LEFT) keyboard->move_cursor(false);
+  if (key_code == KEY_RIGHT) keyboard->move_cursor(true);
 }
 
 static void gui2_loop_wheel(void*, int wheel) {
@@ -5395,10 +5938,13 @@ int gui2_start(const gui2_context* context) {
   startup = context->startup;
   sideload = context->sideload;
   tools = context->tools;
+  background = context->background;
   fastboot_mode = context->fastboot_mode;
   current_language = language_from_code(settings->get_string("tw_language", "en"));
   pending_language = current_language;
   startup_language_known = startup == nullptr;
+  if (startup == nullptr && console != nullptr)
+    console->load_strings(settings->get_string("tw_language", "en"));
   startup_input_rescanned = startup == nullptr;
   startup_failed = false;
   shell_ready = false;
@@ -5420,6 +5966,7 @@ int gui2_start(const gui2_context* context) {
     runtime_console_fonts[i] = graphics.console_fonts[i];
   pointer_indev = graphics.pointer_indev;
   gui2_core::configure_click_guard(pointer_indev, hardware);
+  gui2_input_set_power_key(settings->get_int("tw_power_button", 0));
 
   if (startup != nullptr) {
     gui2_shell::gui_shell_base_options metrics_options;
@@ -5453,8 +6000,9 @@ int gui2_start(const gui2_context* context) {
   callbacks.should_exit = gui2_loop_should_exit;
   callbacks.on_tick = gui2_loop_tick;
   callbacks.on_key_action = gui2_loop_key_action;
-  callbacks.on_activity = gui2_loop_activity;
   callbacks.on_wheel = gui2_loop_wheel;
+  callbacks.on_char = gui2_loop_char;
+  callbacks.on_key = gui2_loop_key;
   callbacks.after_present = gui2_loop_after_present;
   gui2_app::run_gui2_loop(screen, pointer_indev, nullptr, callbacks);
 

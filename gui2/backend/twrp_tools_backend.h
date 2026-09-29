@@ -24,7 +24,7 @@ class twrp_tools_backend final : public tools_backend {
   void acknowledge() override;
 
  private:
-  void run(tool_job job, std::string target, std::string value);
+  void run(tool_job job, std::string value);
   void join_finished_thread();
 
   std::thread worker_;

@@ -63,6 +63,8 @@ extern std::vector<language_struct> Language_List;
 int ConvertStrToColor(std::string str, COLOR* color);
 int gui_forceRender(void);
 int gui_changePage(std::string newPage);
+// Told about every page change; gui2 follows the adb backup's action page.
+void gui_set_page_change_hook(void (*hook)(const std::string& page));
 int gui_changeOverlay(std::string newPage);
 
 class Resource;

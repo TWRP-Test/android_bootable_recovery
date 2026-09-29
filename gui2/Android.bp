@@ -63,6 +63,7 @@ cc_library_static {
         "components/setting_card.cpp",
         "components/section_label.cpp",
         "components/tip_card.cpp",
+        "components/flat_button.cpp",
         "components/slider.cpp",
         "components/swipe_slider.cpp",
         "core/ui_helpers.cpp",

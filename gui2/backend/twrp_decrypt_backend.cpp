@@ -2,9 +2,15 @@
 
 #include <utility>
 
+#include <unistd.h>
+
+#include <cstdlib>
+
 #include "data.hpp"
-#include "twrpinstall/include/set_metadata.h"
 #include "partitions.hpp"
+#include "twcommon.h"
+#include "twrp_operation.h"
+#include "twrpinstall/include/set_metadata.h"
 #include "variables.h"
 
 namespace gui2_backend {
@@ -28,6 +34,13 @@ lock_kind twrp_decrypt_backend::kind() {
     default:
       return lock_kind::DEFAULT;
   }
+}
+
+void twrp_decrypt_backend::select_user() {
+  DataManager::SetValue("tw_crypto_user_id", "0");
+  DataManager::SetValue("tw_crypto_password", "");
+  DataManager::SetValue("tw_password_fail", 0);
+  DataManager::SetValue(TW_CRYPTO_PWTYPE, DataManager::GetStrValue("tw_crypto_pwtype_0"));
 }
 
 void twrp_decrypt_backend::join_finished_thread() {
@@ -60,8 +73,11 @@ bool twrp_decrypt_backend::start_refresh() {
   return true;
 }
 
+// GUIAction::refreshsizes
 void twrp_decrypt_backend::run_refresh() {
+  operation_start("Refreshing Sizes");
   PartitionManager.Update_System_Details();
+  operation_end(0);
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_ = decrypt_state::DONE;
@@ -69,27 +85,65 @@ void twrp_decrypt_backend::run_refresh() {
   running_.store(false);
 }
 
+// GUIAction::decrypt; the password comes from the page instead of the input
+// widget's tw_crypto_password.
 void twrp_decrypt_backend::run(std::string password) {
-  const int result = DataManager::GetIntValue(TW_IS_FBE)
-                         ? PartitionManager.Decrypt_Device(password, 0)
-                         : PartitionManager.Decrypt_Device(password);
-  if (result == 0) {
-    DataManager::SetValue(TW_IS_ENCRYPTED, 0);
-    DataManager::SetBackupFolder();
-    // Startup already ran this while /data was still locked.
-    DataManager::LoadTWRPFolderInfo();
-    // Deliberately no Update_System_Details() here. It walks /data to size a
-    // backup, and it only skips that walk while /data is locked, so running it
-    // the moment the unlock succeeds stalls on the partition that was just
-    // opened. The legacy flow does not do it either; whatever needs the sizes
-    // asks for them itself.
-    if (DataManager::GetIntValue(TW_HAS_DATA_MEDIA) != 0)
-      tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str());
+  int op_status = 0;
+  DataManager::SetValue("tw_crypto_password", password);
+
+  operation_start("Decrypt");
+  {
+    std::string Password;
+    std::string userID;
+    DataManager::GetValue("tw_crypto_password", Password);
+
+    if (DataManager::GetIntValue(TW_IS_FBE)) {  // for FBE
+      DataManager::GetValue("tw_crypto_user_id", userID);
+      if (userID != "") {
+        op_status = PartitionManager.Decrypt_Device(Password, atoi(userID.c_str()));
+        if (userID != "0") {
+          if (op_status != 0) op_status = 1;
+          operation_end(op_status);
+          finish(op_status);
+          return;
+        }
+      } else {
+        LOGINFO("User ID not found\n");
+        op_status = 1;
+      }
+      ::sleep(1);
+    } else {  // for FDE
+      op_status = PartitionManager.Decrypt_Device(Password);
+    }
+
+    if (op_status != 0)
+      op_status = 1;
+    else {
+      DataManager::SetValue(TW_IS_ENCRYPTED, 0);
+      DataManager::SetBackupFolder();
+
+      int has_datamedia;
+
+      // Check for a custom theme and load it if exists
+      DataManager::GetValue(TW_HAS_DATA_MEDIA, has_datamedia);
+      if (has_datamedia != 0) {
+        if (tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str()) != 0) {
+          LOGINFO("Failed to get default contexts and file mode for storage files.\n");
+        } else {
+          LOGINFO("Got default contexts and file mode for storage files.\n");
+        }
+      }
+    }
   }
 
+  operation_end(op_status);
+  finish(op_status);
+}
+
+void twrp_decrypt_backend::finish(int op_status) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    state_ = result == 0 ? decrypt_state::DONE : decrypt_state::FAILED;
+    state_ = op_status == 0 ? decrypt_state::DONE : decrypt_state::FAILED;
   }
   running_.store(false);
 }

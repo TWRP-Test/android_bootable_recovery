@@ -24,7 +24,6 @@ struct export_log_page_view {
   lv_obj_t* body = nullptr;
   lv_obj_t* kernel_log_card = nullptr;
   lv_obj_t* logcat_card = nullptr;
-  lv_obj_t* result_label = nullptr;
 };
 
 export_log_page_view build_export_log_page(const export_log_page_options& options);

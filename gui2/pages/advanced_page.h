@@ -24,6 +24,11 @@ struct advanced_page_options {
   const void* fix_bootloop_target = nullptr;
   const void* merge_snapshots_target = nullptr;
   const void* disable_avb2_target = nullptr;
+  const void* fix_contexts_target = nullptr;
+  const void* install_ramdisk_target = nullptr;
+  const void* reflash_twrp_target = nullptr;
+  const void* install_kernel_target = nullptr;
+  const void* unmap_super_target = nullptr;
 };
 
 void build_advanced_page(const advanced_page_options& options);

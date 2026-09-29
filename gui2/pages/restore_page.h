@@ -23,6 +23,7 @@ struct restore_list_page_options {
   size_t backup_count = 0;
   const int* backup_indices = nullptr;
   lv_event_cb_t select_callback = nullptr;
+  lv_event_cb_t select_storage_callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
 };
 

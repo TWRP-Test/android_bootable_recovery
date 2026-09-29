@@ -1,6 +1,8 @@
 #ifndef GUI2_BACKEND_TWRP_SCREEN_BACKEND_H
 #define GUI2_BACKEND_TWRP_SCREEN_BACKEND_H
 
+#include <time.h>
+
 #include <cstdint>
 #include <string>
 
@@ -36,29 +38,27 @@ class twrp_screen_backend final : public screen_backend {
   void submit_frame(const frame_view& frame, uint64_t monotonic_ms) override;
 
  private:
-  enum class screen_state {
-    ON,
-    DIM,
-    OFF,
-    BLANKED,
-  };
+  // blanktimer's states.
+  enum { kOn = 0, kDim, kOff, kBlanked };
 
   bool has_brightness() const;
-  std::string current_brightness() const;
   std::string make_media_path(const char* directory, const char* prefix,
                               const char* extension) const;
-  capture_result stop_recording_locked();
-  void blank_locked();
-  void unblank_locked();
+
+  // blanktimer, with its lock overlay handed to the before-screen-off callback
+  // and its forced render to the loop, which redraws once the screen is back.
+  void setTimer();
+  void checkForTimeout();
+  std::string getBrightness() const;
+  void resetTimerAndUnblank();
+  void blank();
 
   settings_store* settings_;
   webm_vp8_recorder recorder_;
-  screen_state state_ = screen_state::ON;
-  std::string original_brightness_;
-  uint64_t last_activity_ms_ = 0;
+  int state = kOn;
+  std::string orig_brightness;
+  timespec btimer = {};
   uint64_t last_tick_ms_ = 0;
-  uint64_t dim_start_ms_ = 0;
-  int last_dim_brightness_ = -1;
   void (*before_screen_off_callback_)(void*) = nullptr;
   void* before_screen_off_user_data_ = nullptr;
 };

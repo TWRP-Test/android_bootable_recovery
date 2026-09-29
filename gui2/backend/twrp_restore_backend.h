@@ -25,12 +25,12 @@ class twrp_restore_backend final : public restore_backend {
   bool encrypted() override;
   std::string date() override;
   bool unlock(const std::string& password) override;
-  bool start(const std::vector<std::string>& mount_points, bool check_digest) override;
+  bool start(const std::vector<std::string>& mount_points) override;
   restore_status status() override;
   void acknowledge() override;
 
  private:
-  void run(std::string path);
+  void run();
   void join_finished_thread();
 
   std::mutex mutex_;

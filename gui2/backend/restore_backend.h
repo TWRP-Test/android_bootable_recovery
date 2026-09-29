@@ -52,9 +52,9 @@ class restore_backend {
   // password stops there rather than part way through a restore.
   virtual bool unlock(const std::string& password) = 0;
 
-  // check_digest mirrors tw_skip_digest_check, which despite its name means
-  // "verify" when it is set.
-  virtual bool start(const std::vector<std::string>& mount_points, bool check_digest) = 0;
+  // nandroid restore of the partitions picked, which go into
+  // tw_restore_selected; tw_skip_digest_check is the page's checkbox.
+  virtual bool start(const std::vector<std::string>& mount_points) = 0;
   virtual restore_status status() = 0;
   virtual void acknowledge() = 0;
 };

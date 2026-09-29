@@ -20,6 +20,7 @@ class twrp_decrypt_backend final : public decrypt_backend {
 
   bool is_encrypted() override;
   lock_kind kind() override;
+  void select_user() override;
   bool start(const std::string& password) override;
   bool start_refresh() override;
   decrypt_state state() override;
@@ -28,6 +29,7 @@ class twrp_decrypt_backend final : public decrypt_backend {
  private:
   void run(std::string password);
   void run_refresh();
+  void finish(int op_status);
   void join_finished_thread();
 
   std::mutex mutex_;

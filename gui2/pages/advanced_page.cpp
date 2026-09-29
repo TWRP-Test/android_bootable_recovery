@@ -38,9 +38,14 @@ void build_advanced_page(const advanced_page_options& options) {
   };
   const auto& strings = *options.strings;
   add(options.twrp_folder_target, strings.twrp_folder_title, options.twrp_folder_detail);
-  add(options.fix_bootloop_target, strings.fix_bootloop_title, strings.fix_bootloop_summary);
-  add(options.merge_snapshots_target, strings.merge_title, strings.merge_summary);
   add(options.disable_avb2_target, strings.avb_title, strings.avb_summary);
+  add(options.fix_contexts_target, strings.fix_contexts_title, strings.fix_contexts_summary);
+  add(options.install_ramdisk_target, strings.ramdisk_title, strings.ramdisk_summary);
+  add(options.reflash_twrp_target, strings.reflash_title, strings.reflash_summary);
+  add(options.install_kernel_target, strings.kernel_title, strings.kernel_summary);
+  add(options.fix_bootloop_target, strings.fix_bootloop_title, strings.fix_bootloop_summary);
+  add(options.unmap_super_target, strings.unmap_title, strings.unmap_summary);
+  add(options.merge_snapshots_target, strings.merge_title, strings.merge_summary);
 }
 
 }  // namespace gui2_pages

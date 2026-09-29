@@ -32,6 +32,9 @@ class terminal_backend {
   virtual void send_line(const std::string& text) = 0;
   // Control keys: 0x03 interrupts, 0x04 ends input.
   virtual void send_byte(char byte) = 0;
+  // GUITerminal::NotifyCharInput / NotifyKey for a hardware keyboard.
+  virtual void send_char(int codepoint) = 0;
+  virtual void send_key(int key) = 0;
 };
 
 }  // namespace gui2_backend

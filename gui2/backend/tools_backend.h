@@ -34,6 +34,17 @@ enum class tool_job {
   FIX_RECOVERY_BOOTLOOP,
   MERGE_SNAPSHOTS,
   DISABLE_AVB2,
+  // The backup and restore pages' "Refresh Sizes".
+  REFRESH_SIZES,
+  // A cmd action; value is the command line.
+  COMMAND,
+  // copylog, over tw_include_kernel_log and tw_include_logcat.
+  COPY_LOG,
+  FIX_CONTEXTS,
+  UNMAP_SUPER_DEVICES,
+  REFLASH_TWRP,
+  // repackimage over tw_filename, tw_repack_kernel and tw_repack_backup_first.
+  REPACK_IMAGE,
 };
 
 enum class tool_state {
@@ -49,6 +60,13 @@ struct tool_availability {
   bool fix_recovery_bootloop = false;
   bool merge_snapshots = false;
   bool disable_avb2 = false;
+  bool fix_contexts = false;
+  bool install_ramdisk = false;
+  bool reflash_twrp = false;
+  bool install_kernel = false;
+  bool unmap_super_devices = false;
+  // The sideload button needs data media.
+  bool sideload = false;
 };
 
 class tools_backend {

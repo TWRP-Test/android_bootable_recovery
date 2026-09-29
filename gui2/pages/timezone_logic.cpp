@@ -25,18 +25,4 @@ void refresh_time_choices(lv_obj_t* const* format_cards, bool military_time,
   set_choice_style(dst_card, use_dst, card_color);
 }
 
-std::string build_timezone_value(const char* const* timezone_values,
-                                 const char* const* timezone_offsets, int timezone_index,
-                                 int offset_index, bool use_dst) {
-  std::string value = timezone_values[timezone_index];
-  const size_t separator = value.find(';');
-  const std::string zone = value.substr(0, separator);
-  const std::string dst_zone =
-      separator == std::string::npos ? std::string() : value.substr(separator + 1);
-  value = zone;
-  if (offset_index != 0) value += ":" + std::string(timezone_offsets[offset_index]);
-  if (use_dst) value += dst_zone;
-  return value;
-}
-
 }  // namespace gui2_pages

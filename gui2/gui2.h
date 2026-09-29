@@ -1,6 +1,7 @@
 #ifndef GUI2_H
 #define GUI2_H
 
+#include "backend/background_backend.h"
 #include "backend/console_backend.h"
 #include "backend/backup_backend.h"
 #include "backend/decrypt_backend.h"
@@ -46,6 +47,7 @@ struct gui2_context {
   gui2_backend::install_backend* install = nullptr;
   gui2_backend::sideload_backend* sideload = nullptr;
   gui2_backend::tools_backend* tools = nullptr;
+  gui2_backend::background_backend* background = nullptr;
   // Set: show the splash while startup runs, build the pages after.
   gui2_backend::startup_backend* startup = nullptr;
   // fastbootd: the pages are the fastboot page and reboot, nothing else.

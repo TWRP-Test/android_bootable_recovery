@@ -5,17 +5,12 @@
 
 namespace gui2_backend {
 
-struct log_export_result {
-  bool success = false;
-  std::string path;
-};
-
 class log_export_backend {
  public:
   virtual ~log_export_backend() = default;
 
+  // tw_logcat_exists: the logcat checkbox is only offered with it.
   virtual bool has_logcat() const = 0;
-  virtual log_export_result export_logs(bool include_kernel_log, bool include_logcat) = 0;
 };
 
 }  // namespace gui2_backend

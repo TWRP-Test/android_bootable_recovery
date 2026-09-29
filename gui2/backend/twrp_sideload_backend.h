@@ -19,7 +19,7 @@ class twrp_sideload_backend final : public sideload_backend {
   void acknowledge() override;
 
  private:
-  void run(bool wipe_dalvik, bool wipe_cache);
+  void run();
   void stop_child();
   void join_threads();
 

@@ -23,6 +23,8 @@ class twrp_terminal_backend final : public terminal_backend {
   std::string line(size_t index) override;
   void send_line(const std::string& text) override;
   void send_byte(char byte) override;
+  void send_char(int codepoint) override;
+  void send_key(int key) override;
 };
 
 }  // namespace gui2_backend

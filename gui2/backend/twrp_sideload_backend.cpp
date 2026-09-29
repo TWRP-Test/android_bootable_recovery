@@ -15,6 +15,10 @@
 #include "twcommon.h"
 #include "twinstall/adb_install.h"
 #include "twrp-functions.hpp"
+#include "twrp_operation.h"
+
+// The child's pid, shared with the legacy action code.
+extern pid_t sideload_child_pid;
 
 namespace gui2_backend {
 
@@ -38,29 +42,39 @@ bool twrp_sideload_backend::start(bool wipe_dalvik, bool wipe_cache) {
     state_ = sideload_state::RUNNING;
   }
   cancelled_.store(false);
-  DataManager::SetValue("ui_progress", 0);
-  DataManager::SetValue("ui_portion_size", 0);
-  DataManager::SetValue("ui_portion_start", 0);
+  // The sideload page's two checkboxes.
+  DataManager::SetValue("tw_wipe_dalvik", wipe_dalvik ? 1 : 0);
+  DataManager::SetValue("tw_wipe_cache", wipe_cache ? 1 : 0);
+  DataManager::SetValue("tw_has_cancel", 1);
   running_.store(true);
-  worker_ = std::thread(&twrp_sideload_backend::run, this, wipe_dalvik, wipe_cache);
+  worker_ = std::thread(&twrp_sideload_backend::run, this);
   return true;
 }
 
-// GUIAction::adbsideload, with the two wipe options passed in instead of read
-// from the page's variables.
-void twrp_sideload_backend::run(bool wipe_dalvik, bool wipe_cache) {
+// GUIAction::adbsideload
+void twrp_sideload_backend::run() {
+  operation_start("Sideload");
   gui_msg("start_sideload=Starting ADB sideload feature...");
-  const bool mtp_was_enabled = TWFunc::Toggle_MTP(false);
+  bool mtp_was_enabled = TWFunc::Toggle_MTP(false);
 
+  // wait for the adb connection
   Device::BuiltinAction reboot_action = Device::REBOOT_BOOTLOADER;
   int ret = twrp_sideload("/", &reboot_action);
+  sideload_child_pid = GetMiniAdbdPid();
+  DataManager::SetValue("tw_has_cancel", 0);  // Remove cancel button from gui now that the zip install is going to start
+
   if (ret != 0) {
     if (ret == -2) gui_msg("need_new_adb=You need adb 1.0.32 or newer to sideload to this device.");
+    ret = 1;  // failure
   } else {
-    if (wipe_cache) PartitionManager.Wipe_By_Path("/cache");
+    int wipe_cache = 0;
+    int wipe_dalvik = 0;
+    DataManager::GetValue("tw_wipe_dalvik", wipe_dalvik);
+    if (wipe_cache || DataManager::GetIntValue("tw_wipe_cache")) PartitionManager.Wipe_By_Path("/cache");
     if (wipe_dalvik) PartitionManager.Wipe_Dalvik_Cache();
   }
   TWFunc::Toggle_MTP(mtp_was_enabled);
+  operation_end(ret);
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -72,25 +86,28 @@ void twrp_sideload_backend::run(bool wipe_dalvik, bool wipe_cache) {
   running_.store(false);
 }
 
-// GUIAction::adbsideloadcancel.
+// GUIAction::adbsideloadcancel
 void twrp_sideload_backend::stop_child() {
   struct stat st;
+  DataManager::SetValue("tw_has_cancel", 0);  // Remove cancel button from gui
   gui_msg("cancel_sideload=Cancelling ADB sideload...");
   LOGINFO("Signaling child sideload process to exit.\n");
-  // Calling stat() on this magic filename signals the minadbd subprocess to
-  // shut down.
+  // Calling stat() on this magic filename signals the minadbd
+  // subprocess to shut down.
   stat(FUSE_SIDELOAD_HOST_EXIT_PATHNAME, &st);
-  pid_t child = GetMiniAdbdPid();
-  if (!child) {
+  sideload_child_pid = GetMiniAdbdPid();
+  if (!sideload_child_pid) {
     LOGERR("Unable to get child ID\n");
     return;
   }
   ::sleep(1);
   LOGINFO("Killing child sideload process.\n");
-  kill(child, SIGTERM);
+  kill(sideload_child_pid, SIGTERM);
   int status;
   LOGINFO("Waiting for child sideload process to exit.\n");
-  waitpid(child, &status, 0);
+  waitpid(sideload_child_pid, &status, 0);
+  sideload_child_pid = 0;
+  DataManager::SetValue("tw_page_done", "1");  // For OpenRecoveryScript support
 }
 
 void twrp_sideload_backend::cancel() {

@@ -21,7 +21,7 @@ class twrp_reboot_backend final : public reboot_backend {
   bool is_supported(reboot_target target) const;
   const char* reboot_argument(reboot_target target) const;
 
-  reboot_capabilities capabilities_;
+  mutable reboot_capabilities capabilities_;
 };
 
 }  // namespace gui2_backend

@@ -10,13 +10,7 @@ namespace gui2_backend {
 
 class twrp_file_manager_backend final : public file_manager_backend {
  public:
-  std::vector<file_entry> list(const std::string& path) override;
-  bool remove(const std::string& path) override;
-  bool rename(const std::string& path, const std::string& name) override;
-  bool set_mode(const std::string& path, const std::string& mode) override;
-  bool copy(const std::string& path, const std::string& destination) override;
-  bool move(const std::string& path, const std::string& destination) override;
-  std::string start_directory() override;
+  file_listing list(const std::string& folder, const file_filter& filter) override;
 };
 
 }  // namespace gui2_backend

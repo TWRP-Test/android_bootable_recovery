@@ -93,6 +93,7 @@ struct page_state {
   std::string file_selection;
   bool file_selection_is_folder = false;
   std::string file_clipboard;
+  bool file_clipboard_is_folder = false;
   // The rename/chmod field: which of the two, and the mode to prefill.
   bool file_input_is_mode = false;
   std::string file_selection_mode;
@@ -111,7 +112,8 @@ struct page_state {
   // The confirm page was reached from the file manager, so its way back and
   // "add more" lead there instead of to the install browser.
   bool install_from_file_manager = false;
-  size_t install_target_index = 0;
+  // tw_flash_partition: the partition the image goes to; empty for none yet.
+  std::string install_target_mount;
   bool install_both_slots = false;
   gui2_components::swipe_slider install_confirm;
   gui2_components::swipe_slider system_ro_confirm;
@@ -143,11 +145,8 @@ struct page_state {
   size_t install_console_consumed = 0;
   uint64_t install_last_poll_ms = 0;
   bool file_clipboard_move = false;
-  bool include_kernel_log = false;
-  bool include_logcat = true;
   lv_obj_t* kernel_log_card = nullptr;
   lv_obj_t* logcat_card = nullptr;
-  lv_obj_t* export_result_label = nullptr;
   console_page_view console;
   progress_page_view wipe_progress;
   lv_obj_t* format_data_input = nullptr;
@@ -156,7 +155,7 @@ struct page_state {
   lv_obj_t* format_data_keyboard = nullptr;
   size_t wipe_console_consumed = 0;
   uint64_t wipe_last_poll_ms = 0;
-  bool wipe_selected[24] = {};
+  bool wipe_selected[64] = {};
   size_t wipe_target_count = 0;
   gui2_components::swipe_slider wipe_confirm;
   gui2_components::pattern_lock decrypt_pattern;
@@ -173,15 +172,25 @@ struct page_state {
   uint64_t decrypt_last_poll_ms = 0;
   uint64_t progress_settled_ms = 0;
   bool decrypt_refreshing = false;
+  // The attempt ran during startup's decrypt pause; the page stays until
+  // startup finishes.
+  bool decrypt_during_startup = false;
   gui2_components::tab_bar backup_tabs;
   backup_page_view backup_view;
   gui2_components::swipe_slider backup_confirm;
-  bool backup_selected[24] = {};
+  bool backup_selected[64] = {};
   size_t backup_target_count = 0;
   size_t backup_active_tab = 0;
-  bool backup_compress = true;
-  bool backup_skip_digest = false;
   bool backup_encrypt = false;
+  bool backup_password_mismatch = false;
+  // The name field between visits; tw_backup_name is only written on the swipe.
+  std::string backup_name;
+  // Where Select Storage goes back to.
+  page_id select_storage_back = page_id::MOUNT;
+  // The system_readonly page opened from the mount page rather than startup.
+  bool system_ro_from_mount = false;
+  // The install list picking an image for repackimage (repackselect).
+  bool install_repack = false;
   progress_page_view backup_progress;
   size_t backup_console_consumed = 0;
   uint64_t backup_last_poll_ms = 0;
@@ -189,10 +198,9 @@ struct page_state {
   gui2_components::tab_bar restore_tabs;
   gui2_components::swipe_slider restore_confirm;
   gui2_components::keyboard restore_keyboard_widget;
-  bool restore_selected[24] = {};
+  bool restore_selected[64] = {};
   size_t restore_target_count = 0;
   size_t restore_active_tab = 0;
-  bool restore_check_digest = true;
   bool restore_wrong_password = false;
   std::string restore_path;
   std::string restore_name;

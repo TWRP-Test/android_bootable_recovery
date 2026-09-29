@@ -25,28 +25,39 @@ void run_gui2_loop(gui2_backend::screen_backend* screen, lv_indev_t* pointer_ind
   auto& perf_manager = twrp::TwrpPerfManager::Get();
   perf_manager.Initialize();
 
+  // A screen coming back is redrawn in full, as gui_forceRender does.
+  bool screen_off = screen->is_screen_off();
+  auto sync_screen_off = [&]() {
+    const bool now_off = screen->is_screen_off();
+    if (screen_off && !now_off) lv_obj_invalidate(lv_screen_active());
+    screen_off = now_off;
+    gui2_input_set_screen_off(now_off);
+  };
+
   for (;;) {
     if (callbacks.should_exit != nullptr && callbacks.should_exit(user_data)) break;
     const uint64_t loop_start_ms = monotonic_ms();
     if (callbacks.on_tick != nullptr) callbacks.on_tick(user_data, loop_start_ms);
     perf_manager.Update();
     screen->tick(loop_start_ms);
-    gui2_input_set_screen_off(screen->is_screen_off());
+    sync_screen_off();
     uint32_t delay_ms = lv_timer_handler();
 
     gui2_key_action key_action;
     while (gui2_input_take_key_action(&key_action)) {
       if (callbacks.on_key_action != nullptr) callbacks.on_key_action(user_data, key_action);
     }
+    int typed = 0;
+    while (gui2_input_take_char(&typed)) {
+      if (callbacks.on_char != nullptr) callbacks.on_char(user_data, typed);
+    }
+    while (gui2_input_take_key(&typed)) {
+      if (callbacks.on_key != nullptr) callbacks.on_key(user_data, typed);
+    }
 
     if (gui2_input_take_activity()) {
-      const bool was_screen_off = screen->is_screen_off();
       screen->on_input_activity();
-      if (was_screen_off) {
-        gui2_input_set_screen_off(false);
-        lv_obj_invalidate(lv_screen_active());
-      }
-      if (callbacks.on_activity != nullptr) callbacks.on_activity(user_data, was_screen_off);
+      sync_screen_off();
       perf_manager.NotifyInteraction();
     }
 

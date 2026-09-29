@@ -66,15 +66,9 @@ bool twrp_hardware_settings::set_brightness_percent(int percent) {
          settings_->set_persistent("tw_brightness_pct", std::to_string(percent));
 }
 
-// Asked on first use: the vibrator driver may be a vendor module that is not
-// loaded yet when this object is made.
+// The legacy settings page offers the vibration tab on tw_disable_haptics.
 bool twrp_hardware_settings::has_haptics() const {
-#ifdef TW_NO_HAPTICS
-  return false;
-#else
-  if (haptics_state_ < 0) haptics_state_ = haptics_available() != 0 ? 1 : 0;
-  return haptics_state_ == 1;
-#endif
+  return DataManager::GetIntValue("tw_disable_haptics") == 0;
 }
 
 int twrp_hardware_settings::haptic_duration_ms(haptic_channel channel) const {

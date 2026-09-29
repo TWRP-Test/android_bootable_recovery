@@ -1,6 +1,7 @@
 #ifndef GUI2_APP_GUI2_RUNTIME_H
 #define GUI2_APP_GUI2_RUNTIME_H
 
+#include "backend/background_backend.h"
 #include "backend/console_backend.h"
 #include "backend/file_manager_backend.h"
 #include "backend/install_backend.h"
@@ -39,6 +40,7 @@ struct runtime_state {
   gui2_backend::sideload_backend* sideload = nullptr;
   gui2_backend::startup_backend* startup = nullptr;
   gui2_backend::tools_backend* tools = nullptr;
+  gui2_backend::background_backend* background = nullptr;
   bool switch_to_legacy = false;
   bool reboot_requested = false;
 };
