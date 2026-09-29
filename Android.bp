@@ -589,7 +589,6 @@ cc_binary {
             "libsysutils",
             "libkeystoreinfo",
             "libgatekeeper_aidl",
-            "libgpt_twrp",
         ],
         default: [],
     }) + select(soong_config_variable("twrpGlobalVars", "include_se_omapi"), {

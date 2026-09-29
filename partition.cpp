@@ -76,9 +76,6 @@ extern "C" {
 #ifdef USE_EXT4
 #include <ext4_utils/make_ext4fs.h>
 #endif
-#ifdef TW_INCLUDE_CRYPTO
-#include "gpt/gpt.h"
-#endif
 }
 
 #ifdef HAVE_CAPABILITIES
