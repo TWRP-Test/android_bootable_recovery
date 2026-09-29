@@ -2046,6 +2046,8 @@ void TWPartitionManager::Mark_User_Decrypted(int userID) {
 
 void TWPartitionManager::Mark_Data_Locked() {
 #ifdef TW_INCLUDE_FBE
+    // No DE keys were loaded, so the unmount took none.
+    if (!DataManager::GetIntValue(TW_IS_FBE)) return;
     for (users_struct &user: Users_List) {
         if (!user.isDecrypted) continue;
         // fscrypt_unlock_ce_storage() returns early for a user vold still holds
@@ -2070,7 +2072,7 @@ bool TWPartitionManager::Storage_Name_In_Use(const std::string &Name) {
 
 void TWPartitionManager::Check_Users_Decryption_Status() {
 #ifdef TW_INCLUDE_FBE
-    int all_is_decrypted = 1;
+    int all_is_decrypted = !Users_List.empty();
     for (users_struct &user: Users_List) {
         if (!user.isDecrypted) {
             LOGINFO("User %s is not decrypted.\n", user.userId.c_str());
@@ -2104,11 +2106,18 @@ int TWPartitionManager::Decrypt_Device(std::string Password, int user_id) {
         if (!Mount_By_Path("/data", true)) // /data has to be mounted for FBE
             return -1;
 
+        bool user_found = false;
         bool user_need_decrypt = false;
         for (users_struct &user: Users_List) {
-            if (atoi(user.userId.c_str()) == user_id && !user.isDecrypted) {
-                user_need_decrypt = true;
+            if (atoi(user.userId.c_str()) == user_id) {
+                user_found = true;
+                user_need_decrypt = !user.isDecrypted;
+                break;
             }
+        }
+        if (!user_found) {
+            LOGERR("User %d was not discovered during FBE setup\n", user_id);
+            return -1;
         }
         if (!user_need_decrypt) {
             LOGINFO("User %d does not require decryption\n", user_id);
