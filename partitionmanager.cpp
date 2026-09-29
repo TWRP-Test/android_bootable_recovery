@@ -410,7 +410,7 @@ int TWPartitionManager::Process_Fstab(std::string Fstab_Filename, bool Display_E
         }
 
 #ifdef TW_LOAD_VENDOR_MODULES
-        KernelModuleLoader::Load_Vendor_Modules();
+        KernelModuleLoader::LoadVendorModules();
 #endif
 
         ven = PartitionManager.Find_Partition_By_Path("/vendor");
