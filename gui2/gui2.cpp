@@ -486,6 +486,7 @@ static constexpr settings_target unmap_super_target = settings_target::UNMAP_SUP
 // 0..count-1 for the rows of a list to carry as their user data. A longer list
 // gets a new table; the old ones stay, so rows already built keep theirs.
 static const int* row_indices(size_t count) {
+  if (count == 0) return nullptr;
   static std::vector<std::unique_ptr<int[]>> tables;
   static size_t capacity = 0;
   if (count > capacity) {
@@ -3716,12 +3717,16 @@ static void decrypt_language_event_cb(lv_event_t* event) {
   navigate_to(page_kind::LANGUAGE);
 }
 
-// TWRP spells "no credential, use the default" as this password; see
-// TWPartitionManager::Decrypt_Device("!") on the startup path.
+// TWRP's default password, as Decrypt_Data uses it at startup.
 static constexpr const char* kDefaultCryptoPassword = "!";
 
-// A device with no lock screen has nothing to ask for, so the attempt runs
-// straight away and only the progress is shown.
+// The legacy "Decrypt Data" button's condition.
+static bool data_locked(void) {
+  return decrypt != nullptr && decrypt->is_encrypted() &&
+         (settings == nullptr || settings->get_int("tw_is_decrypted", 0) == 0);
+}
+
+// No lock screen: try the default password straight away.
 static void enter_decrypt_flow(page_transition transition) {
   if (decrypt == nullptr) return;
   if (decrypt->kind() == gui2_backend::lock_kind::DEFAULT &&
@@ -4938,8 +4943,7 @@ static void show_mount_page(page_transition transition) {
   options.storage_callback = mount_card_event_cb;
   options.storage_target = &kMountStorageTarget;
   options.press_guard_callback = press_cancel_guard_cb;
-  options.has_decrypt = decrypt != nullptr && decrypt->is_encrypted() &&
-                        (settings == nullptr || settings->get_int("tw_is_decrypted", 0) == 0);
+  options.has_decrypt = data_locked();
   options.decrypt_callback = mount_card_event_cb;
   options.decrypt_target = &kMountDecryptTarget;
   options.mtp_enabled = mount != nullptr && mount->mtp_enabled();
@@ -5104,7 +5108,7 @@ static void show_home_page(page_transition transition) {
   options.action_count = gui2_pages::action_definition_count();
   options.action_event_callback = action_card_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
-  if (decrypt != nullptr && decrypt->is_encrypted()) {
+  if (data_locked()) {
     options.notice_text = strings().data_encrypted_notice;
     options.notice_event_callback = home_notice_event_cb;
   }
@@ -5584,9 +5588,8 @@ static void poll_startup(uint64_t now_ms) {
     navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::REPLACE);
   else if (from_pause)
     navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
-  // Data can be locked again by the time startup ends (Mark_Data_Locked after
-  // Setup_Data_Media's unmount), which skips Decrypt_Data's default password.
-  if (!fastboot_mode && decrypt != nullptr && decrypt->is_encrypted()) {
+  // Startup can end with Data still locked; try the default password then.
+  if (!fastboot_mode && data_locked()) {
     decrypt->select_user();
     if (decrypt->kind() == gui2_backend::lock_kind::DEFAULT)
       enter_decrypt_flow(page_transition::NONE);
@@ -5992,8 +5995,7 @@ int gui2_start(const gui2_context* context) {
       shutdown_gui2();
       return GUI2_EXIT_INITIALIZATION_FAILED;
     }
-    if (decrypt != nullptr && decrypt->is_encrypted())
-      enter_decrypt_flow(page_transition::NONE);
+    if (data_locked()) enter_decrypt_flow(page_transition::NONE);
   }
 
   gui2_app::loop_callbacks callbacks;
