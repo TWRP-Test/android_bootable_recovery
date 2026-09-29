@@ -20,7 +20,9 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/klog.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
@@ -1041,12 +1043,12 @@ uint64_t TWFunc::GetBlockSizeByIoctl(const char* block_device) {
   } else {
     int ret = 0;
     uint64_t block_device_size;
-    ret = ioctl(fd, BLKGETSIZE, &block_device_size);
+    ret = ioctl(fd, BLKGETSIZE64, &block_device_size);
     close(fd);
     if (ret) {
       LOGINFO("IoctlGetBlockSize: ioctl error: (%s)\n", strerror(errno));
     } else {
-      return block_device_size * 512;
+      return block_device_size;
     }
   }
   return 0;
