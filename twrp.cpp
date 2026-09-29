@@ -51,6 +51,7 @@
 #include "gui2/backend/twrp_screen_backend.h"
 #include "gui2/backend/twrp_settings_store.h"
 #include "gui2/backend/twrp_wipe_backend.h"
+#include "gui2/backend/twrp_background_backend.h"
 
 #include <android-base/properties.h>
 #include "twrpminui/minui.h"
@@ -82,27 +83,11 @@ TWPartitionManager PartitionManager;
 int Log_Offset;
 bool datamedia;
 
-static void DecryptPage(const bool skip_decryption, const bool data_media) {
-  // Offer to decrypt if the device is encrypted
-  if (DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0) {
-    if (skip_decryption) {
-      LOGINFO("Skipping decryption\n");
-      PartitionManager.Update_System_Details(true);
-    }
-  } else if (data_media) {
-    PartitionManager.Update_System_Details(true);
-    if (tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str()) != 0) {
-      LOGINFO("Failed to get default contexts and file mode for storage files.\n");
-    } else {
-      LOGINFO("Got default contexts and file mode for storage files.\n");
-    }
-  }
-}
 
 static void MonitorBattery();
 
-static void startLegacyBatteryMonitor() {
-  static std::thread battery_monitor(MonitorBattery);
+static void startBatteryMonitor() {
+  std::thread(MonitorBattery).detach();
 }
 
 // A small amount of the existing recovery startup path still presents legacy
@@ -156,20 +141,6 @@ static void ProcessFastbootdMode() {
   TWFunc::CheckAndRunScript("/system/bin/postfastboot.sh", "fastboot");
 }
 
-// Only reached when GUI2 could not take over: it owns the unlock flow and shows
-// its own page, so running this during startup would hide it behind the legacy
-// one.
-static void Legacy_Decrypt_Page(void) {
-	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0) return;
-	if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) == 0) return;
-
-	LOGINFO("Is encrypted, do decrypt page first\n");
-	if (DataManager::GetIntValue(TW_IS_FBE))
-		DataManager::SetValue("tw_crypto_user_id", "0");
-	if (gui_startPage("decrypt", 1, 1) != 0) {
-		LOGERR("Failed to start decrypt GUI page.\n");
-	}
-}
 
 static void legacy_fastbootd_page() {
 	if (gui_startPage("fastboot", 1, 1) != 0) {
@@ -185,6 +156,11 @@ class startup_hooks {
 	virtual void step(gui2_backend::startup_step) {}
 	virtual bool legacy_ui() const { return true; }
 	virtual void run_script() { OpenRecoveryScript::Run_OpenRecoveryScript(); }
+	virtual void decrypt() {
+		if (gui_startPage("decrypt", 1, 1) != 0) {
+			LOGERR("Failed to start decrypt GUI page.\n");
+		}
+	}
 	virtual void ask_system_read_only() {
 		DataManager::SetValue("tw_back", "main");
 		if (gui_startPage("system_readonly", 1, 1) != 0) {
@@ -192,6 +168,28 @@ class startup_hooks {
 		}
 	}
 };
+
+static void DecryptPage(bool SkipDecryption, bool datamedia, startup_hooks* hooks) {
+	// Offer to decrypt if the device is encrypted
+	if (DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0) {
+		if (SkipDecryption) {
+			LOGINFO("Skipping decryption\n");
+			PartitionManager.Update_System_Details(true);
+		} else if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) != 0) {
+			LOGINFO("Is encrypted, do decrypt page first\n");
+			if (DataManager::GetIntValue(TW_IS_FBE))
+				DataManager::SetValue("tw_crypto_user_id", "0");
+			hooks->decrypt();
+		}
+	} else if (datamedia) {
+		PartitionManager.Update_System_Details(true);
+		if (tw_get_default_metadata(DataManager::GetCurrentStoragePath().c_str()) != 0) {
+			LOGINFO("Failed to get default contexts and file mode for storage files.\n");
+		} else {
+			LOGINFO("Got default contexts and file mode for storage files.\n");
+		}
+	}
+}
 
 static void ProcessRecoveryMode(const bool skip_decryption, startup_hooks* hooks) {
   hooks->step(gui2_backend::startup_step::SYSTEM);
@@ -294,7 +292,7 @@ static void ProcessRecoveryMode(const bool skip_decryption, startup_hooks* hooks
 #ifdef TW_INCLUDE_CRYPTO
   android::keystore::syncKeystoreDb();
 #endif
-  DecryptPage(skip_decryption, datamedia);
+  DecryptPage(skip_decryption, datamedia, hooks);
 
   // Check for and load custom theme if present
   TWFunc::CheckSelinuxSupport();
@@ -476,6 +474,14 @@ class twrp_startup_backend final : public gui2_backend::startup_backend, public 
 		answered_.notify_all();
 	}
 
+	void finish_decrypt() override {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (status_.pause != gui2_backend::startup_pause::DECRYPT || has_answer_)
+			return;
+		has_answer_ = true;
+		answered_.notify_all();
+	}
+
 	bool can_hide_system_read_only() override {
 		return DataManager::GetIntValue(TW_IS_ENCRYPTED) == 0;
 	}
@@ -501,8 +507,15 @@ class twrp_startup_backend final : public gui2_backend::startup_backend, public 
 		set_pause(gui2_backend::startup_pause::NONE);
 	}
 
-	// The same writes the legacy mountsystemtoggle action makes; system is not
-	// mounted at this point, so there is nothing to remount.
+	void decrypt() override {
+		std::unique_lock<std::mutex> lock(mutex_);
+		status_.pause = gui2_backend::startup_pause::DECRYPT;
+		has_answer_ = false;
+		answered_.wait(lock, [this] { return has_answer_ || abandoned_; });
+		status_.pause = gui2_backend::startup_pause::NONE;
+	}
+
+	// The system_readonly page: its checkbox, then mountsystemtoggle.
 	void ask_system_read_only() override {
 		std::unique_lock<std::mutex> lock(mutex_);
 		status_.pause = gui2_backend::startup_pause::SYSTEM_READ_ONLY;
@@ -516,13 +529,7 @@ class twrp_startup_backend final : public gui2_backend::startup_backend, public 
 		lock.unlock();
 
 		DataManager::SetValue("tw_never_show_system_ro_page", never_show ? 1 : 0);
-		DataManager::SetValue("tw_mount_system_ro", keep ? 1 : 0);
-		TWPartition* sys = PartitionManager.Find_Partition_By_Path(PartitionManager.Get_Android_Root_Path());
-		TWPartition* ven = PartitionManager.Find_Partition_By_Path("/vendor");
-		if (sys)
-			sys->Change_Mount_Read_Only(keep);
-		if (ven)
-			ven->Change_Mount_Read_Only(keep);
+		gui2_backend::mountsystemtoggle(keep ? "1" : "0");
 	}
 
   private:
@@ -698,6 +705,7 @@ int main(int argc, char* argv[]) {
 	gui2_backend::twrp_install_backend install_backend;
 	gui2_backend::twrp_sideload_backend sideload_backend;
 	gui2_backend::twrp_tools_backend tools_backend;
+	gui2_backend::twrp_background_backend background_backend;
 	gui2_context gui2_context_value;
 	gui2_context_value.settings = &settings_store;
 	gui2_context_value.hardware = &hardware_settings;
@@ -718,8 +726,11 @@ int main(int argc, char* argv[]) {
 	gui2_context_value.install = &install_backend;
 	gui2_context_value.sideload = &sideload_backend;
 	gui2_context_value.tools = &tools_backend;
+	gui2_context_value.background = &background_backend;
 	gui2_context_value.startup = &startup_backend;
 	gui2_context_value.fastboot_mode = fastboot;
+	// Started ahead of the GUI, as upstream does.
+	startBatteryMonitor();
 	const int gui2_result = gui2_start(&gui2_context_value);
 	if (gui2_result == GUI2_EXIT_STARTUP_FAILED)
 		return -1;
@@ -749,8 +760,6 @@ int main(int argc, char* argv[]) {
 			Reboot();
 			return 0;
 		}
-		Legacy_Decrypt_Page();
-		startLegacyBatteryMonitor();
 		gui_start();
 	}
 	TWFunc::UpdateIntentFile(startup.GetIntent());

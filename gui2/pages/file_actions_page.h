@@ -15,6 +15,9 @@ struct file_actions_page_options {
   const gui2_core::ui_metrics* metrics = nullptr;
   const gui2_i18n::language_pack* strings = nullptr;
   bool is_folder = false;
+  // tw_include_nano: files get "Edit with nano".
+  bool can_edit = false;
+  const void* edit_target = nullptr;
   lv_event_cb_t callback = nullptr;
   lv_event_cb_t press_guard_callback = nullptr;
   const void* terminal_target = nullptr;

@@ -11,7 +11,6 @@ class twrp_log_export_backend final : public log_export_backend {
   explicit twrp_log_export_backend(settings_store* settings) : settings_(settings) {}
 
   bool has_logcat() const override;
-  log_export_result export_logs(bool include_kernel_log, bool include_logcat) override;
 
  private:
   settings_store* settings_;

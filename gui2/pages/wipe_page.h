@@ -26,6 +26,9 @@ struct wipe_page_options {
   const void* advanced_target = nullptr;
   const void* format_data_target = nullptr;
   bool has_data_media = false;
+  // Encrypted data without data media: the legacy "Wipe Encryption" button.
+  const void* wipe_encryption_target = nullptr;
+  bool show_wipe_encryption = false;
   gui2_components::swipe_slider* confirm = nullptr;
   void (*confirm_callback)(void*) = nullptr;
   void* confirm_user_data = nullptr;

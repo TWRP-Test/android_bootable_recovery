@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "components/check_row.h"
+#include "components/flat_button.h"
 #include "components/section_label.h"
 #include "components/tip_card.h"
 #include "components/setting_card.h"
@@ -53,19 +54,23 @@ void build_restore_list_page(const restore_list_page_options& options) {
   if (options.backup_count == 0 || options.backups == nullptr) {
     gui2_components::create_tip_card(body, metrics, strings.restore_none, lv_color_hex(kAccent),
                                      lv_color_hex(kAccentSurface));
-    return;
+  } else {
+    gui2_components::create_section_label(body, metrics, strings.restore_choose);
+    for (size_t i = 0; i < options.backup_count; ++i) {
+      gui2_components::create_setting_card(
+          body, metrics, options.backups[i].name.c_str(), options.backups[i].detail.c_str(),
+          options.select_callback,
+          options.backup_indices == nullptr
+              ? nullptr
+              : static_cast<const void*>(&options.backup_indices[i]),
+          options.press_guard_callback);
+    }
   }
-
-  gui2_components::create_section_label(body, metrics, strings.restore_choose);
-  for (size_t i = 0; i < options.backup_count; ++i) {
-    gui2_components::create_setting_card(
-        body, metrics, options.backups[i].name.c_str(), options.backups[i].detail.c_str(),
-        options.select_callback,
-        options.backup_indices == nullptr
-            ? nullptr
-            : static_cast<const void*>(&options.backup_indices[i]),
-        options.press_guard_callback);
-  }
+  if (options.select_storage_callback != nullptr)
+    gui2_components::create_flat_button(body, metrics, metrics.content_width,
+                                        strings.select_storage_title,
+                                        options.select_storage_callback,
+                                        options.press_guard_callback);
 }
 
 restore_page_view build_restore_page(const restore_page_options& options) {
@@ -133,7 +138,10 @@ restore_page_view build_restore_page(const restore_page_options& options) {
     lv_obj_set_style_pad_top(view.password_input, input_pad, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(view.password_input, input_pad, LV_PART_MAIN);
     lv_textarea_set_password_mode(view.password_input, true);
-    lv_textarea_set_max_length(view.password_input, 64);
+    // restore_decrypt's <restrict>.
+    lv_textarea_set_max_length(view.password_input, 32);
+    lv_textarea_set_accepted_chars(
+        view.password_input, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_");
     lv_obj_set_scrollbar_mode(view.password_input, LV_SCROLLBAR_MODE_OFF);
     gui2_core::set_surface_style(view.password_input, metrics.card_color);
     lv_obj_set_style_radius(view.password_input, input_height / 4, LV_PART_MAIN);

@@ -20,8 +20,9 @@ class twrp_backup_backend final : public backup_backend {
   twrp_backup_backend& operator=(const twrp_backup_backend&) = delete;
 
   std::vector<backup_target> targets() override;
-  bool start(const std::vector<std::string>& mount_points, const std::string& name, bool compress,
-             bool skip_digest, bool encrypt, const std::string& password) override;
+  std::string generate_name() override;
+  std::string append_date(const std::string& name) override;
+  bool start() override;
   void cancel() override;
   backup_status status() override;
   void acknowledge() override;
@@ -33,7 +34,9 @@ class twrp_backup_backend final : public backup_backend {
   std::mutex mutex_;
   backup_state state_ = backup_state::IDLE;
   std::atomic<bool> running_{ false };
+  std::atomic<bool> cancelling_{ false };
   std::thread worker_;
+  std::thread cancel_worker_;
 };
 
 }  // namespace gui2_backend

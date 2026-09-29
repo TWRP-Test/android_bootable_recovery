@@ -15,9 +15,6 @@ enum class install_state {
 
 struct install_status {
   install_state state = install_state::IDLE;
-  std::string detail;
-  // Set when a zip asked for it; the page offers the wipe afterwards.
-  bool cache_wipe_requested = false;
   // 0-100 as the zip reports it; -1 when it reports nothing.
   int progress = -1;
 };
@@ -35,11 +32,13 @@ class install_backend {
  public:
   virtual ~install_backend() = default;
 
-  // Legacy queues zips and flashes them in order; one at a time is the same
-  // thing with a queue of one.
-  virtual bool start_zip(const std::vector<std::string>& paths, bool verify_digest) = 0;
+  // GUIAction::flash over the zip queue.
+  virtual bool start_zip(const std::vector<std::string>& paths) = 0;
 
   virtual std::vector<image_target> image_targets() = 0;
+  // The partition the legacy file selector picks for an image by its name;
+  // empty when it picks none.
+  virtual std::string image_target_for(const std::string& filename) = 0;
   virtual bool start_image(const std::string& path, const std::string& mount_point,
                            bool both_slots) = 0;
 

@@ -31,10 +31,9 @@ class twrp_wipe_backend final : public wipe_backend {
   wipe_status status() override;
 
  private:
-  enum class job { FACTORY_RESET, FORMAT_DATA, LIST };
-
-  bool start(job kind, std::vector<std::string> mount_points);
-  void run(job kind, std::vector<std::string> mount_points);
+  // Arguments of GUIAction::wipe, run one after the other.
+  bool start(std::vector<std::string> args);
+  void run(std::vector<std::string> args);
   void join_finished_thread();
 
   settings_store* settings_;

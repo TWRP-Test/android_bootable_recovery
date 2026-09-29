@@ -2,6 +2,7 @@
 #define GUI2_BACKEND_DECRYPT_BACKEND_H
 
 #include <string>
+#include <vector>
 
 namespace gui2_backend {
 
@@ -21,14 +22,16 @@ enum class decrypt_state {
   FAILED,
 };
 
-// Decryption of the primary user. Recovery only ever needs user 0 mounted, so
-// the other users the device may carry are deliberately out of scope.
 class decrypt_backend {
  public:
   virtual ~decrypt_backend() = default;
 
   virtual bool is_encrypted() = 0;
   virtual lock_kind kind() = 0;
+
+  // What the legacy "Decrypt Data" button sets before opening the page: user
+  // 0, an empty password, and user 0's lock type.
+  virtual void select_user() = 0;
 
   // Runs the attempt on a worker so the UI keeps drawing. Returns false when a
   // previous attempt is still in flight.

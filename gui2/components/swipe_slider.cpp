@@ -108,7 +108,7 @@ void swipe_slider::finish_drag(bool cancelled) {
     set_progress(0);
     return;
   }
-  gui2_core::vibrate_action();
+  gui2_core::vibrate_slider();
   if (callback_ != nullptr) callback_(user_data_);
 }
 

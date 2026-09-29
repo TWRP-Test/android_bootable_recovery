@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "components/check_row.h"
+#include "components/flat_button.h"
 #include "components/section_label.h"
 #include "pages/wipe_page.h"
 #include "core/ui_helpers.h"
@@ -35,6 +36,36 @@ void hide_keyboard_cb(lv_event_t* event) {
   if (keyboard != nullptr) lv_obj_set_hidden(keyboard, true);
 }
 
+// The <restrict> of the legacy name and password inputs.
+constexpr const char* kNameChars =
+    " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-_.{}[]";
+constexpr const char* kPasswordChars =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_";
+
+lv_obj_t* create_input(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, bool password,
+                       uint32_t max_length, const char* accepted, const char* placeholder) {
+  const int input_height = gui2_core::single_line_card_height() * 11 / 10;
+  const int input_pad = std::max(0, (input_height - metrics.text_font->line_height) / 2);
+  lv_obj_t* input = lv_textarea_create(parent);
+  lv_textarea_set_one_line(input, true);
+  lv_obj_set_size(input, metrics.content_width, input_height);
+  lv_obj_set_style_pad_top(input, input_pad, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(input, input_pad, LV_PART_MAIN);
+  lv_obj_set_style_pad_hor(input, gui2_core::card_inner_padding(), LV_PART_MAIN);
+  if (password) lv_textarea_set_password_mode(input, true);
+  lv_textarea_set_max_length(input, max_length);
+  lv_textarea_set_accepted_chars(input, accepted);
+  if (placeholder != nullptr) lv_textarea_set_placeholder_text(input, placeholder);
+  lv_obj_set_scrollbar_mode(input, LV_SCROLLBAR_MODE_OFF);
+  gui2_core::set_surface_style(input, metrics.card_color);
+  lv_obj_set_style_radius(input, input_height / 4, LV_PART_MAIN);
+  lv_obj_set_style_border_width(input, 0, LV_PART_MAIN);
+  lv_obj_set_style_text_color(input, metrics.primary_text, LV_PART_MAIN);
+  lv_obj_set_style_text_color(input, metrics.secondary_text, LV_PART_TEXTAREA_PLACEHOLDER);
+  lv_obj_set_style_text_font(input, metrics.text_font, LV_PART_MAIN);
+  return input;
+}
+
 }  // namespace
 
 backup_page_view build_backup_page(const backup_page_options& options) {
@@ -63,25 +94,26 @@ backup_page_view build_backup_page(const backup_page_options& options) {
           const_cast<void*>(static_cast<const void*>(&options.target_indices[i])));
     }
   }
+  if (options.select_storage_callback != nullptr || options.refresh_sizes_callback != nullptr)
+    gui2_components::create_flat_button_row(
+        view.partitions_pane, metrics, strings.select_storage_title,
+        options.select_storage_callback, strings.refresh_sizes_button,
+        options.refresh_sizes_callback, options.press_guard_callback);
 
   view.options_pane = create_column(view.body, metrics);
 
   gui2_components::create_section_label(view.options_pane, metrics, strings.backup_name_label);
 
-  const int input_height = gui2_core::single_line_card_height() * 11 / 10;
-  const int input_pad = std::max(0, (input_height - metrics.text_font->line_height) / 2);
-  view.name_input = lv_textarea_create(view.options_pane);
-  lv_textarea_set_one_line(view.name_input, true);
-  lv_obj_set_size(view.name_input, metrics.content_width, input_height);
-  lv_obj_set_style_pad_top(view.name_input, input_pad, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(view.name_input, input_pad, LV_PART_MAIN);
-  lv_textarea_set_max_length(view.name_input, 64);
-  lv_obj_set_scrollbar_mode(view.name_input, LV_SCROLLBAR_MODE_OFF);
-  gui2_core::set_surface_style(view.name_input, metrics.card_color);
-  lv_obj_set_style_radius(view.name_input, input_height / 4, LV_PART_MAIN);
-  lv_obj_set_style_border_width(view.name_input, 0, LV_PART_MAIN);
-  lv_obj_set_style_text_color(view.name_input, metrics.primary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(view.name_input, metrics.text_font, LV_PART_MAIN);
+  view.name_input = create_input(view.options_pane, metrics, false, 64, kNameChars,
+                                 strings.backup_auto_name);
+  if (options.name != nullptr) lv_textarea_set_text(view.name_input, options.name);
+  if (options.name_focus_callback != nullptr)
+    lv_obj_add_event_cb(view.name_input, options.name_focus_callback, LV_EVENT_FOCUSED, nullptr);
+  if (options.append_date_callback != nullptr)
+    gui2_components::create_flat_button(view.options_pane, metrics, metrics.content_width,
+                                        strings.backup_append_date,
+                                        options.append_date_callback,
+                                        options.press_guard_callback);
 
   if (options.compress_target != nullptr) {
     gui2_components::create_check_row(
@@ -95,6 +127,12 @@ backup_page_view build_backup_page(const backup_page_options& options) {
         options.option_callback,
         const_cast<void*>(static_cast<const void*>(options.skip_digest_target)));
   }
+  if (options.disable_free_space_target != nullptr) {
+    gui2_components::create_check_row(
+        view.options_pane, metrics, strings.general_disable_free_space, options.disable_free_space,
+        options.option_callback,
+        const_cast<void*>(static_cast<const void*>(options.disable_free_space_target)));
+  }
   if (options.encrypt_target != nullptr) {
     gui2_components::create_check_row(
         view.options_pane, metrics, strings.backup_encrypt, options.encrypt,
@@ -103,19 +141,22 @@ backup_page_view build_backup_page(const backup_page_options& options) {
 
     view.password_block = create_column(view.options_pane, metrics);
     gui2_components::create_section_label(view.password_block, metrics, strings.backup_password);
-    view.password_input = lv_textarea_create(view.password_block);
-    lv_textarea_set_one_line(view.password_input, true);
-    lv_obj_set_size(view.password_input, metrics.content_width, input_height);
-    lv_obj_set_style_pad_top(view.password_input, input_pad, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(view.password_input, input_pad, LV_PART_MAIN);
-    lv_textarea_set_password_mode(view.password_input, true);
-    lv_textarea_set_max_length(view.password_input, 64);
-    lv_obj_set_scrollbar_mode(view.password_input, LV_SCROLLBAR_MODE_OFF);
-    gui2_core::set_surface_style(view.password_input, metrics.card_color);
-    lv_obj_set_style_radius(view.password_input, input_height / 4, LV_PART_MAIN);
-    lv_obj_set_style_border_width(view.password_input, 0, LV_PART_MAIN);
-    lv_obj_set_style_text_color(view.password_input, metrics.primary_text, LV_PART_MAIN);
-    lv_obj_set_style_text_font(view.password_input, metrics.text_font, LV_PART_MAIN);
+    view.password_input = create_input(view.password_block, metrics, true, 32, kPasswordChars,
+                                       options.password_mismatch
+                                           ? strings.backup_password_mismatch
+                                           : nullptr);
+    gui2_components::create_section_label(view.password_block, metrics,
+                                          strings.backup_password_confirm);
+    view.password_confirm_input =
+        create_input(view.password_block, metrics, true, 32, kPasswordChars, nullptr);
+  }
+
+  if (options.slot_label != nullptr) {
+    gui2_components::create_section_label(view.options_pane, metrics, options.slot_label);
+    gui2_components::create_flat_button_row(view.options_pane, metrics, strings.backup_slot_a,
+                                            options.slot_a_callback, strings.backup_slot_b,
+                                            options.slot_b_callback,
+                                            options.press_guard_callback);
   }
 
   if (options.keyboard != nullptr) {
@@ -135,6 +176,7 @@ backup_page_view build_backup_page(const backup_page_options& options) {
                                           metrics, gui2_components::keyboard_layout::LETTERS));
       options.keyboard->bind(view.name_input);
       options.keyboard->bind(view.password_input);
+      options.keyboard->bind(view.password_confirm_input);
     }
   }
 

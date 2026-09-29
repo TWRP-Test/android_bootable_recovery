@@ -36,9 +36,6 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
         view.body, metrics, strings.include_logcat, options.include_logcat,
         options.option_event_callback, const_cast<void*>(options.logcat_target));
   }
-
-  view.result_label = gui2_components::create_section_label(view.body, metrics, "");
-  lv_obj_set_hidden(view.result_label, true);
   return view;
 }
 

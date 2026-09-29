@@ -29,7 +29,9 @@ void build_file_actions_page(const file_actions_page_options& options) {
                                          options.press_guard_callback);
   };
 
-  card(strings.fm_open_terminal, options.terminal_target);
+  // filemanageroptions: nano for files, the terminal for folders.
+  if (!options.is_folder && options.can_edit) card(strings.fm_edit, options.edit_target);
+  if (options.is_folder) card(strings.fm_open_terminal, options.terminal_target);
   card(strings.fm_copy, options.copy_target);
   card(strings.fm_move, options.move_target);
   card(strings.fm_chmod755, options.chmod755_target);

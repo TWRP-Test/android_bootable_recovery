@@ -47,4 +47,12 @@ void twrp_terminal_backend::send_byte(char byte) {
   twrp_terminal::input_char(static_cast<unsigned char>(byte));
 }
 
+void twrp_terminal_backend::send_char(int codepoint) {
+  twrp_terminal::input_char(codepoint);
+}
+
+void twrp_terminal_backend::send_key(int key) {
+  twrp_terminal::input_key(key);
+}
+
 }  // namespace gui2_backend

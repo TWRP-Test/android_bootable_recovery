@@ -62,8 +62,9 @@ bool accept_click(lv_event_t* event) {
   return result;
 }
 
-void vibrate_action() {
-  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::ACTION);
+// GUISlider: a completed swipe vibrates tw_button_vibrate.
+void vibrate_slider() {
+  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
 void clear_click_guard() {

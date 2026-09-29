@@ -129,8 +129,7 @@ void update_status_bar(const status_bar_view& view, const gui2_core::ui_metrics&
   }
 
   char battery_text[16];
-  std::snprintf(battery_text, sizeof(battery_text), "%d%%",
-                std::clamp(snapshot.battery_percentage, 0, 100));
+  std::snprintf(battery_text, sizeof(battery_text), "%d%%", snapshot.battery_percentage);
   lv_label_set_text(view.battery_value, battery_text);
   lv_image_set_src(view.battery_icon,
                    gui2_svg_get_raster(

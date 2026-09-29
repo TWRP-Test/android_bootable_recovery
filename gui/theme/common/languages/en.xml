@@ -691,6 +691,10 @@
 		<string name="min_queue">Minimum zip queue reached!</string>
 		<string name="screenshot_saved">Screenshot was saved to {1}</string>
 		<string name="screenshot_err">Failed to take a screenshot!</string>
+		<string name="screenrecord_started">Screen recording started: {1}</string>
+		<string name="screenrecord_start_err">Unable to start screen recording!</string>
+		<string name="screenrecord_saved">Screen recording was saved to {1}</string>
+		<string name="screenrecord_save_err">Failed to save the screen recording!</string>
 		<string name="zip_wipe_cache">One or more zip requested a cache wipe -- Wiping cache now.</string>
 		<string name="and_sec_wipe_err">Unable to wipe android secure</string>
 		<string name="dalvik_wipe_err">Failed to wipe dalvik</string>

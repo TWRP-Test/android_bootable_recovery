@@ -557,7 +557,36 @@ void keyboard::handle(const key& definition) {
   }
 }
 
+namespace {
+keyboard* current_keyboard = nullptr;
+}  // namespace
+
+keyboard* keyboard::current() {
+  return current_keyboard != nullptr && current_keyboard->visible() ? current_keyboard : nullptr;
+}
+
+void keyboard::type(int ch) {
+  key definition;
+  if (ch == 8) {
+    definition.kind = key_kind::BACKSPACE;
+  } else if (ch == 13) {
+    definition.kind = key_kind::ENTER;
+  } else if (ch >= 32) {
+    definition.text = std::string(1, static_cast<char>(ch));
+  } else {
+    return;
+  }
+  handle(definition);
+}
+
+void keyboard::move_cursor(bool right) {
+  key definition;
+  definition.kind = right ? key_kind::CURSOR_RIGHT : key_kind::CURSOR_LEFT;
+  handle(definition);
+}
+
 void keyboard::detach() {
+  if (current_keyboard == this) current_keyboard = nullptr;
   // The timer outlives the page otherwise, and its field is already gone.
   blink_stop();
   root_ = nullptr;
@@ -582,6 +611,7 @@ void keyboard::hidden_anim_done(lv_anim_t* anim) {
 
 void keyboard::show() {
   if (root_ == nullptr) return;
+  current_keyboard = this;
   // The page sets the keyboard's position after create(); its y only leaves
   // that resting place while a slide is running.
   if (lv_anim_get(root_, slide_y_cb) == nullptr) resting_y_ = lv_obj_get_y(root_);
@@ -628,6 +658,7 @@ void keyboard::hide() {
 }
 
 void keyboard::dismiss() {
+  if (current_keyboard == this) current_keyboard = nullptr;
   blink_stop();
   if (root_ != nullptr) {
     lv_anim_delete(root_, slide_y_cb);

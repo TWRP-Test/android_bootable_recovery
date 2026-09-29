@@ -192,7 +192,9 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
                            lv_event_cb_t callback, const void* target,
                            lv_event_cb_t long_press = nullptr) {
     lv_obj_t* row = lv_obj_create(view.list);
-    lv_obj_set_size(row, metrics.content_width, row_height);
+    // A name longer than a line wraps, and the row grows to fit it.
+    lv_obj_set_size(row, metrics.content_width, LV_SIZE_CONTENT);
+    lv_obj_set_style_min_height(row, row_height, LV_PART_MAIN);
     lv_obj_set_clickable(row, true);
     gui2_core::set_surface_style(row, metrics.card_color, LV_OPA_TRANSP);
     lv_obj_set_style_bg_color(row, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 24),
@@ -201,7 +203,9 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
     lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(row, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(row, gui2_core::card_inner_padding() / 3, LV_PART_MAIN);
     lv_obj_set_style_pad_left(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
+    lv_obj_set_style_pad_right(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
     lv_obj_set_style_pad_column(row, gui2_core::card_inner_padding() * 3 / 4, LV_PART_MAIN);
     lv_obj_set_layout(row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
@@ -234,7 +238,8 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
 
     lv_obj_t* name = lv_label_create(row);
     lv_label_set_text(name, text == nullptr ? "" : text);
-    lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+    lv_label_set_long_mode(name, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(name, 1);
     lv_obj_set_flex_grow(name, 1);
     lv_obj_set_style_text_color(name, metrics.primary_text, LV_PART_MAIN);
     lv_obj_set_style_text_font(name, metrics.text_font, LV_PART_MAIN);
@@ -253,7 +258,6 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
                 options.entry_indices == nullptr ? nullptr : &options.entry_indices[i],
                 options.entry_indices == nullptr ? nullptr : options.entry_long_press_callback);
     if (options.show_sizes && !entry.directory) {
-      lv_obj_set_style_pad_right(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
       lv_obj_t* size = lv_label_create(row);
       lv_label_set_text(size, human_size(entry.size).c_str());
       lv_obj_set_style_text_color(size, metrics.secondary_text, LV_PART_MAIN);

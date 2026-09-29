@@ -26,13 +26,32 @@ struct backup_page_options {
   const int* target_indices = nullptr;
   lv_event_cb_t selection_callback = nullptr;
 
+  // Under the list: "Select Storage" and "Refresh Sizes".
+  lv_event_cb_t select_storage_callback = nullptr;
+  lv_event_cb_t refresh_sizes_callback = nullptr;
+  lv_event_cb_t press_guard_callback = nullptr;
+
+  // tw_backup_name; empty shows the "(Auto Generate)" placeholder.
+  const char* name = nullptr;
+  // The name field got focus, or "Append date" was tapped.
+  lv_event_cb_t name_focus_callback = nullptr;
+  lv_event_cb_t append_date_callback = nullptr;
+
   bool compress = false;
   bool skip_digest = false;
+  bool disable_free_space = false;
   bool encrypt = false;
   const int* compress_target = nullptr;
   const int* skip_digest_target = nullptr;
+  const int* disable_free_space_target = nullptr;
   const int* encrypt_target = nullptr;
   lv_event_cb_t option_callback = nullptr;
+  // The password pages' "Passwords do not match".
+  bool password_mismatch = false;
+  // backup_options' two slot buttons (tw_has_boot_slots); null label hides them.
+  const char* slot_label = nullptr;
+  lv_event_cb_t slot_a_callback = nullptr;
+  lv_event_cb_t slot_b_callback = nullptr;
   gui2_components::keyboard* keyboard = nullptr;
   gui2_components::keyboard_callback key_callback = nullptr;
   void* keyboard_user_data = nullptr;
@@ -54,6 +73,7 @@ struct backup_page_view {
   lv_obj_t* name_input = nullptr;
   lv_obj_t* password_block = nullptr;
   lv_obj_t* password_input = nullptr;
+  lv_obj_t* password_confirm_input = nullptr;
   lv_obj_t* keyboard = nullptr;
   lv_obj_t* slider_track = nullptr;
 };

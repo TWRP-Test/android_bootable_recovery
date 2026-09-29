@@ -29,11 +29,13 @@ class backup_backend {
   virtual ~backup_backend() = default;
 
   virtual std::vector<backup_target> targets() = 0;
+  // The name page's two helpers; both leave the result in tw_backup_name.
+  virtual std::string generate_name() = 0;
+  virtual std::string append_date(const std::string& name) = 0;
 
-  // An empty name lets TWRP generate one from the current date.
-  virtual bool start(const std::vector<std::string>& mount_points, const std::string& name,
-                     bool compress, bool skip_digest, bool encrypt,
-                     const std::string& password) = 0;
+  // nandroid backup, over what the pages left in tw_backup_list,
+  // tw_backup_name, the option variables and tw_encrypt_backup.
+  virtual bool start() = 0;
   virtual void cancel() = 0;
   virtual backup_status status() = 0;
   virtual void acknowledge() = 0;

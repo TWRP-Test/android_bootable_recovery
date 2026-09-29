@@ -64,6 +64,13 @@ void build_wipe_page(const wipe_page_options& options) {
                                          options.format_data_target,
                                          options.press_guard_callback);
   }
+  if (options.show_wipe_encryption) {
+    gui2_components::create_setting_card(options.content, metrics, strings.wipe_encryption_title,
+                                         strings.wipe_encryption_summary,
+                                         options.option_event_callback,
+                                         options.wipe_encryption_target,
+                                         options.press_guard_callback);
+  }
 
   if (options.page_layer == nullptr) return;
 

@@ -35,7 +35,7 @@ class wipe_backend {
 
   virtual bool start_factory_reset() = 0;
   virtual bool start_format_data() = 0;
-  // What the legacy flash_done button does: dalvik first, then cache.
+  // The legacy flash_done button: cache, then dalvik; dalvik alone on A/B.
   virtual bool start_cache_dalvik() = 0;
   virtual bool start_wipe(const std::vector<std::string>& mount_points) = 0;
 

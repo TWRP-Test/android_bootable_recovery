@@ -23,6 +23,9 @@ enum class startup_pause {
   SCRIPT,
   // Waiting for answer_system_read_only().
   SYSTEM_READ_ONLY,
+  // Waiting for finish_decrypt(): the unlock, or giving up on it, comes before
+  // the rest of startup, as the legacy decrypt page does.
+  DECRYPT,
 };
 
 struct startup_status {
@@ -40,6 +43,7 @@ class startup_backend {
   virtual void finish() = 0;
 
   virtual void answer_system_read_only(bool keep_read_only, bool never_show_again) = 0;
+  virtual void finish_decrypt() = 0;
   virtual bool can_hide_system_read_only() = 0;
 
   virtual std::string device_label() = 0;

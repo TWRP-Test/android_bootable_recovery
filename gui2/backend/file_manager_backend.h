@@ -17,25 +17,27 @@ struct file_entry {
   int64_t modified = 0;
 };
 
-// The legacy file manager's actions, minus the ones that only make sense with
-// its own confirmation pages.
+// A legacy <fileselector>'s <filter>: which files it lists besides folders.
+struct file_filter {
+  // ';' separated endings, matched as written; empty lists every file.
+  std::string extn;
+  // ';' separated beginnings a file may match instead.
+  std::string prfx;
+};
+
+// GUIFileSelector::GetFileList: folders and files, each sorted by
+// tw_gui_sort_order. Not opened: the legacy list steps up to the parent.
+struct file_listing {
+  std::vector<file_entry> folders;
+  std::vector<file_entry> files;
+  bool opened = true;
+};
+
 class file_manager_backend {
  public:
   virtual ~file_manager_backend() = default;
 
-  // Directories first, then files, both by name. Unreadable directories come
-  // back empty rather than as an error: recovery mounts come and go.
-  virtual std::vector<file_entry> list(const std::string& path) = 0;
-
-  virtual bool remove(const std::string& path) = 0;
-  virtual bool rename(const std::string& path, const std::string& name) = 0;
-  virtual bool set_mode(const std::string& path, const std::string& mode) = 0;
-  // Both take a destination directory, the way the legacy pages do.
-  virtual bool copy(const std::string& path, const std::string& destination) = 0;
-  virtual bool move(const std::string& path, const std::string& destination) = 0;
-
-  // Where to start. The current storage, or / when there is none.
-  virtual std::string start_directory() = 0;
+  virtual file_listing list(const std::string& folder, const file_filter& filter) = 0;
 };
 
 }  // namespace gui2_backend

@@ -126,6 +126,7 @@ enum class BackupMethod {
 
 namespace gui2_backend {
 class twrp_tools_backend;
+class twrp_mount_backend;
 }
 
 // Partition class
@@ -356,6 +357,7 @@ private:
     friend class GUIPartitionList;
     friend class GUIAction;
     friend class gui2_backend::twrp_tools_backend;
+    friend class gui2_backend::twrp_mount_backend;
     friend class PageManager;
 };
 
