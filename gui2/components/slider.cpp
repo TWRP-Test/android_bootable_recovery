@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 
+#include "core/ui_metrics.h"
 #include "src/core/lv_obj_class_private.h"
 #include "src/core/lv_obj_private.h"
 
@@ -143,7 +144,7 @@ static void draw_slider(slider_instance* slider, lv_event_t* event) {
   fill_area.x2 = fill_area.x1 + fill_width - 1;
   draw_rect(layer, &slider->object, LV_PART_INDICATOR, fill_area, slider->foreground, part_opa);
 
-  if (active) draw_rect(layer, &slider->object, LV_PART_MAIN, area, lv_color_black(), 11);
+  if (active) draw_rect(layer, &slider->object, LV_PART_MAIN, area, gui2_core::ui.scrim, 11);
 
   lv_area_t knob_area;
   knob_area.x1 = area.x1 + center - knob_size / 2;
@@ -158,8 +159,8 @@ static void slider_constructor(const lv_obj_class_t* class_p, lv_obj_t* object) 
   slider->minimum = 0;
   slider->maximum = 100;
   slider->value = 0;
-  slider->foreground = lv_color_hex(0x347FF1);
-  slider->thumb = lv_color_hex(0xFFFFFF);
+  slider->foreground = gui2_core::ui.accent;
+  slider->thumb = gui2_core::ui.on_accent;
   slider->dragging = false;
   slider->enabled = true;
   slider->grab_offset = 0;

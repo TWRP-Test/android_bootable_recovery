@@ -8,10 +8,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-constexpr uint32_t kDone = 0x18C935;
-constexpr uint32_t kFailed = 0xF0443E;
-
 void set_x_cb(void* target, int32_t value) {
   lv_obj_set_x(static_cast<lv_obj_t*>(target), value);
 }
@@ -101,10 +97,9 @@ static lv_obj_t* create_action_button(lv_obj_t* parent, const gui2_core::ui_metr
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
-  const lv_color_t face = primary ? lv_color_hex(kAccent) : metrics.card_color;
+  const lv_color_t face = primary ? metrics.accent : metrics.card_color;
   gui2_core::set_surface_style(button, face);
-  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), face, 18),
-                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(button, gui2_core::tinted(face, 18), LV_STATE_PRESSED);
   gui2_core::disable_scrolling(button);
   if (press_guard != nullptr) lv_obj_add_event_cb(button, press_guard, LV_EVENT_ALL, nullptr);
   if (action.callback != nullptr)
@@ -112,7 +107,7 @@ static lv_obj_t* create_action_button(lv_obj_t* parent, const gui2_core::ui_metr
 
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, action.label == nullptr ? "" : action.label);
-  lv_obj_set_style_text_color(label, primary ? lv_color_hex(0xFFFFFF) : metrics.primary_text,
+  lv_obj_set_style_text_color(label, primary ? metrics.on_accent : metrics.primary_text,
                               LV_PART_MAIN);
   lv_obj_set_style_text_font(label, metrics.text_font, LV_PART_MAIN);
   lv_obj_center(label);
@@ -145,7 +140,7 @@ static void build_actions(progress_page_view* view,
     view->running_action =
         create_action_button(options.page_layer, metrics, options.running_action, false,
                              metrics.content_width, height, options.press_guard_callback);
-    lv_obj_set_pos(view->running_action, metrics.outer_margin,
+    lv_obj_set_pos(view->running_action, metrics.content_left,
                    metrics.height - metrics.status_height - metrics.outer_margin - height);
   }
   if (!has_actions(options)) return;
@@ -157,7 +152,7 @@ static void build_actions(progress_page_view* view,
 
   view->actions = lv_obj_create(options.page_layer);
   lv_obj_set_size(view->actions, metrics.content_width, height);
-  lv_obj_set_pos(view->actions, metrics.outer_margin,
+  lv_obj_set_pos(view->actions, metrics.content_left,
                  metrics.height - metrics.status_height - metrics.outer_margin - height);
   gui2_core::set_surface_style(view->actions, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(view->actions, 0, LV_PART_MAIN);
@@ -187,7 +182,7 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   const int border = std::max(2, gui2_core::ui_px(4));
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -221,12 +216,12 @@ progress_page_view build_progress_page(const progress_page_options& options) {
 
   view.bar = lv_obj_create(view.body);
   lv_obj_set_size(view.bar, metrics.content_width, bar_height);
-  view.track_color = lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 38);
+  view.track_color = gui2_core::tinted(metrics.card_color, 38);
   gui2_core::set_surface_style(view.bar, view.track_color);
   lv_obj_set_style_radius(view.bar, bar_height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.bar, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(view.bar, border, LV_PART_MAIN);
-  lv_obj_set_style_border_color(view.bar, lv_color_hex(kAccent), LV_PART_MAIN);
+  lv_obj_set_style_border_color(view.bar, metrics.accent, LV_PART_MAIN);
   lv_obj_set_style_border_opa(view.bar, LV_OPA_COVER, LV_PART_MAIN);
   // Without this the square-ended fill draws past the rounded cap.
   lv_obj_set_style_clip_corner(view.bar, true, LV_PART_MAIN);
@@ -239,7 +234,7 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   // something real to draw.
   lv_obj_set_hidden(view.bar_fill, true);
   lv_obj_set_pos(view.bar_fill, 0, 0);
-  gui2_core::set_surface_style(view.bar_fill, lv_color_hex(kAccent));
+  gui2_core::set_surface_style(view.bar_fill, metrics.accent);
   lv_obj_set_style_radius(view.bar_fill, bar_height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.bar_fill, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.bar_fill);
@@ -275,7 +270,7 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
 
   if (status.state == operation_state::RUNNING) {
     lv_obj_set_style_bg_color(view->bar, view->track_color, LV_PART_MAIN);
-    lv_obj_set_style_border_color(view->bar, lv_color_hex(kAccent), LV_PART_MAIN);
+    lv_obj_set_style_border_color(view->bar, gui2_core::ui.accent, LV_PART_MAIN);
   }
 
   if (status.state == operation_state::RUNNING && status.total <= 0) {
@@ -293,7 +288,7 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
   // antialiased arcs show up as a hairline along both caps.
   if (status.state != operation_state::RUNNING) {
     const lv_color_t color =
-        lv_color_hex(status.state == operation_state::FAILED ? kFailed : kDone);
+        status.state == operation_state::FAILED ? gui2_core::ui.danger : gui2_core::ui.success;
     lv_obj_set_style_bg_color(view->bar, color, LV_PART_MAIN);
     lv_obj_set_style_bg_color(view->bar_fill, color, LV_PART_MAIN);
     lv_obj_set_style_border_color(view->bar, color, LV_PART_MAIN);

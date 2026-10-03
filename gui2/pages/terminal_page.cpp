@@ -8,9 +8,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-constexpr uint32_t kDanger = 0xF0443E;
-
 int command_row_height(const gui2_core::ui_metrics& metrics) {
   return gui2_core::single_line_card_height() * 11 / 10;
 }
@@ -53,7 +50,7 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   const int row_height = command_row_height(metrics);
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, options.top_offset);
+  lv_obj_set_pos(view.body, metrics.content_left, options.top_offset);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -90,7 +87,7 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
 
   view.prompt = lv_label_create(row);
   lv_label_set_text(view.prompt, options.prompt == nullptr ? "#" : options.prompt);
-  lv_obj_set_style_text_color(view.prompt, lv_color_hex(kAccent), LV_PART_MAIN);
+  lv_obj_set_style_text_color(view.prompt, gui2_core::ui.accent, LV_PART_MAIN);
   lv_obj_set_style_text_font(view.prompt, options.console_font, LV_PART_MAIN);
 
   const int interrupt_width = row_height * 9 / 10;
@@ -114,7 +111,7 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   lv_obj_t* interrupt = lv_obj_create(row);
   lv_obj_set_size(interrupt, interrupt_width, interrupt_width);
   lv_obj_set_clickable(interrupt, true);
-  gui2_core::set_surface_style(interrupt, lv_color_hex(kDanger));
+  gui2_core::set_surface_style(interrupt, gui2_core::ui.danger);
   lv_obj_set_style_radius(interrupt, interrupt_width / 3, LV_PART_MAIN);
   lv_obj_set_style_border_width(interrupt, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(interrupt, 0, LV_PART_MAIN);
@@ -125,7 +122,7 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
     lv_obj_add_event_cb(interrupt, options.interrupt_callback, LV_EVENT_CLICKED, nullptr);
   lv_obj_t* interrupt_label = lv_label_create(interrupt);
   lv_label_set_text(interrupt_label, "^C");
-  lv_obj_set_style_text_color(interrupt_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_color(interrupt_label, gui2_core::ui.on_accent, LV_PART_MAIN);
   lv_obj_set_style_text_font(interrupt_label, options.console_font, LV_PART_MAIN);
   lv_obj_center(interrupt_label);
 

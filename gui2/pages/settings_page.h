@@ -16,6 +16,8 @@ struct settings_page_options {
   const void* general_target = nullptr;
   const void* keyboard_target = nullptr;
   const void* language_target = nullptr;
+  const void* appearance_target = nullptr;
+  const char* appearance_detail = nullptr;
   const void* timezone_target = nullptr;
   const void* screen_target = nullptr;
   const void* haptics_target = nullptr;

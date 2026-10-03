@@ -7,13 +7,6 @@
 
 namespace gui2_components {
 
-namespace {
-
-constexpr uint32_t kAccent = 0x347FF1;
-constexpr uint32_t kIdle = 0x6A6A6A;
-
-}  // namespace
-
 lv_point_t pattern_lock::center_of(int index) const {
   const int row = index / kGrid;
   const int column = index % kGrid;
@@ -46,7 +39,7 @@ lv_obj_t* pattern_lock::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   path_ = lv_line_create(root_);
   lv_obj_set_size(path_, size_, size_);
   lv_obj_set_pos(path_, 0, 0);
-  lv_obj_set_style_line_color(path_, lv_color_hex(kAccent), LV_PART_MAIN);
+  lv_obj_set_style_line_color(path_, gui2_core::ui.accent, LV_PART_MAIN);
   lv_obj_set_style_line_width(path_, std::max(2, dot_size_ / 3), LV_PART_MAIN);
   lv_obj_set_style_line_rounded(path_, true, LV_PART_MAIN);
   lv_obj_set_clickable(path_, false);
@@ -59,7 +52,7 @@ lv_obj_t* pattern_lock::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
     lv_obj_set_style_radius(dots_[i], LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_border_width(dots_[i], 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dots_[i], 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(dots_[i], lv_color_hex(kIdle), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(dots_[i], gui2_core::ui.idle_dot, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(dots_[i], LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_clickable(dots_[i], false);
     gui2_core::disable_scrolling(dots_[i]);
@@ -71,7 +64,8 @@ void pattern_lock::reset() {
   count_ = 0;
   dragging_ = false;
   for (int i = 0; i < kDots; ++i) {
-    if (dots_[i] != nullptr) lv_obj_set_style_bg_color(dots_[i], lv_color_hex(kIdle), LV_PART_MAIN);
+    if (dots_[i] != nullptr)
+      lv_obj_set_style_bg_color(dots_[i], gui2_core::ui.idle_dot, LV_PART_MAIN);
   }
   if (path_ != nullptr) lv_line_set_points(path_, points_, 0);
 }
@@ -122,7 +116,7 @@ void pattern_lock::connect(int index) {
   if (count_ >= kDots || used(index)) return;
   order_[count_++] = index;
   if (dots_[index] != nullptr)
-    lv_obj_set_style_bg_color(dots_[index], lv_color_hex(kAccent), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(dots_[index], gui2_core::ui.accent, LV_PART_MAIN);
   if (dot_callback_ != nullptr) dot_callback_(user_data_);
 }
 

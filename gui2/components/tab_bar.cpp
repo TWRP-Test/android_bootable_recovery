@@ -8,8 +8,6 @@ namespace gui2_components {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-
 struct pill_binding {
   tab_bar* owner;
   size_t index;
@@ -75,10 +73,15 @@ void tab_bar::select(size_t index) {
   for (size_t i = 0; i < count_; ++i) {
     if (pills_[i] == nullptr) continue;
     const bool on = i == index;
-    lv_obj_set_style_bg_color(pills_[i], lv_color_hex(kAccent), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(pills_[i], gui2_core::ui.accent, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(pills_[i], on ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
-    if (labels_[i] != nullptr)
-      lv_obj_set_style_text_opa(labels_[i], on ? LV_OPA_COVER : LV_OPA_60, LV_PART_MAIN);
+    if (labels_[i] == nullptr) continue;
+    const auto& ui = gui2_core::ui;
+    lv_obj_set_style_text_color(
+        labels_[i], on ? ui.on_accent : (ui.dark ? ui.primary_text : ui.secondary_text),
+        LV_PART_MAIN);
+    lv_obj_set_style_text_opa(labels_[i], on || !ui.dark ? LV_OPA_COVER : LV_OPA_60,
+                              LV_PART_MAIN);
   }
 }
 

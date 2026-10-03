@@ -20,19 +20,17 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
                               const char* title, const char* detail, lv_event_cb_t event_callback,
                               const void* user_data, lv_event_cb_t press_guard_callback) {
   int card_height = std::max(metrics.card_height, gui2_core::ui_px(132));
+  const int card_width = gui2_core::card_width_in(parent);
   lv_obj_t* card = lv_obj_create(parent);
-  lv_obj_set_size(card, metrics.content_width, card_height);
+  lv_obj_set_size(card, card_width, card_height);
   lv_obj_set_clickable(card, true);
   lv_obj_set_style_radius(card, card_height / 4, LV_PART_MAIN);
   lv_obj_set_style_bg_color(card, metrics.card_color, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(card, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 18),
-                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(card, gui2_core::tinted(metrics.card_color, 18), LV_STATE_PRESSED);
   lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(card, 0, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(card, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(card, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(card, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(card);
   gui2_core::disable_scrolling(card);
   if (press_guard_callback != nullptr)
     lv_obj_add_event_cb(card, press_guard_callback, LV_EVENT_ALL, nullptr);
@@ -42,7 +40,7 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
   const int left = card_inner_padding(metrics);
   const int gap = gui2_core::ui_px(8);
   const int right = left + gui2_core::ui_px(56);
-  const int text_width = std::max(1, metrics.content_width - left - right);
+  const int text_width = std::max(1, card_width - left - right);
 
   lv_obj_t* text_block = lv_obj_create(card);
   lv_obj_set_width(text_block, text_width);
@@ -82,6 +80,7 @@ lv_obj_t* create_setting_card(lv_obj_t* parent, const gui2_core::ui_metrics& met
 
   lv_obj_t* arrow =
       create_svg_image(card, &kGui2IconArrowRight, gui2_core::ui_px(48), gui2_core::ui_px(48));
+  tint_on_surface(arrow, metrics.primary_text);
   lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -card_inner_padding(metrics), 0);
   return card;
 }

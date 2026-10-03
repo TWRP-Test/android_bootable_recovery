@@ -36,7 +36,8 @@ void build_home_page(const home_page_options& options) {
 
   const auto& metrics = *options.metrics;
   const bool landscape = metrics.width > metrics.height;
-  const int columns = landscape && metrics.width >= 800 ? 2 : 1;
+  const int columns =
+      metrics.large_screen ? gui2_core::grid_columns() : landscape && metrics.width >= 800 ? 2 : 1;
   const int card_width =
       (metrics.content_width - metrics.card_gap * (columns - 1)) / columns;
 
@@ -50,8 +51,8 @@ void build_home_page(const home_page_options& options) {
 
     lv_obj_t* notice = lv_obj_create(options.content);
     lv_obj_set_size(notice, metrics.content_width, notice_height);
-    lv_obj_set_pos(notice, metrics.outer_margin, 0);
-    gui2_core::set_surface_style(notice, lv_color_hex(0x2A1010));
+    lv_obj_set_pos(notice, metrics.content_left, 0);
+    gui2_core::set_surface_style(notice, metrics.danger_surface);
     lv_obj_set_style_radius(notice, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
     lv_obj_set_style_pad_all(notice, notice_pad, LV_PART_MAIN);
     lv_obj_set_style_border_width(notice, 0, LV_PART_MAIN);
@@ -66,14 +67,14 @@ void build_home_page(const home_page_options& options) {
     lv_label_set_text(label, options.notice_text);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, std::max(1, metrics.content_width - notice_pad * 2));
-    lv_obj_set_style_text_color(label, lv_color_hex(0xF0443E), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, metrics.danger, LV_PART_MAIN);
     lv_obj_set_style_text_font(label, metrics.status_font, LV_PART_MAIN);
 
     cards_top = notice_height + metrics.card_gap;
   }
 
   lv_obj_t* cards = lv_obj_create(options.content);
-  lv_obj_set_pos(cards, metrics.outer_margin, cards_top);
+  lv_obj_set_pos(cards, metrics.content_left, cards_top);
   lv_obj_set_width(cards, metrics.content_width);
   lv_obj_set_height(cards, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(cards, metrics.background, LV_OPA_TRANSP);

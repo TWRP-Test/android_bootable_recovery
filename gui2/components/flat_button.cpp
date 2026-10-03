@@ -6,12 +6,6 @@
 
 namespace gui2_components {
 
-namespace {
-
-constexpr uint32_t kAccent = 0x347FF1;
-
-}  // namespace
-
 lv_obj_t* create_flat_button(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, int width,
                              const char* text, lv_event_cb_t callback,
                              lv_event_cb_t press_guard_callback) {
@@ -22,11 +16,8 @@ lv_obj_t* create_flat_button(lv_obj_t* parent, const gui2_core::ui_metrics& metr
   gui2_core::set_surface_style(button, metrics.card_color);
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 18),
-                            LV_STATE_PRESSED);
-  lv_obj_set_style_shadow_width(button, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(button, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(button, gui2_core::ui_px(3), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(button, gui2_core::tinted(metrics.card_color, 18), LV_STATE_PRESSED);
+  gui2_core::set_card_shadow(button);
   gui2_core::disable_scrolling(button);
   if (press_guard_callback != nullptr)
     lv_obj_add_event_cb(button, press_guard_callback, LV_EVENT_ALL, nullptr);
@@ -35,7 +26,7 @@ lv_obj_t* create_flat_button(lv_obj_t* parent, const gui2_core::ui_metrics& metr
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, text == nullptr ? "" : text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-  lv_obj_set_style_text_color(label, lv_color_hex(kAccent), LV_PART_MAIN);
+  lv_obj_set_style_text_color(label, metrics.accent, LV_PART_MAIN);
   lv_obj_set_style_text_font(label, metrics.text_font, LV_PART_MAIN);
   lv_obj_center(label);
   return button;

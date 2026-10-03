@@ -12,8 +12,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-
 lv_obj_t* add_crumb(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, const char* text,
                     bool current, lv_event_cb_t callback, const void* target,
                     lv_event_cb_t press_guard) {
@@ -26,7 +24,7 @@ lv_obj_t* add_crumb(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, cons
   lv_obj_set_style_border_width(pill, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_hor(pill, gui2_core::card_inner_padding() * 3 / 4, LV_PART_MAIN);
   lv_obj_set_style_pad_ver(pill, 0, LV_PART_MAIN);
-  gui2_core::set_surface_style(pill, current ? lv_color_hex(kAccent) : metrics.card_color);
+  gui2_core::set_surface_style(pill, current ? metrics.accent : metrics.card_color);
   gui2_core::disable_scrolling(pill);
   if (press_guard != nullptr) lv_obj_add_event_cb(pill, press_guard, LV_EVENT_ALL, nullptr);
   if (callback != nullptr)
@@ -34,7 +32,7 @@ lv_obj_t* add_crumb(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, cons
 
   lv_obj_t* label = lv_label_create(pill);
   lv_label_set_text(label, text);
-  lv_obj_set_style_text_color(label, current ? lv_color_hex(0xFFFFFF) : metrics.primary_text,
+  lv_obj_set_style_text_color(label, current ? metrics.on_accent : metrics.primary_text,
                               LV_PART_MAIN);
   lv_obj_set_style_text_font(label, metrics.status_font, LV_PART_MAIN);
   lv_obj_center(label);
@@ -106,7 +104,7 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
   const auto& metrics = *options.metrics;
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -121,7 +119,7 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
   // parented outside the body when the page wants it to stay put.
   const bool fixed_crumbs = options.crumb_parent != nullptr;
   view.crumbs = lv_obj_create(fixed_crumbs ? options.crumb_parent : view.body);
-  if (fixed_crumbs) lv_obj_set_pos(view.crumbs, metrics.outer_margin, options.crumb_y);
+  if (fixed_crumbs) lv_obj_set_pos(view.crumbs, metrics.content_left, options.crumb_y);
   lv_obj_set_width(view.crumbs, metrics.content_width);
   lv_obj_set_height(view.crumbs, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.crumbs, metrics.background, LV_OPA_TRANSP);
@@ -197,13 +195,16 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
     lv_obj_set_style_min_height(row, row_height, LV_PART_MAIN);
     lv_obj_set_clickable(row, true);
     gui2_core::set_surface_style(row, metrics.card_color, LV_OPA_TRANSP);
-    lv_obj_set_style_bg_color(row, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 24),
-                              LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(row, gui2_core::tinted(metrics.card_color, 24), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
     lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(row, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_ver(row, gui2_core::card_inner_padding() / 3, LV_PART_MAIN);
+    // Flex lays a content-sized row out at its content height, so any height
+    // min_height adds lands below the content. Pad the icon up to the row height.
+    lv_obj_set_style_pad_ver(row, std::max(gui2_core::card_inner_padding() / 3,
+                                           (row_height - icon_size) / 2),
+                             LV_PART_MAIN);
     lv_obj_set_style_pad_left(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
     lv_obj_set_style_pad_right(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
     lv_obj_set_style_pad_column(row, gui2_core::card_inner_padding() * 3 / 4, LV_PART_MAIN);
@@ -253,7 +254,7 @@ file_manager_page_view build_file_manager_page(const file_manager_page_options& 
     const gui2_backend::file_entry& entry = options.entries[i];
     lv_obj_t* row =
         add_row(entry.name.c_str(), entry.directory ? &kGui2IconFolder : &kGui2IconFile,
-                entry.directory ? lv_color_hex(kAccent) : metrics.primary_text,
+                entry.directory ? metrics.accent : metrics.primary_text,
                 options.entry_indices == nullptr ? nullptr : options.entry_callback,
                 options.entry_indices == nullptr ? nullptr : &options.entry_indices[i],
                 options.entry_indices == nullptr ? nullptr : options.entry_long_press_callback);
@@ -320,7 +321,7 @@ file_toolbar_view build_file_toolbar(const file_toolbar_options& options) {
   const int icon = height * 9 / 20;
 
   view.root = lv_obj_create(options.parent);
-  lv_obj_set_pos(view.root, metrics.outer_margin, options.y);
+  lv_obj_set_pos(view.root, metrics.content_left, options.y);
   lv_obj_set_size(view.root, metrics.content_width, height);
   gui2_core::set_surface_style(view.root, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_border_width(view.root, 0, LV_PART_MAIN);
@@ -343,7 +344,7 @@ file_toolbar_view build_file_toolbar(const file_toolbar_options& options) {
   gui2_core::set_surface_style(view.field, metrics.card_color);
   lv_obj_set_style_radius(view.field, height / 2, LV_PART_MAIN);
   lv_obj_set_style_border_width(view.field, gui2_core::ui_px(4), LV_PART_MAIN);
-  lv_obj_set_style_border_color(view.field, lv_color_hex(kAccent), LV_PART_MAIN);
+  lv_obj_set_style_border_color(view.field, metrics.accent, LV_PART_MAIN);
   lv_obj_set_style_border_opa(view.field, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_border_opa(view.field, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
   lv_obj_set_style_transition(view.field, &transition, LV_PART_MAIN);
@@ -377,8 +378,7 @@ file_toolbar_view build_file_toolbar(const file_toolbar_options& options) {
   const int clear_size = height * 3 / 5;
   view.clear = lv_obj_create(view.field);
   lv_obj_set_size(view.clear, clear_size, clear_size);
-  gui2_core::set_surface_style(view.clear, lv_color_mix(lv_color_hex(0xFFFFFF),
-                                                        metrics.card_color, 40));
+  gui2_core::set_surface_style(view.clear, gui2_core::tinted(metrics.card_color, 40));
   lv_obj_set_style_radius(view.clear, LV_RADIUS_CIRCLE, LV_PART_MAIN);
   lv_obj_set_style_border_width(view.clear, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.clear, 0, LV_PART_MAIN);
@@ -397,8 +397,7 @@ file_toolbar_view build_file_toolbar(const file_toolbar_options& options) {
     view.sort_button = lv_obj_create(view.root);
     lv_obj_set_size(view.sort_button, LV_SIZE_CONTENT, height);
     gui2_core::set_surface_style(view.sort_button, metrics.card_color);
-    lv_obj_set_style_bg_color(view.sort_button,
-                              lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 24),
+    lv_obj_set_style_bg_color(view.sort_button, gui2_core::tinted(metrics.card_color, 24),
                               LV_STATE_PRESSED);
     lv_obj_set_style_radius(view.sort_button, height / 2, LV_PART_MAIN);
     lv_obj_set_style_border_width(view.sort_button, 0, LV_PART_MAIN);
@@ -462,7 +461,7 @@ lv_obj_t* open_sort_menu(const sort_menu_options& options) {
   lv_obj_t* backdrop = lv_obj_create(lv_layer_top());
   lv_obj_set_pos(backdrop, 0, 0);
   lv_obj_set_size(backdrop, metrics.width, metrics.height);
-  gui2_core::set_surface_style(backdrop, lv_color_hex(0x000000), LV_OPA_TRANSP);
+  gui2_core::set_surface_style(backdrop, metrics.scrim, LV_OPA_TRANSP);
   lv_obj_set_style_radius(backdrop, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(backdrop, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(backdrop, 0, LV_PART_MAIN);
@@ -477,7 +476,7 @@ lv_obj_t* open_sort_menu(const sort_menu_options& options) {
   lv_obj_t* menu = lv_obj_create(backdrop);
   lv_obj_set_width(menu, width);
   lv_obj_set_height(menu, LV_SIZE_CONTENT);
-  gui2_core::set_surface_style(menu, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 10));
+  gui2_core::set_surface_style(menu, gui2_core::tinted(metrics.card_color, 10));
   lv_obj_set_style_radius(menu, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
   lv_obj_set_style_clip_corner(menu, true, LV_PART_MAIN);
   lv_obj_set_style_border_width(menu, 0, LV_PART_MAIN);
@@ -494,16 +493,14 @@ lv_obj_t* open_sort_menu(const sort_menu_options& options) {
     if (i > 0 && options.group_size > 0 && i % options.group_size == 0) {
       lv_obj_t* line = lv_obj_create(menu);
       lv_obj_set_size(line, width, std::max(1, gui2_core::ui_px(2)));
-      gui2_core::set_surface_style(line, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color,
-                                                      22));
+      gui2_core::set_surface_style(line, gui2_core::tinted(metrics.card_color, 22));
       lv_obj_set_style_radius(line, 0, LV_PART_MAIN);
       lv_obj_set_style_border_width(line, 0, LV_PART_MAIN);
     }
     lv_obj_t* row = lv_obj_create(menu);
     lv_obj_set_size(row, width, row_height);
     gui2_core::set_surface_style(row, metrics.card_color, LV_OPA_TRANSP);
-    lv_obj_set_style_bg_color(row, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 24),
-                              LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(row, gui2_core::tinted(metrics.card_color, 24), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
     lv_obj_set_style_radius(row, 0, LV_PART_MAIN);
     lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
@@ -517,7 +514,7 @@ lv_obj_t* open_sort_menu(const sort_menu_options& options) {
     lv_obj_t* label = lv_label_create(row);
     lv_label_set_text(label, options.labels[i]);
     lv_obj_set_style_text_color(
-        label, i == options.selected ? lv_color_hex(kAccent) : metrics.primary_text, LV_PART_MAIN);
+        label, i == options.selected ? metrics.accent : metrics.primary_text, LV_PART_MAIN);
     lv_obj_set_style_text_font(label, metrics.status_font, LV_PART_MAIN);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
   }

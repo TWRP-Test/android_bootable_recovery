@@ -15,7 +15,7 @@ namespace {
 
 lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_t* body = lv_obj_create(content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_width(body, metrics.content_width);
   lv_obj_set_height(body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
@@ -24,6 +24,7 @@ lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(body);
   lv_obj_set_overflow_visible(body, true);
   gui2_core::disable_scrolling(body);
   return body;
@@ -83,10 +84,10 @@ void build_wipe_page(const wipe_page_options& options) {
                                                          strings.factory_reset_detail);
   lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
   lv_obj_set_size(hint, metrics.content_width, hint_height);
-  lv_obj_set_pos(hint, metrics.outer_margin, track_y - metrics.cards_top_gap - hint_height);
+  lv_obj_set_pos(hint, metrics.content_left, track_y - metrics.cards_top_gap - hint_height);
 
   if (options.confirm != nullptr) {
-    options.confirm->create(options.page_layer, metrics, metrics.outer_margin, track_y,
+    options.confirm->create(options.page_layer, metrics, metrics.content_left, track_y,
                             metrics.content_width, track_height, strings.swipe_factory_reset,
                             options.confirm_callback, options.confirm_user_data);
   }
@@ -118,7 +119,7 @@ void build_advanced_wipe_page(const advanced_wipe_page_options& options) {
         options.repair_callback, nullptr, options.press_guard_callback);
     lv_obj_t* detail = lv_obj_get_child(lv_obj_get_child(card, 0), 1);
     if (options.repair_invalid && detail != nullptr)
-      lv_obj_set_style_text_color(detail, lv_color_hex(0xF0443E), LV_PART_MAIN);
+      lv_obj_set_style_text_color(detail, metrics.danger, LV_PART_MAIN);
   }
 }
 
@@ -137,7 +138,7 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   lv_obj_t* warning_card = lv_obj_create(view.body);
   lv_obj_set_width(warning_card, metrics.content_width);
   lv_obj_set_height(warning_card, LV_SIZE_CONTENT);
-  gui2_core::set_surface_style(warning_card, lv_color_hex(0x2A1010));
+  gui2_core::set_surface_style(warning_card, metrics.danger_surface);
   lv_obj_set_style_radius(warning_card, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
   lv_obj_set_style_pad_all(warning_card, warning_pad, LV_PART_MAIN);
   lv_obj_set_style_border_width(warning_card, 0, LV_PART_MAIN);
@@ -147,7 +148,7 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
   lv_label_set_text(warning, strings.format_data_warning);
   lv_label_set_long_mode(warning, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(warning, std::max(1, metrics.content_width - warning_pad * 2));
-  lv_obj_set_style_text_color(warning, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  lv_obj_set_style_text_color(warning, metrics.danger, LV_PART_MAIN);
   lv_obj_set_style_text_font(warning, metrics.status_font, LV_PART_MAIN);
 
   const int icon_box = std::clamp(metrics.content_width / 2, gui2_core::ui_px(220),
@@ -209,7 +210,7 @@ format_data_page_view build_format_data_page(const format_data_page_options& opt
     const int track_height = wipe_track_height();
     const int page_height = metrics.height - metrics.status_height - metrics.nav_height;
     view.slider_track = options.confirm->create(
-        options.page_layer, metrics, metrics.outer_margin,
+        options.page_layer, metrics, metrics.content_left,
         page_height - track_height - metrics.cards_top_gap, metrics.content_width, track_height,
         strings.swipe_format_data, options.confirm_callback, options.confirm_user_data);
   }

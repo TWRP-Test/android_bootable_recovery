@@ -18,6 +18,7 @@
 #include "components/apply_button.h"
 #include "components/check_row.h"
 #include "components/setting_card.h"
+#include "components/option_card.h"
 #include "components/flat_button.h"
 #include "components/choice_card.h"
 #include "components/icon.h"
@@ -243,6 +244,8 @@ static void show_home_page(page_transition transition);
 static void show_action_page(const action_definition& definition, page_transition transition);
 static void show_reboot_page(page_transition transition);
 static void show_language_page(page_transition transition);
+static void show_appearance_page(page_transition transition);
+static bool theme_is_dark(void);
 static void show_timezone_page(page_transition transition);
 static void show_brightness_page(page_transition transition);
 static void show_haptics_page(page_transition transition);
@@ -379,6 +382,7 @@ static void reset_reboot_page_state(void) {
   page_state.reboot.target_selected = false;
   page_state.reboot.has_error = false;
   page_state.reboot.selected_target = gui2_backend::reboot_target::SYSTEM;
+  page_state.reboot.slot_pending = false;
 }
 
 static void reboot_option_event_cb(lv_event_t* event) {
@@ -398,7 +402,15 @@ static void reboot_slot_event_cb(lv_event_t* event) {
   const auto* slot = static_cast<const gui2_backend::boot_slot*>(lv_event_get_user_data(event));
   if (slot == nullptr || reboot == nullptr) return;
 
-  page_state.reboot.has_error = !reboot->set_active_slot(*slot);
+  const char* name = *slot == gui2_backend::boot_slot::A ? "A" : "B";
+  page_state.reboot.slot_pending = reboot->active_slot() != name;
+  page_state.reboot.pending_slot = *slot;
+  // The swipe that applies the slot also reboots, so it needs a target.
+  if (page_state.reboot.slot_pending && !page_state.reboot.target_selected) {
+    page_state.reboot.selected_target = gui2_backend::reboot_target::SYSTEM;
+    page_state.reboot.target_selected = true;
+  }
+  page_state.reboot.has_error = false;
   navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
 }
 
@@ -406,6 +418,14 @@ static void reboot_confirmation_complete(void* user_data) {
   auto* state = static_cast<gui2_pages::reboot_page_state*>(user_data);
   if (state == nullptr || reboot == nullptr || !state->target_selected) return;
 
+  if (state->slot_pending) {
+    if (!reboot->set_active_slot(state->pending_slot)) {
+      state->has_error = true;
+      navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
+      return;
+    }
+    state->slot_pending = false;
+  }
   if (!reboot->request_reboot(state->selected_target)) {
     state->has_error = true;
     navigate_to(page_kind::REBOOT, nullptr, page_transition::REPLACE);
@@ -432,6 +452,7 @@ static void reboot_to_system(void) {
 
 enum class settings_target {
   LANGUAGE,
+  APPEARANCE,
   TIMEZONE,
   BRIGHTNESS,
   HAPTICS,
@@ -459,6 +480,7 @@ enum class settings_target {
 };
 
 static constexpr settings_target language_target = settings_target::LANGUAGE;
+static constexpr settings_target appearance_target = settings_target::APPEARANCE;
 static constexpr settings_target timezone_target = settings_target::TIMEZONE;
 static constexpr settings_target brightness_target = settings_target::BRIGHTNESS;
 static constexpr settings_target haptics_target = settings_target::HAPTICS;
@@ -575,6 +597,7 @@ static void navigate_back(void) {
     const auto return_request = page_state.reboot.return_request;
     navigate_to(return_request.id, return_request.payload, page_transition::POP);
   } else if (page_router.current() == page_kind::LANGUAGE ||
+             page_router.current() == page_kind::APPEARANCE ||
              page_router.current() == page_kind::TIMEZONE ||
              page_router.current() == page_kind::BRIGHTNESS ||
              page_router.current() == page_kind::HAPTICS ||
@@ -746,10 +769,7 @@ static void language_option_event_cb(lv_event_t* event) {
   pending_language = *language;
   for (int i = 0; i < 3; ++i) {
     const bool selected = pending_language == static_cast<app_language>(i);
-    if (language_option_cards[i] != nullptr) {
-      lv_obj_set_style_bg_color(language_option_cards[i],
-                                selected ? lv_color_hex(0x347FF1) : ui.card_color, LV_PART_MAIN);
-    }
+    gui2_core::set_selected_fill(language_option_cards[i], selected, ui.card_color);
     if (language_check_labels[i] != nullptr)
       lv_label_set_text(language_check_labels[i], selected ? LV_SYMBOL_OK : "");
   }
@@ -903,8 +923,10 @@ static void quick_action_event_cb(lv_event_t* event) {
   if (action == nullptr) return;
 
   if (*action == quick_action::SCREENSHOT) {
-    // Close before capturing.
+    // Close before capturing, and draw the closed frame now: this loop's refresh
+    // may already have run, and the capture follows this loop's present.
     close_quick_menu();
+    lv_refr_now(nullptr);
     screen_actions.request_screenshot();
     return;
   }
@@ -975,11 +997,10 @@ static void refresh_recording_ui(void) {
     lv_label_set_text(quick_record_label,
                       recording ? strings().stop_recording : strings().start_recording);
   if (quick_record_button != nullptr) {
+    lv_obj_set_style_bg_color(quick_record_button, recording ? ui.danger : ui.background,
+                              LV_PART_MAIN);
     lv_obj_set_style_bg_color(quick_record_button,
-                              recording ? lv_color_hex(0xF0443E) : ui.background, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(quick_record_button,
-                              lv_color_mix(lv_color_hex(0xFFFFFF),
-                                           recording ? lv_color_hex(0xF0443E) : ui.background, 18),
+                              gui2_core::tinted(recording ? ui.danger : ui.background, 18),
                               LV_STATE_PRESSED);
   }
   gui2_shell::layout_status_bar(status_view, ui);
@@ -1227,6 +1248,11 @@ static void show_reboot_page(page_transition transition) {
              capabilities.power_off);
 
   const std::string active_slot = reboot == nullptr ? std::string() : reboot->active_slot();
+  // The slot cards show the pick; the label above them keeps the slot in use.
+  const std::string shown_slot =
+      page_state.reboot.slot_pending
+          ? (page_state.reboot.pending_slot == gui2_backend::boot_slot::A ? "A" : "B")
+          : active_slot;
   const std::string current_slot_text = std::string(strings().current_boot_slot) + ": " +
                                         (active_slot.empty() ? std::string("-") : active_slot);
   gui2_pages::reboot_page_options options;
@@ -1243,7 +1269,7 @@ static void show_reboot_page(page_transition transition) {
   // Legacy's fastboot reboot page has no slot choice.
   options.has_boot_slots = capabilities.boot_slots && !fastboot_mode;
   options.current_slot_text = current_slot_text.c_str();
-  options.active_slot = &active_slot;
+  options.active_slot = &shown_slot;
   options.slots = page_state.reboot.slots;
   options.slot_count = std::size(page_state.reboot.slots);
   options.option_event_callback = reboot_option_event_cb;
@@ -1263,6 +1289,8 @@ static void settings_option_event_cb(lv_event_t* event) {
   if (target == nullptr) return;
   if (*target == settings_target::LANGUAGE)
     navigate_to(page_kind::LANGUAGE);
+  else if (*target == settings_target::APPEARANCE)
+    navigate_to(page_kind::APPEARANCE);
   else if (*target == settings_target::TIMEZONE)
     navigate_to(page_kind::TIMEZONE);
   else if (*target == settings_target::BRIGHTNESS)
@@ -1319,13 +1347,7 @@ static void settings_option_event_cb(lv_event_t* event) {
 static void refresh_language_options(void) {
   for (int i = 0; i < 3; ++i) {
     const bool selected = pending_language == static_cast<app_language>(i);
-    const lv_color_t option_color = selected ? lv_color_hex(0x347FF1) : ui.card_color;
-    if (language_option_cards[i] != nullptr) {
-      lv_obj_set_style_bg_color(language_option_cards[i], option_color, LV_PART_MAIN);
-      lv_obj_set_style_bg_color(language_option_cards[i],
-                                lv_color_mix(lv_color_hex(0xFFFFFF), option_color, 18),
-                                LV_STATE_PRESSED);
-    }
+    gui2_core::set_selected_fill(language_option_cards[i], selected, ui.card_color);
     if (language_check_labels[i] != nullptr)
       lv_label_set_text(language_check_labels[i], selected ? LV_SYMBOL_OK : "");
   }
@@ -2077,7 +2099,7 @@ static void show_sideload_page(page_transition transition) {
   options.option_callback = sideload_option_cb;
   gui2_pages::build_sideload_page(options);
 
-  page_state.sideload_confirm.create(page_layer, ui, ui.outer_margin,
+  page_state.sideload_confirm.create(page_layer, ui, ui.content_left,
                                      ui.height - ui.status_height - ui.nav_height - track_height -
                                          ui.cards_top_gap,
                                      ui.content_width, track_height, strings().sideload_swipe,
@@ -2938,7 +2960,7 @@ static void show_install_confirm_page(page_transition transition) {
   options.press_guard_callback = press_cancel_guard_cb;
   gui2_pages::build_install_confirm_page(options);
 
-  page_state.install_confirm.create(page_layer, ui, ui.outer_margin,
+  page_state.install_confirm.create(page_layer, ui, ui.content_left,
                                     ui.height - ui.status_height - ui.nav_height - track_height -
                                         ui.cards_top_gap,
                                     ui.content_width, track_height, strings().swipe_install,
@@ -3023,26 +3045,6 @@ static void install_countdown_cancel_cb(lv_event_t* event) {
   refresh_install_progress();
 }
 
-static bool start_cache_dalvik_wipe() {
-  return wipe != nullptr && wipe->start_cache_dalvik();
-}
-
-// flash_done: "Wipe Cache/Dalvik", or "Wipe Dalvik" on A/B, through the
-// legacy confirm_action page.
-static void flash_done_wipe_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  const bool ab_device = settings != nullptr && settings->get_int("tw_ab_device", 0) != 0;
-  tool_request request;
-  request.title = ab_device ? strings().flash_wipe_dalvik : strings().flash_wipe_cache_dalvik;
-  request.text = ab_device ? strings().flash_wipe_dalvik_confirm
-                           : strings().flash_wipe_cache_dalvik_confirm;
-  request.tone = gui2_pages::confirm_tone::DANGER;
-  request.swipe = strings().swipe_wipe;
-  request.back = { page_kind::INSTALL_PROGRESS };
-  request.wipe_start = start_cache_dalvik_wipe;
-  open_tool_confirm(request);
-}
-
 // On A/B the button is "Reboot" and opens the reboot page.
 static void flash_done_reboot_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
@@ -3065,13 +3067,10 @@ static void show_install_progress_page(page_transition transition) {
   options.subtitle = page_summary;
   options.page_layer = page_layer;
   const bool ab_device = settings != nullptr && settings->get_int("tw_ab_device", 0) != 0;
+  options.left_action = { strings().action_back, progress_back_cb };
   if (page_state.install_image) {
-    options.left_action = { strings().action_back, progress_back_cb };
     options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
   } else {
-    options.left_action = { ab_device ? strings().flash_wipe_dalvik
-                                      : strings().flash_wipe_cache_dalvik,
-                            flash_done_wipe_cb };
     options.right_action = { ab_device ? strings().reboot_title : strings().action_reboot_system,
                              ab_device ? flash_done_reboot_cb : progress_reboot_system_cb };
   }
@@ -3309,7 +3308,7 @@ static void show_console_page(page_transition transition) {
                                                  nullptr);
   // The tab bar sizes itself to the content width but does not know where the
   // margin starts.
-  if (tabs != nullptr) lv_obj_set_pos(tabs, ui.outer_margin, 0);
+  if (tabs != nullptr) lv_obj_set_pos(tabs, ui.content_left, 0);
   // Everything below the tabs has to start under them; both panes place
   // themselves at the top of the content otherwise.
   const int tabs_offset = gui2_core::single_line_card_height() + ui.cards_top_gap;
@@ -3325,7 +3324,7 @@ static void show_console_page(page_transition transition) {
     options.self_scrolling = true;
     page_state.console = gui2_pages::build_console_page(options);
     if (page_state.console.body != nullptr) {
-      lv_obj_set_pos(page_state.console.body, ui.outer_margin, tabs_offset);
+      lv_obj_set_pos(page_state.console.body, ui.content_left, tabs_offset);
       const int height = std::max(gui2_core::ui_px(240),
                                   page_state.console.minimum_height - tabs_offset);
       lv_obj_set_height(page_state.console.body, height);
@@ -3558,7 +3557,7 @@ static void show_advanced_wipe_page(page_transition transition) {
   gui2_pages::build_advanced_wipe_page(options);
 
   const int page_height = ui.height - ui.status_height - ui.nav_height;
-  page_state.wipe_confirm.create(page_layer, ui, ui.outer_margin,
+  page_state.wipe_confirm.create(page_layer, ui, ui.content_left,
                                  page_height - track_height - ui.cards_top_gap, ui.content_width,
                                  track_height, strings().swipe_wipe, advanced_wipe_confirmed,
                                  nullptr);
@@ -3761,8 +3760,7 @@ static constexpr int kMountSystemTarget = 102;
 // What legacy asked on its multiuser_warning and restore_keymaster pages.
 static void add_backup_tips(lv_obj_t* body, bool restoring) {
   const auto add = [&](const char* text) {
-    gui2_components::create_tip_card(body, ui, text, lv_color_hex(0xFFC46B),
-                                     lv_color_hex(0x2E2412));
+    gui2_components::create_tip_card(body, ui, text, ui.warning, ui.warning_surface);
   };
   if (tools != nullptr && tools->users_locked()) add(strings().multiuser_body);
   if (restoring && decrypt != nullptr && decrypt->kind() != gui2_backend::lock_kind::DEFAULT)
@@ -4329,7 +4327,7 @@ static const void* advanced_definition(void) {
 static void create_bottom_swipe(gui2_components::swipe_slider* slider, const char* text,
                                 gui2_components::swipe_complete_callback callback, bool danger) {
   const int track_height = gui2_pages::wipe_track_height();
-  slider->create(page_layer, ui, ui.outer_margin,
+  slider->create(page_layer, ui, ui.content_left,
                  ui.height - ui.status_height - ui.nav_height - track_height - ui.cards_top_gap,
                  ui.content_width, track_height, text, callback, nullptr);
   slider->set_danger(danger);
@@ -4483,7 +4481,7 @@ static void wipe_repair_event_cb(lv_event_t* event) {
     if (detail != nullptr) {
       lv_label_set_text(detail, count == 0 ? strings().repair_change_hint
                                            : strings().repair_change_invalid);
-      lv_obj_set_style_text_color(detail, lv_color_hex(0xF0443E), LV_PART_MAIN);
+      lv_obj_set_style_text_color(detail, ui.danger, LV_PART_MAIN);
     }
     return;
   }
@@ -5154,6 +5152,9 @@ static void show_action_page(const action_definition& definition, page_transitio
     settings_options.general_target = &general_settings_target;
     settings_options.keyboard_target = &keyboard_settings_target;
     settings_options.language_target = &language_target;
+    settings_options.appearance_target = &appearance_target;
+    settings_options.appearance_detail =
+        theme_is_dark() ? strings().appearance_dark : strings().appearance_light;
     settings_options.timezone_target = &timezone_target;
     settings_options.screen_target = &brightness_target;
     settings_options.haptics_target = &haptics_target;
@@ -5281,6 +5282,9 @@ static void build_page(const gui2_pages::page_request& request) {
       return;
     case page_kind::LANGUAGE:
       show_language_page(request.transition);
+      return;
+    case page_kind::APPEARANCE:
+      show_appearance_page(request.transition);
       return;
     case page_kind::TIMEZONE:
       show_timezone_page(request.transition);
@@ -5411,8 +5415,22 @@ static void build_page(const gui2_pages::page_request& request) {
   }
 }
 
+static bool theme_is_dark(void) {
+  return settings == nullptr || settings->get_int("tw_gui2_theme", 0) == 0;
+}
+
+static void apply_lvgl_theme(bool dark) {
+  lv_display_t* display = lv_display_get_default();
+  if (display == nullptr) return;
+  lv_display_set_theme(display, lv_theme_default_init(display, lv_palette_main(LV_PALETTE_BLUE),
+                                                      lv_palette_main(LV_PALETTE_RED), dark,
+                                                      LV_FONT_DEFAULT));
+}
+
 static void create_gui2_shell(lv_obj_t* screen) {
   gui2_shell::gui_shell_base_options options;
+  options.dark = theme_is_dark();
+  apply_lvgl_theme(options.dark);
   options.screen = screen;
   options.text_font = runtime_text_font;
   options.status_font = runtime_status_font;
@@ -5470,6 +5488,70 @@ static bool create_pages(void) {
   shell_ready = true;
   if (splash_view.root != nullptr) lv_obj_move_foreground(splash_view.root);
   return status_controller.start(settings, ui, status_view, refresh_recording_ui);
+}
+
+static constexpr int appearance_values[2] = { 0, 1 };
+
+// Every object keeps the colors it was built with, so the shell is built again.
+static void rebuild_for_theme(void*) {
+  status_controller.stop();
+  page_state.reboot.confirmation_slider.detach();
+  page_host.clear();
+  screen_lock.reset();
+  screen_actions.reset();
+  screen_feedback.reset();
+  wheel_scroll_controller.reset();
+  quick_panel_view = {};
+  quick_panel_controller = {};
+  quick_record_button = nullptr;
+  quick_record_label = nullptr;
+  quick_feedback = nullptr;
+  quick_brightness_binding = {};
+  quick_brightness_dirty = false;
+  if (mouse_cursor != nullptr) lv_obj_delete(mouse_cursor);
+  mouse_cursor = nullptr;
+  lv_obj_clean(lv_layer_top());
+  lv_obj_clean(lv_screen_active());
+  status_view = {};
+  navigation_view = {};
+  page_layer = nullptr;
+  main_content = nullptr;
+  shell_ready = false;
+  create_pages();
+  navigate_to(page_kind::APPEARANCE, nullptr, page_transition::NONE);
+}
+
+static void appearance_event_cb(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) || settings == nullptr)
+    return;
+  const auto* value = static_cast<const int*>(lv_event_get_user_data(event));
+  if (value == nullptr || (*value == 0) == theme_is_dark()) return;
+  if (!settings->set_persistent("tw_gui2_theme", std::to_string(*value)) || !settings->flush())
+    return;
+  // The card that was tapped is among what the rebuild deletes.
+  lv_async_call(rebuild_for_theme, nullptr);
+}
+
+static void show_appearance_page(page_transition transition) {
+  create_page_scaffold(page_kind::APPEARANCE, false, strings().appearance_title, "", 0,
+                       transition);
+  lv_obj_t* body = lv_obj_create(main_content);
+  lv_obj_set_pos(body, ui.content_left, 0);
+  lv_obj_set_width(body, ui.content_width);
+  lv_obj_set_height(body, LV_SIZE_CONTENT);
+  gui2_core::set_surface_style(body, ui.background, LV_OPA_TRANSP);
+  lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_row(body, ui.card_gap, LV_PART_MAIN);
+  lv_obj_set_layout(body, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+  gui2_core::disable_scrolling(body);
+
+  const bool dark = theme_is_dark();
+  const char* labels[2] = { strings().appearance_dark, strings().appearance_light };
+  for (int i = 0; i < 2; ++i)
+    gui2_components::create_option_card(body, ui, labels[i], (i == 0) == dark,
+                                        appearance_event_cb, &appearance_values[i],
+                                        press_cancel_guard_cb);
 }
 
 static const char* startup_step_text(gui2_backend::startup_step step) {
@@ -5723,7 +5805,7 @@ static void show_system_read_only_page(page_transition transition) {
   gui2_pages::build_system_read_only_page(options);
 
   page_state.system_ro_confirm.create(
-      page_layer, ui, ui.outer_margin,
+      page_layer, ui, ui.content_left,
       ui.height - ui.status_height - track_height - ui.cards_top_gap * 2, ui.content_width,
       track_height, strings().sys_ro_swipe, system_ro_allow_cb, nullptr);
 }

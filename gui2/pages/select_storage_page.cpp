@@ -14,7 +14,7 @@ void build_select_storage_page(const select_storage_page_options& options) {
   const auto& strings = *options.strings;
 
   lv_obj_t* body = lv_obj_create(options.content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_width(body, metrics.content_width);
   lv_obj_set_height(body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
@@ -34,7 +34,7 @@ void build_select_storage_page(const select_storage_page_options& options) {
     // The current one is marked the same way the reboot page marks its target.
     if (card != nullptr && storage.selected) {
       lv_obj_set_style_border_width(card, gui2_core::ui_px(4), LV_PART_MAIN);
-      lv_obj_set_style_border_color(card, lv_color_hex(0x347FF1), LV_PART_MAIN);
+      lv_obj_set_style_border_color(card, metrics.accent, LV_PART_MAIN);
       lv_obj_set_style_border_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     }
   }

@@ -14,12 +14,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kWarning = 0xF0A73E;
-constexpr uint32_t kAccent = 0x347FF1;
-// The same treatment as the warning banners, in the accent instead: a notice,
-// not a problem.
-constexpr uint32_t kAccentSurface = 0x0E1B2E;
-
 lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) {
   lv_obj_t* column = lv_obj_create(parent);
   lv_obj_set_width(column, metrics.content_width);
@@ -30,6 +24,7 @@ lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) 
   lv_obj_set_layout(column, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(column, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(column, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(column);
   gui2_core::disable_scrolling(column);
   return column;
 }
@@ -37,7 +32,7 @@ lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) 
 // The detail page hangs straight off the page content, which is not inset.
 lv_obj_t* create_body(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) {
   lv_obj_t* body = create_column(parent, metrics);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   return body;
 }
 
@@ -52,8 +47,8 @@ void build_restore_list_page(const restore_list_page_options& options) {
   lv_obj_t* body = create_column(options.content, metrics);
 
   if (options.backup_count == 0 || options.backups == nullptr) {
-    gui2_components::create_tip_card(body, metrics, strings.restore_none, lv_color_hex(kAccent),
-                                     lv_color_hex(kAccentSurface));
+    gui2_components::create_tip_card(body, metrics, strings.restore_none, metrics.accent,
+                                     metrics.accent_surface);
   } else {
     gui2_components::create_section_label(body, metrics, strings.restore_choose);
     for (size_t i = 0; i < options.backup_count; ++i) {
@@ -117,8 +112,8 @@ restore_page_view build_restore_page(const restore_page_options& options) {
     lv_obj_t* remove = gui2_components::create_setting_card(
         view.options_pane, metrics, strings.delete_backup, nullptr, options.manage_callback,
         options.delete_target, options.press_guard_callback);
-    lv_obj_set_style_text_color(lv_obj_get_child(lv_obj_get_child(remove, 0), 0),
-                                lv_color_hex(0xF0443E), LV_PART_MAIN);
+    lv_obj_set_style_text_color(lv_obj_get_child(lv_obj_get_child(remove, 0), 0), metrics.danger,
+                                LV_PART_MAIN);
   }
 
   // A password is only ever asked for when the folder turned out to be
@@ -127,7 +122,7 @@ restore_page_view build_restore_page(const restore_page_options& options) {
     lv_obj_t* notice =
         gui2_components::create_section_label(view.options_pane, metrics,
                                               strings.restore_encrypted_notice);
-    lv_obj_set_style_text_color(notice, lv_color_hex(kWarning), LV_PART_MAIN);
+    lv_obj_set_style_text_color(notice, metrics.warning, LV_PART_MAIN);
 
     gui2_components::create_section_label(view.options_pane, metrics, strings.backup_password);
     const int input_height = gui2_core::single_line_card_height() * 11 / 10;
@@ -152,7 +147,7 @@ restore_page_view build_restore_page(const restore_page_options& options) {
     if (options.wrong_password) {
       lv_obj_t* error = gui2_components::create_section_label(
           view.options_pane, metrics, strings.restore_wrong_password);
-      lv_obj_set_style_text_color(error, lv_color_hex(0xF0443E), LV_PART_MAIN);
+      lv_obj_set_style_text_color(error, metrics.danger, LV_PART_MAIN);
     }
   }
 
@@ -181,7 +176,7 @@ restore_page_view build_restore_page(const restore_page_options& options) {
     const int track_height = wipe_track_height();
     const int page_height = metrics.height - metrics.status_height - metrics.nav_height;
     view.slider_track = options.confirm->create(
-        options.page_layer, metrics, metrics.outer_margin,
+        options.page_layer, metrics, metrics.content_left,
         page_height - track_height - metrics.cards_top_gap, metrics.content_width, track_height,
         strings.swipe_restore, options.confirm_callback, options.confirm_user_data);
   }

@@ -10,6 +10,7 @@ enum class page_id {
   ACTION,
   REBOOT,
   LANGUAGE,
+  APPEARANCE,
   TIMEZONE,
   BRIGHTNESS,
   HAPTICS,

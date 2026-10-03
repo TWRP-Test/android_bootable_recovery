@@ -42,6 +42,9 @@ struct reboot_page_state {
   bool target_selected = false;
   bool has_error = false;
   gui2_backend::reboot_target selected_target = gui2_backend::reboot_target::SYSTEM;
+  // A slot picked on the page; it is applied only when the reboot is swiped.
+  bool slot_pending = false;
+  gui2_backend::boot_slot pending_slot = gui2_backend::boot_slot::A;
   gui2_pages::page_request return_request{ gui2_pages::page_id::HOME, nullptr,
                                            gui2_core::page_transition::NONE };
   reboot_option options[7] = {};

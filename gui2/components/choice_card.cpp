@@ -23,9 +23,7 @@ lv_obj_t* create_choice_card(lv_obj_t* parent, const gui2_core::ui_metrics& metr
   lv_obj_set_style_radius(card, height / 4, LV_PART_MAIN);
   lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(card, 0, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(card, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(card, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(card, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(card);
   gui2_core::disable_scrolling(card);
   if (press_guard_callback != nullptr)
     lv_obj_add_event_cb(card, press_guard_callback, LV_EVENT_ALL, nullptr);

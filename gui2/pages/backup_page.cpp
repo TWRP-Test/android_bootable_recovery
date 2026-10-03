@@ -22,6 +22,7 @@ lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) 
   lv_obj_set_layout(column, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(column, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(column, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(column);
   gui2_core::disable_scrolling(column);
   return column;
 }
@@ -187,7 +188,7 @@ backup_page_view build_backup_page(const backup_page_options& options) {
     const int track_height = wipe_track_height();
     const int page_height = metrics.height - metrics.status_height - metrics.nav_height;
     view.slider_track = options.confirm->create(
-        options.page_layer, metrics, metrics.outer_margin,
+        options.page_layer, metrics, metrics.content_left,
         page_height - track_height - metrics.cards_top_gap, metrics.content_width, track_height,
         strings.swipe_backup, options.confirm_callback, options.confirm_user_data);
   }

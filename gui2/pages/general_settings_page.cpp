@@ -15,7 +15,7 @@ void build_general_settings_page(const general_settings_page_options& options) {
 
   lv_obj_t* body = lv_obj_create(options.content);
   // Hung straight off the scroll area, so the side margin is this page's job.
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_width(body, metrics.content_width);
   lv_obj_set_height(body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
@@ -24,6 +24,7 @@ void build_general_settings_page(const general_settings_page_options& options) {
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(body);
   gui2_core::disable_scrolling(body);
 
   for (size_t i = 0; i < options.item_count; ++i) {

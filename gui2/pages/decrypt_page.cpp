@@ -10,12 +10,6 @@
 
 namespace gui2_pages {
 
-namespace {
-
-constexpr uint32_t kAccent = 0x347FF1;
-
-}  // namespace
-
 decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
   decrypt_page_view view;
   if (options.content == nullptr || options.metrics == nullptr || options.strings == nullptr)
@@ -31,7 +25,7 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
                                     metrics.nav_height - gui2_core::single_line_card_height() -
                                     metrics.cards_top_gap * 2);
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, viewport);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -51,7 +45,7 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
   lv_obj_t* icon = lv_obj_create(view.body);
   lv_obj_set_size(icon, badge, badge);
   lv_obj_set_style_radius(icon, badge / 4, LV_PART_MAIN);
-  gui2_core::set_surface_style(icon, lv_color_hex(kAccent));
+  gui2_core::set_surface_style(icon, metrics.accent);
   lv_obj_set_style_pad_all(icon, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(icon);
   lv_obj_t* art = gui2_components::create_svg_image(
@@ -68,8 +62,8 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
   lv_obj_set_width(view.status, metrics.content_width);
   lv_obj_set_style_text_align(view.status, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   lv_obj_set_style_text_font(view.status, metrics.status_font, LV_PART_MAIN);
-  lv_obj_set_style_text_color(
-      view.status, lv_color_hex(options.failed ? 0xF0443E : kAccent), LV_PART_MAIN);
+  lv_obj_set_style_text_color(view.status, options.failed ? metrics.danger : metrics.accent,
+                              LV_PART_MAIN);
 
   if (pattern_mode) {
     if (options.pattern != nullptr) {

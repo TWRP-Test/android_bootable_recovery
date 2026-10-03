@@ -52,6 +52,8 @@ void gr_exit(void);
 
 int gr_fb_width(void);
 int gr_fb_height(void);
+// Panel size in millimetres, oriented like gr_fb_width/height; false when unknown.
+bool gr_fb_physical_size(int* width_mm, int* height_mm);
 int gr_copy_frame(void* destination, size_t capacity, int* width, int* height, int* row_bytes,
                   GRPixelFormat* format);
 GRPixelFormat gr_pixel_format(void);

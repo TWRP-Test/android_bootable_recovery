@@ -121,7 +121,7 @@ class keyboard {
 
   void build_rows();
   void clear_rows();
-  lv_obj_t* add_row(int height, int gap);
+  lv_obj_t* add_row(int width, int height, int gap);
   lv_obj_t* add_key(lv_obj_t* parent, const key& definition, int width, int height, int radius,
                     bool inside_group);
   void handle(const key& definition);

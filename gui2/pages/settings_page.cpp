@@ -24,6 +24,9 @@ void build_settings_page(const settings_page_options& options) {
                                        strings.current_language_detail,
                                        options.option_event_callback, options.language_target,
                                        options.press_guard_callback);
+  gui2_components::create_setting_card(options.content, metrics, strings.appearance_title,
+                                       options.appearance_detail, options.option_event_callback,
+                                       options.appearance_target, options.press_guard_callback);
   gui2_components::create_setting_card(options.content, metrics, strings.time_title,
                                        strings.time_summary, options.option_event_callback,
                                        options.timezone_target, options.press_guard_callback);

@@ -21,6 +21,9 @@ struct language_pack {
   const char* language_title;
   const char* language_summary;
   const char* current_language_detail;
+  const char* appearance_title;
+  const char* appearance_dark;
+  const char* appearance_light;
   const char* screen_title;
   const char* screen_summary;
   const char* brightness_label;
@@ -180,10 +183,6 @@ struct language_pack {
   const char* install_image_tab;
   const char* install_confirm;
   const char* swipe_install;
-  const char* flash_wipe_cache_dalvik;
-  const char* flash_wipe_dalvik;
-  const char* flash_wipe_cache_dalvik_confirm;
-  const char* flash_wipe_dalvik_confirm;
   const char* installing;
   const char* install_complete;
   const char* install_failed;

@@ -70,6 +70,7 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
 
   view.battery_icon = gui2_components::create_svg_image(view.root, &kGui2IconBattery100,
                                                         gui2_core::ui_px(72), gui2_core::ui_px(48));
+  gui2_components::tint_on_surface(view.battery_icon, metrics.primary_text);
 
   // The icon art is drawn in black; tint it like the text beside it.
   view.wifi_icon = gui2_components::create_svg_image(view.root, &kGui2IconWifi,
@@ -82,7 +83,7 @@ status_bar_view create_status_bar(lv_obj_t* screen, const gui2_core::ui_metrics&
 
   view.recording_indicator = lv_label_create(view.root);
   lv_label_set_text(view.recording_indicator, recording_text == nullptr ? "" : recording_text);
-  lv_obj_set_style_text_color(view.recording_indicator, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  lv_obj_set_style_text_color(view.recording_indicator, metrics.danger, LV_PART_MAIN);
   lv_obj_set_style_text_font(view.recording_indicator, metrics.status_font, LV_PART_MAIN);
   lv_obj_set_hidden(view.recording_indicator, true);
 

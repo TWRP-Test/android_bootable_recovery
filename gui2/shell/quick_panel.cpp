@@ -29,7 +29,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
   view.dismiss = lv_obj_create(lv_layer_top());
   lv_obj_set_size(view.dismiss, metrics.width, metrics.height);
   lv_obj_set_pos(view.dismiss, 0, 0);
-  gui2_core::set_surface_style(view.dismiss, lv_color_hex(0x000000), LV_OPA_30);
+  gui2_core::set_surface_style(view.dismiss, metrics.scrim, LV_OPA_30);
   lv_obj_set_style_pad_all(view.dismiss, 0, LV_PART_MAIN);
   lv_obj_set_clickable(view.dismiss, true);
   lv_obj_set_press_lock(view.dismiss, true);
@@ -87,13 +87,11 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
                                 LV_PART_MAIN);
     lv_obj_set_style_text_font(*options.brightness_value_label, metrics.status_font, LV_PART_MAIN);
 
-    const lv_color_t slider_background =
-        lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 38);
+    const lv_color_t slider_background = gui2_core::tinted(metrics.card_color, 38);
     lv_obj_t* slider = gui2_components::create_slider(
         view.menu, inner_padding, content_top + header_height + slider_gap,
         metrics.content_width - inner_padding * 2, slider_height, 10, 100, options.brightness_value,
-        slider_background, lv_color_hex(0x347FF1), lv_color_hex(0xFFFFFF),
-        options.brightness_visual);
+        slider_background, metrics.accent, metrics.on_accent, options.brightness_visual);
     if (slider != nullptr) {
       if (options.brightness_event_callback != nullptr) {
         lv_obj_add_event_cb(slider, options.brightness_event_callback, LV_EVENT_VALUE_CHANGED,
@@ -158,7 +156,7 @@ quick_panel_view create_quick_panel(const quick_panel_options& options) {
 
   view.menu_open_y = metrics.status_height + std::max(gui2_core::ui_px(8), metrics.card_gap / 2);
   view.menu_closed_y = -view.menu_height;
-  lv_obj_set_pos(view.menu, metrics.outer_margin, view.menu_closed_y);
+  lv_obj_set_pos(view.menu, metrics.content_left, view.menu_closed_y);
 
   view.screenshot_flash = lv_obj_create(lv_layer_top());
   lv_obj_set_size(view.screenshot_flash, metrics.width, metrics.height);

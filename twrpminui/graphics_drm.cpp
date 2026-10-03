@@ -1277,6 +1277,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return nullptr;
   }
 
+  gr_set_physical_size(main_monitor_connector->mmWidth, main_monitor_connector->mmHeight);
   main_monitor_crtc = find_crtc_for_connector(drm_fd, res, main_monitor_connector);
 
   if (!main_monitor_crtc) {

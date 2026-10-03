@@ -26,6 +26,7 @@ void build_mount_page(const mount_page_options& options) {
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(body);
   gui2_core::disable_scrolling(body);
 
   if (options.storage_name != nullptr && options.storage_name[0] != '\0') {

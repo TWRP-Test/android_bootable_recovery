@@ -156,16 +156,6 @@ bool twrp_wipe_backend::start_format_data() {
   return start({ "DATAMEDIA" });
 }
 
-// flash_done's button: "wipe /cache" then "wipe dalvik" as the page's action
-// and action2, dalvik alone on A/B devices.
-bool twrp_wipe_backend::start_cache_dalvik() {
-#ifdef AB_OTA_UPDATER
-  return start({ "dalvik" });
-#else
-  return start({ "/cache", "dalvik" });
-#endif
-}
-
 // The advanced wipe page: its list writes tw_wipe_list, "path;" per row.
 bool twrp_wipe_backend::start_wipe(const std::vector<std::string>& mount_points) {
   std::string list;

@@ -15,12 +15,16 @@ struct gui_shell_base_options {
   const lv_font_t* keyboard_font = nullptr;
   const char* recording_text = nullptr;
   lv_event_cb_t status_gesture_callback = nullptr;
+  bool dark = true;
 };
 
 struct gui_shell_base_view {
   status_bar_view status;
   lv_obj_t* page_layer = nullptr;
 };
+
+// The panel's short side in millimetres, or 0 when the display does not say.
+int panel_short_side_mm();
 
 // Fills gui2_core::ui from the panel size and fonts; the splash needs it
 // before the shell exists.

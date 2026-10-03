@@ -13,10 +13,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-constexpr uint32_t kWarning = 0xE8A33D;
-constexpr uint32_t kWarningSurface = 0x2A1F0D;
-
 lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, int width,
                         int gap) {
   lv_obj_t* column = lv_obj_create(parent);
@@ -40,9 +36,7 @@ lv_obj_t* create_info_card(lv_obj_t* parent, const gui2_core::ui_metrics& metric
   gui2_core::set_surface_style(card, metrics.card_color);
   lv_obj_set_style_pad_all(card, padding, LV_PART_MAIN);
   lv_obj_set_style_radius(card, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(card, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(card, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(card, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(card);
   return card;
 }
 
@@ -80,12 +74,12 @@ void build_install_confirm_page(const install_confirm_page_options& options) {
   const auto& strings = *options.strings;
 
   lv_obj_t* body = create_column(options.content, metrics, metrics.content_width, metrics.card_gap);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
 
   // What this is about to do, before anything that can change it.
   if (!options.image)
-    gui2_components::create_tip_card(body, metrics, strings.install_warning,
-                                     lv_color_hex(kWarning), lv_color_hex(kWarningSurface));
+    gui2_components::create_tip_card(body, metrics, strings.install_warning, metrics.warning,
+                                     metrics.warning_surface);
 
   lv_obj_t* preview = create_info_card(body, metrics);
   add_line(preview, metrics, strings.install_folder, metrics.secondary_text, metrics.status_font);
@@ -103,7 +97,7 @@ void build_install_confirm_page(const install_confirm_page_options& options) {
           options.press_guard_callback);
       if (card != nullptr && i == options.selected_target) {
         lv_obj_set_style_border_width(card, gui2_core::ui_px(4), LV_PART_MAIN);
-        lv_obj_set_style_border_color(card, lv_color_hex(kAccent), LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, metrics.accent, LV_PART_MAIN);
         lv_obj_set_style_border_opa(card, LV_OPA_COVER, LV_PART_MAIN);
       }
     }
