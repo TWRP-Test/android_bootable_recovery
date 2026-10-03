@@ -11,11 +11,9 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-
 lv_obj_t* create_body(lv_obj_t* content, const gui2_core::ui_metrics& metrics) {
   lv_obj_t* body = lv_obj_create(content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_size(body, metrics.content_width, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
@@ -114,8 +112,8 @@ void build_change_fs_page(const change_fs_page_options& options) {
   const auto& details = *options.details;
   lv_obj_t* body = create_body(options.content, metrics);
 
-  gui2_components::create_tip_card(body, metrics, strings.change_fs_warning,
-                                   lv_color_hex(0xFFC46B), lv_color_hex(0x2E2412));
+  gui2_components::create_tip_card(body, metrics, strings.change_fs_warning, metrics.warning,
+                                   metrics.warning_surface);
   gui2_components::create_section_label(body, metrics, strings.change_fs_new);
 
   const int height = gui2_core::single_line_card_height();
@@ -127,13 +125,11 @@ void build_change_fs_page(const change_fs_page_options& options) {
     lv_obj_set_style_radius(card, height / 4, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(
-        card, selected ? lv_color_mix(lv_color_hex(kAccent), metrics.card_color, 30)
-                       : metrics.card_color,
+        card, selected ? lv_color_mix(metrics.accent, metrics.card_color, 30) : metrics.card_color,
         LV_PART_MAIN);
-    lv_obj_set_style_bg_color(card, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 18),
-                              LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(card, gui2_core::tinted(metrics.card_color, 18), LV_STATE_PRESSED);
     lv_obj_set_style_border_width(card, selected ? gui2_core::ui_px(5) : 0, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(kAccent), LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, metrics.accent, LV_PART_MAIN);
     lv_obj_set_style_pad_hor(card, padding, LV_PART_MAIN);
     lv_obj_set_style_pad_ver(card, 0, LV_PART_MAIN);
     gui2_core::disable_scrolling(card);
@@ -159,17 +155,16 @@ void build_confirm_page(const confirm_page_options& options) {
   if (options.content == nullptr || options.metrics == nullptr) return;
   const auto& metrics = *options.metrics;
   lv_obj_t* body = create_body(options.content, metrics);
-  uint32_t text = 0x9BC5E9;
-  uint32_t surface = 0x0E1B2E;
+  lv_color_t text = metrics.accent_soft;
+  lv_color_t surface = metrics.accent_surface;
   if (options.tone == confirm_tone::WARNING) {
-    text = 0xFFC46B;
-    surface = 0x2E2412;
+    text = metrics.warning;
+    surface = metrics.warning_surface;
   } else if (options.tone == confirm_tone::DANGER) {
-    text = 0xFF8A80;
-    surface = 0x2E1414;
+    text = metrics.danger_soft;
+    surface = metrics.danger_surface_soft;
   }
-  gui2_components::create_tip_card(body, metrics, options.text, lv_color_hex(text),
-                                   lv_color_hex(surface));
+  gui2_components::create_tip_card(body, metrics, options.text, text, surface);
 }
 
 }  // namespace gui2_pages

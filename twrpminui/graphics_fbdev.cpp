@@ -160,6 +160,7 @@ static GRSurface* fbdev_init(minui_backend* backend) {
         close(fd);
         return NULL;
     }
+    gr_set_physical_size(static_cast<int>(vi.width), static_cast<int>(vi.height));
 
 #ifdef RECOVERY_FORCE_RGB_565
     // Changing fb_var_screeninfo can affect fb_fix_screeninfo,

@@ -67,14 +67,14 @@ lv_obj_t* create_navigation_fade(lv_obj_t* page_layer, const gui2_core::ui_metri
   // gradient exactly where a long page needs it most.
   const int scrollbar_column = gui2_core::ui_px(14);
   lv_obj_set_size(fade, std::max(1, metrics.width - scrollbar_column), fade_height);
-  gui2_core::set_surface_style(fade, lv_color_hex(0x000000), LV_OPA_COVER);
+  gui2_core::set_surface_style(fade, metrics.background, LV_OPA_COVER);
   lv_obj_set_style_radius(fade, 0, LV_PART_MAIN);
   lv_obj_set_style_border_width(fade, 0, LV_PART_MAIN);
   lv_obj_set_style_shadow_width(fade, 0, LV_PART_MAIN);
   lv_obj_set_style_outline_width(fade, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(fade, 0, LV_PART_MAIN);
   lv_obj_set_style_bg_main_opa(fade, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_bg_grad_color(fade, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_color(fade, metrics.background, LV_PART_MAIN);
   lv_obj_set_style_bg_grad_opa(fade, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_bg_grad_dir(fade, LV_GRAD_DIR_VER, LV_PART_MAIN);
   // Transparent at the top, fully black where the navigation bar starts. The

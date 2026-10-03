@@ -30,7 +30,7 @@ hardware_page_view build_hardware_page(const hardware_page_options& options) {
 
   const auto& metrics = *options.metrics;
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -46,7 +46,7 @@ hardware_page_view build_hardware_page(const hardware_page_options& options) {
   gui2_core::disable_scrolling(view.body);
 
   view.error_label = create_section_label(view.body, metrics, options.error_text);
-  lv_obj_set_style_text_color(view.error_label, lv_color_hex(0xF0443E), LV_PART_MAIN);
+  lv_obj_set_style_text_color(view.error_label, metrics.danger, LV_PART_MAIN);
   lv_obj_set_hidden(view.error_label, true);
 
   for (size_t i = 0; i < options.slider_count; ++i) {

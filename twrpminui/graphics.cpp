@@ -65,6 +65,8 @@ GRSurface* gr_draw = NULL;
 static GGLContext *gr_context = 0;
 GGLSurface gr_mem_surface;
 static GRPixelFormat gr_target_format = GRPixelFormat::UNKNOWN;
+static int gr_physical_width_mm = 0;
+static int gr_physical_height_mm = 0;
 static bool gr_raw_native_frame = false;
 static int gr_is_curr_clr_opaque = 0;
 static GRRect gr_frame_damage = { 0, 0, 0, 0 };
@@ -243,6 +245,12 @@ void gr_set_pixel_format(GRPixelFormat format)
 {
     if (format != GRPixelFormat::UNKNOWN)
         gr_target_format = format;
+}
+
+void gr_set_physical_size(int width_mm, int height_mm)
+{
+    gr_physical_width_mm = width_mm;
+    gr_physical_height_mm = height_mm;
 }
 
 bool gr_raw_frame_native()
@@ -799,6 +807,16 @@ int gr_fb_height(void)
     return (gr_rotation == 0 || gr_rotation == 180) ?
             gr_draw->height - 2 * overscan_offset_y :
             gr_draw->width  - 2 * overscan_offset_x;
+}
+
+bool gr_fb_physical_size(int* width_mm, int* height_mm)
+{
+    if (!width_mm || !height_mm || gr_physical_width_mm <= 0 || gr_physical_height_mm <= 0)
+        return false;
+    const bool upright = gr_rotation == 0 || gr_rotation == 180;
+    *width_mm = upright ? gr_physical_width_mm : gr_physical_height_mm;
+    *height_mm = upright ? gr_physical_height_mm : gr_physical_width_mm;
+    return true;
 }
 
 int gr_copy_frame(void* destination, size_t capacity, int* width, int* height,

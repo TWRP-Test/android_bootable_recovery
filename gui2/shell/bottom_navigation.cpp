@@ -36,10 +36,10 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
     lv_obj_set_style_radius(button, radius_size / 2, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, metrics.nav_color, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.nav_color, 18),
+    lv_obj_set_style_bg_color(button, gui2_core::tinted(metrics.nav_color, 18),
                               LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(button, gui2_core::ui_px(4), LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, metrics.dark ? gui2_core::ui_px(4) : 0, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, metrics.outline, LV_PART_MAIN);
     lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
   }
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
@@ -52,6 +52,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
   const int icon_size =
       std::clamp(button_height * 58 / 100, gui2_core::ui_px(52), gui2_core::ui_px(84));
   lv_obj_t* image = gui2_components::create_svg_image(button, source, icon_size, icon_size);
+  gui2_components::tint_on_surface(image, metrics.primary_text);
   lv_obj_center(image);
   return button;
 }
@@ -99,12 +100,10 @@ bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
   gui2_core::set_surface_style(pill, metrics.nav_color);
   lv_obj_set_style_pad_all(pill, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(pill, pill_height / 2, LV_PART_MAIN);
-  lv_obj_set_style_border_width(pill, gui2_core::ui_px(4), LV_PART_MAIN);
-  lv_obj_set_style_border_color(pill, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+  lv_obj_set_style_border_width(pill, metrics.dark ? gui2_core::ui_px(4) : 0, LV_PART_MAIN);
+  lv_obj_set_style_border_color(pill, metrics.outline, LV_PART_MAIN);
   lv_obj_set_style_border_opa(pill, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(pill, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(pill, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(pill, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(pill);
   lv_obj_set_layout(pill, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(pill, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(pill, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);

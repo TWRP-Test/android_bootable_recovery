@@ -12,11 +12,11 @@ lv_color_t severity_color(const gui2_core::ui_metrics& metrics,
                           gui2_backend::console_severity severity) {
   switch (severity) {
     case gui2_backend::console_severity::ERROR:
-      return lv_color_hex(0xF0443E);
+      return metrics.danger;
     case gui2_backend::console_severity::WARNING:
-      return lv_color_hex(0xFFAA20);
+      return metrics.warning;
     case gui2_backend::console_severity::HIGHLIGHT:
-      return lv_color_hex(0x9BC5E9);
+      return metrics.accent_soft;
     case gui2_backend::console_severity::NORMAL:
       break;
   }
@@ -43,7 +43,7 @@ console_page_view build_console_page(const console_page_options& options) {
       std::max(gui2_core::ui_px(400), viewport_height - gui2_core::navigation_safe_area());
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_size(view.body, metrics.content_width, view.minimum_height);
   gui2_core::set_surface_style(view.body, metrics.card_color);
   lv_obj_set_style_radius(view.body, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);

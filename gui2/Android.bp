@@ -61,6 +61,7 @@ cc_library_static {
         "components/tab_bar.cpp",
         "components/quick_action_button.cpp",
         "components/setting_card.cpp",
+        "components/option_card.cpp",
         "components/section_label.cpp",
         "components/tip_card.cpp",
         "components/flat_button.cpp",

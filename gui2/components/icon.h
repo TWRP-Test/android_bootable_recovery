@@ -13,6 +13,9 @@ void scale_icon_font(lv_obj_t* object, float scale);
 
 int action_icon_art_size(int color_block_size);
 
+// White artwork on a surface takes `color` under a light palette.
+void tint_on_surface(lv_obj_t* image, lv_color_t color);
+
 }  // namespace gui2_components
 
 #endif

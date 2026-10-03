@@ -14,7 +14,7 @@ void screen_lock::create(const gui2_core::ui_metrics& metrics, const char* lock_
   root_ = lv_obj_create(lv_layer_top());
   lv_obj_set_size(root_, metrics.width, metrics.height);
   lv_obj_set_pos(root_, 0, 0);
-  gui2_core::set_surface_style(root_, lv_color_black(), LV_OPA_70);
+  gui2_core::set_surface_style(root_, metrics.scrim, LV_OPA_70);
   lv_obj_set_style_pad_all(root_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(root_);
   lv_obj_set_overflow_visible(root_, true);

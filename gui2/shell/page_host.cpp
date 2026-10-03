@@ -103,6 +103,7 @@ void page_host::start_transition() {
 
 void page_host::settle() {
   if (content_ == nullptr || metrics_ == nullptr) return;
+  gui2_core::equalize_card_grids(content_);
 
   // Measure without the reserve first: what matters is whether the content
   // reaches into the strip the floating control owns, not whether it fills the

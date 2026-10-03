@@ -14,11 +14,6 @@ namespace gui2_pages {
 
 namespace {
 
-constexpr uint32_t kAccent = 0x347FF1;
-constexpr uint32_t kAccentSurface = 0x0E1B2E;
-constexpr uint32_t kWarning = 0xF0443E;
-constexpr uint32_t kWarningSurface = 0x2A1010;
-
 const char* security_label(const gui2_i18n::language_pack& strings,
                            gui2_backend::wifi_security security) {
   switch (security) {
@@ -36,7 +31,7 @@ const char* security_label(const gui2_i18n::language_pack& strings,
 
 lv_obj_t* create_column(lv_obj_t* parent, const gui2_core::ui_metrics& metrics) {
   lv_obj_t* column = lv_obj_create(parent);
-  lv_obj_set_pos(column, metrics.outer_margin, 0);
+  lv_obj_set_pos(column, metrics.content_left, 0);
   lv_obj_set_width(column, metrics.content_width);
   lv_obj_set_height(column, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(column, metrics.background, LV_OPA_TRANSP);
@@ -53,15 +48,14 @@ lv_obj_t* create_button(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, 
                         const char* text, bool primary, lv_event_cb_t callback,
                         lv_event_cb_t press_guard_callback) {
   const int height = gui2_core::single_line_card_height();
-  const lv_color_t fill = primary ? lv_color_hex(kAccent) : metrics.card_color;
+  const lv_color_t fill = primary ? metrics.accent : metrics.card_color;
   lv_obj_t* button = lv_obj_create(parent);
   lv_obj_set_size(button, width, height);
   lv_obj_set_clickable(button, true);
   gui2_core::set_surface_style(button, fill);
   lv_obj_set_style_radius(button, height / 3, LV_PART_MAIN);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), fill, 18),
-                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(button, gui2_core::tinted(fill, 18), LV_STATE_PRESSED);
   gui2_core::disable_scrolling(button);
   if (press_guard_callback != nullptr)
     lv_obj_add_event_cb(button, press_guard_callback, LV_EVENT_ALL, nullptr);
@@ -70,8 +64,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const gui2_core::ui_metrics& metrics, 
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, text == nullptr ? "" : text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-  lv_obj_set_style_text_color(label, primary ? lv_color_hex(0xFFFFFF) : lv_color_hex(kAccent),
-                              LV_PART_MAIN);
+  lv_obj_set_style_text_color(label, primary ? metrics.on_accent : metrics.accent, LV_PART_MAIN);
   lv_obj_set_style_text_font(label, metrics.text_font, LV_PART_MAIN);
   lv_obj_center(label);
   return button;
@@ -112,12 +105,12 @@ wifi_page_view build_wifi_page(const wifi_page_options& options) {
                   options.press_guard_callback);
 
     if (options.failed_text != nullptr)
-      gui2_components::create_tip_card(body, metrics, options.failed_text,
-                                       lv_color_hex(kWarning), lv_color_hex(kWarningSurface));
+      gui2_components::create_tip_card(body, metrics, options.failed_text, metrics.danger,
+                                       metrics.danger_surface);
     if (options.connected_ssid != nullptr && options.connected_ssid[0] != '\0') {
       const std::string text = std::string(strings.wifi_connected) + ": " + options.connected_ssid;
-      gui2_components::create_tip_card(body, metrics, text.c_str(), lv_color_hex(kAccent),
-                                       lv_color_hex(kAccentSurface));
+      gui2_components::create_tip_card(body, metrics, text.c_str(), metrics.accent,
+                                       metrics.accent_surface);
     }
 
     gui2_components::create_section_label(body, metrics, strings.wifi_networks);

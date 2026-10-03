@@ -19,8 +19,7 @@ lv_obj_t* create_quick_action_button(lv_obj_t* parent, const gui2_core::ui_metri
   lv_obj_set_pos(button, x, y);
   gui2_core::set_surface_style(button, metrics.background);
   lv_obj_set_style_radius(button, height / 4, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.background, 18),
-                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(button, gui2_core::tinted(metrics.background, 18), LV_STATE_PRESSED);
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
   lv_obj_set_clickable(button, true);
   if (gesture_callback != nullptr) lv_obj_set_press_lock(button, true);
@@ -38,6 +37,7 @@ lv_obj_t* create_quick_action_button(lv_obj_t* parent, const gui2_core::ui_metri
 
   lv_obj_t* icon =
       create_svg_image(button, icon_source, gui2_core::ui_px(48), gui2_core::ui_px(48));
+  tint_on_surface(icon, metrics.primary_text);
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);

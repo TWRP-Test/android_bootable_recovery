@@ -15,7 +15,7 @@ fastbootd_page_view build_fastbootd_page(const fastbootd_page_options& options) 
   const auto& metrics = *options.metrics;
   const auto& strings = *options.strings;
   lv_obj_t* body = lv_obj_create(options.content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_size(body, metrics.content_width, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);

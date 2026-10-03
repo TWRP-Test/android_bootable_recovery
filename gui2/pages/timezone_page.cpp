@@ -50,7 +50,7 @@ timezone_page_view build_timezone_page(const timezone_page_options& options) {
   const int row_width = std::max(1, metrics.content_width - padding * 2);
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);

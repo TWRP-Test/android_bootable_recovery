@@ -14,7 +14,7 @@ void build_system_read_only_page(const system_read_only_page_options& options) {
   const auto& metrics = *options.metrics;
   const auto& strings = *options.strings;
   lv_obj_t* body = lv_obj_create(options.content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_size(body, metrics.content_width, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
@@ -23,8 +23,8 @@ void build_system_read_only_page(const system_read_only_page_options& options) {
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   gui2_core::disable_scrolling(body);
 
-  gui2_components::create_tip_card(body, metrics, strings.sys_ro_body, lv_color_hex(0x9BC5E9),
-                                   lv_color_hex(0x0E1B2E));
+  gui2_components::create_tip_card(body, metrics, strings.sys_ro_body, metrics.accent_soft,
+                                   metrics.accent_surface);
   if (options.show_never_show)
     gui2_components::create_check_row(body, metrics, strings.sys_ro_never_show,
                                       options.never_show, options.never_show_callback, nullptr);

@@ -17,7 +17,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   track_ = lv_obj_create(parent);
   lv_obj_set_size(track_, width, height);
   lv_obj_set_pos(track_, x, y);
-  gui2_core::set_surface_style(track_, lv_color_hex(0x454545));
+  gui2_core::set_surface_style(track_, metrics.control_track);
   lv_obj_set_style_radius(track_, height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(track_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(track_);
@@ -34,7 +34,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_label_set_text(prompt_, text == nullptr ? "" : text);
   lv_obj_set_width(prompt_, std::max(1, inner_width - knob_width_ + prompt_inset_));
   lv_obj_set_style_text_align(prompt_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-  lv_obj_set_style_text_color(prompt_, lv_color_hex(0xBDBDBD), LV_PART_MAIN);
+  lv_obj_set_style_text_color(prompt_, metrics.control_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(prompt_, metrics.text_font, LV_PART_MAIN);
   lv_obj_update_layout(prompt_);
   lv_obj_set_pos(prompt_, inner_margin_ + knob_width_ - prompt_inset_,
@@ -45,7 +45,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   fill_ = lv_obj_create(track_);
   lv_obj_set_size(fill_, knob_width_, inner_height);
   lv_obj_set_pos(fill_, inner_margin_, inner_margin_);
-  gui2_core::set_surface_style(fill_, lv_color_hex(0x9BC5E9));
+  gui2_core::set_surface_style(fill_, metrics.accent_soft);
   lv_obj_set_style_radius(fill_, inner_height / 2, LV_PART_MAIN);
   lv_obj_set_clickable(fill_, false);
   gui2_core::disable_scrolling(fill_);
@@ -53,7 +53,7 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   knob_ = lv_obj_create(track_);
   lv_obj_set_size(knob_, knob_width_, inner_height);
   lv_obj_set_pos(knob_, inner_margin_, inner_margin_);
-  gui2_core::set_surface_style(knob_, lv_color_hex(0x347FF1));
+  gui2_core::set_surface_style(knob_, metrics.accent);
   lv_obj_set_style_radius(knob_, inner_height / 2, LV_PART_MAIN);
   lv_obj_set_clickable(knob_, true);
   lv_obj_set_press_lock(knob_, true);
@@ -155,9 +155,11 @@ void swipe_slider::set_enabled(bool enabled) {
 
 void swipe_slider::set_danger(bool danger) {
   if (knob_ != nullptr)
-    lv_obj_set_style_bg_color(knob_, lv_color_hex(danger ? 0xE5483F : 0x347FF1), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(knob_, danger ? gui2_core::ui.danger : gui2_core::ui.accent,
+                              LV_PART_MAIN);
   if (fill_ != nullptr)
-    lv_obj_set_style_bg_color(fill_, lv_color_hex(danger ? 0xF2A7A1 : 0x9BC5E9), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(fill_, danger ? gui2_core::ui.danger_soft : gui2_core::ui.accent_soft,
+                              LV_PART_MAIN);
 }
 
 void swipe_slider::detach() {

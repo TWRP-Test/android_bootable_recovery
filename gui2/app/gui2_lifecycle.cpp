@@ -1,9 +1,12 @@
 #include "app/gui2_lifecycle.h"
 
+#include <cstdio>
+
 #include "core/ui_metrics.h"
 #include "gui2_display.h"
 #include "gui2_input.h"
 #include "gui2_svg_cache.h"
+#include "shell/gui_shell_base.h"
 #include "twrpminui/minui.h"
 
 namespace gui2_app {
@@ -23,7 +26,10 @@ bool initialize_graphics(const gui2_context* context, graphics_state* state,
   state->lv_initialized = true;
   lv_tick_set_cb(tick_callback);
 
-  gui2_core::ui.scale = gui2_core::ui_scale_for(gr_fb_width(), gr_fb_height());
+  const int short_side_mm = gui2_shell::panel_short_side_mm();
+  gui2_core::ui.scale = gui2_core::ui_scale_for(gr_fb_width(), gr_fb_height(), short_side_mm);
+  fprintf(stderr, "gui2: %dx%d, short side %d mm, scale %.2f\n", gr_fb_width(), gr_fb_height(),
+          short_side_mm, gui2_core::ui.scale);
   if (!state->fonts.initialize(gui2_core::ui.scale)) {
     shutdown_graphics(state, false);
     return false;

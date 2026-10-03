@@ -2,14 +2,12 @@
 
 #include <string>
 
+#include "core/ui_helpers.h"
+
 namespace gui2_pages {
 
 void set_choice_style(lv_obj_t* object, bool selected, lv_color_t card_color) {
-  if (object == nullptr) return;
-  const lv_color_t color = selected ? lv_color_hex(0x347FF1) : card_color;
-  lv_obj_set_style_bg_color(object, color, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(object, lv_color_mix(lv_color_hex(0xFFFFFF), color, 18),
-                            LV_STATE_PRESSED);
+  gui2_core::set_selected_fill(object, selected, card_color);
 }
 
 void refresh_time_choices(lv_obj_t* const* format_cards, bool military_time,

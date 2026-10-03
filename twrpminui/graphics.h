@@ -56,6 +56,8 @@ void gr_reset_damage();
 // Backends use this to describe the actual byte order of their scanout
 // buffer. It is intentionally not tied to GGLPixelFormat.
 void gr_set_pixel_format(GRPixelFormat format);
+// Panel size in millimetres before rotation; non-positive values mean unknown.
+void gr_set_physical_size(int width_mm, int height_mm);
 bool gr_raw_frame_native();
 void gr_raw_frame_done();
 

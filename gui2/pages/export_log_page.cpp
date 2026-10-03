@@ -15,7 +15,7 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
   const auto& strings = *options.strings;
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -24,6 +24,7 @@ export_log_page_view build_export_log_page(const export_log_page_options& option
   lv_obj_set_layout(view.body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(view.body);
   lv_obj_set_overflow_visible(view.body, true);
   gui2_core::disable_scrolling(view.body);
 

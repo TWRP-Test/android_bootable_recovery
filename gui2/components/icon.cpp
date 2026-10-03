@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/ui_metrics.h"
 #include "gui2_svg_cache.h"
 
 namespace gui2_components {
@@ -30,6 +31,12 @@ void scale_icon_font(lv_obj_t* object, float scale) {
 int action_icon_art_size(int color_block_size) {
   // Keep the vector artwork visually inset from the colored rounded square.
   return std::max(1, color_block_size * 82 / 100);
+}
+
+void tint_on_surface(lv_obj_t* image, lv_color_t color) {
+  if (image == nullptr || gui2_core::ui.dark) return;
+  lv_obj_set_style_image_recolor(image, color, LV_PART_MAIN);
+  lv_obj_set_style_image_recolor_opa(image, LV_OPA_COVER, LV_PART_MAIN);
 }
 
 }  // namespace gui2_components

@@ -32,7 +32,7 @@ file_input_page_view build_file_input_page(const file_input_page_options& option
   const int input_pad = std::max(0, (input_height - line_height) / 2);
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
@@ -64,7 +64,7 @@ file_input_page_view build_file_input_page(const file_input_page_options& option
   if (options.error_text != nullptr) {
     lv_obj_t* error =
         gui2_components::create_section_label(view.body, metrics, options.error_text);
-    lv_obj_set_style_text_color(error, lv_color_hex(0xF0443E), LV_PART_MAIN);
+    lv_obj_set_style_text_color(error, metrics.danger, LV_PART_MAIN);
   }
   if (options.note_text != nullptr)
     gui2_components::create_section_label(view.body, metrics, options.note_text);

@@ -23,7 +23,7 @@ page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::
   if (page_layer == nullptr) return result;
 
   result.heading = lv_obj_create(page_layer);
-  lv_obj_set_pos(result.heading, metrics.outer_margin, metrics.heading_top);
+  lv_obj_set_pos(result.heading, metrics.content_left, metrics.heading_top);
   lv_obj_set_size(result.heading, metrics.content_width, metrics.heading_height);
   gui2_core::set_surface_style(result.heading, metrics.background, LV_OPA_TRANSP);
   const int heading_pad_left = gui2_core::ui_px(10);

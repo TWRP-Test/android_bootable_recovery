@@ -9,14 +9,8 @@ namespace gui2_components {
 
 namespace {
 
-constexpr uint32_t kPanel = 0x141414;
-
 // Set from settings before any keyboard exists.
 int lift_pixels = 0;
-constexpr uint32_t kKey = 0x3C3C3C;
-constexpr uint32_t kKeyPressed = 0x585858;
-constexpr uint32_t kKeySubdued = 0x2E2E2E;
-constexpr uint32_t kAccent = 0x347FF1;
 
 // A clipboard of its own: recovery has no system one, and the copy and paste
 // keys are useless without somewhere to put the text.
@@ -27,6 +21,8 @@ std::string& clipboard() {
 
 struct geometry {
   int side_pad;
+  // Width the key rows span; large screens keep it phone-like and centred.
+  int key_area;
   int gap;
   int key_height;
   int function_height;
@@ -36,10 +32,13 @@ struct geometry {
 geometry measure(const gui2_core::ui_metrics& metrics, keyboard_layout layout,
                  bool shell_row = false) {
   geometry g;
-  g.key_height = std::max(1, metrics.height * 11 / 200);
+  g.key_height = metrics.large_screen ? gui2_core::ui_px(140)
+                                      : std::max(1, metrics.height * 11 / 200);
   g.function_height = g.key_height * 4 / 5;
   g.gap = std::max(2, g.key_height / 11);
   g.side_pad = g.gap * 2;
+  g.key_area = metrics.width - g.side_pad * 2;
+  if (metrics.large_screen) g.key_area = std::min(g.key_area, gui2_core::ui_px(1800));
   g.rows = shell_row ? 5 : 4;
   return g;
 }
@@ -59,7 +58,7 @@ void prepare_field(lv_obj_t* textarea, lv_color_t caret) {
   lv_obj_set_style_border_color(textarea, caret, LV_PART_CURSOR);
   lv_obj_set_style_border_opa(textarea, LV_OPA_COVER, LV_PART_CURSOR);
   lv_obj_set_style_text_color(textarea, caret, LV_PART_CURSOR);
-  lv_obj_set_style_bg_color(textarea, lv_color_hex(kAccent), LV_PART_SELECTED);
+  lv_obj_set_style_bg_color(textarea, gui2_core::ui.accent, LV_PART_SELECTED);
   lv_obj_set_style_bg_opa(textarea, LV_OPA_50, LV_PART_SELECTED);
   lv_textarea_set_text_selection(textarea, true);
   // Without this the page underneath takes the drag and scrolls instead of
@@ -293,13 +292,12 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
   lv_obj_set_style_pad_row(root_, g.gap, LV_PART_MAIN);
   lv_obj_set_style_border_width(root_, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(root_, 0, LV_PART_MAIN);
-  gui2_core::set_surface_style(root_, lv_color_hex(kPanel));
+  gui2_core::set_surface_style(root_, gui2_core::ui.key_panel);
   gui2_core::disable_scrolling(root_);
   lv_obj_set_flex_flow(root_, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  prepare_field(textarea_,
-                metrics_ != nullptr ? metrics_->primary_text : lv_color_hex(0xFFFFFF));
+  prepare_field(textarea_, gui2_core::ui.primary_text);
   blink_field_is(textarea_);
 
   rows_ = root_;
@@ -319,7 +317,7 @@ void keyboard::focus_event_cb(lv_event_t* event) {
 
 void keyboard::bind(lv_obj_t* textarea) {
   if (textarea == nullptr) return;
-  prepare_field(textarea, metrics_ != nullptr ? metrics_->primary_text : lv_color_hex(0xFFFFFF));
+  prepare_field(textarea, gui2_core::ui.primary_text);
   lv_obj_add_event_cb(textarea, focus_event_cb, LV_EVENT_CLICKED, this);
 }
 
@@ -341,17 +339,18 @@ lv_obj_t* keyboard::add_key(lv_obj_t* parent, const key& definition, int width, 
   lv_obj_set_style_transform_width(button, 0, LV_PART_MAIN | LV_STATE_PRESSED);
   lv_obj_set_style_transform_height(button, 0, LV_PART_MAIN | LV_STATE_PRESSED);
 
-  const uint32_t fill = definition.accent    ? kAccent
-                        : definition.subdued ? kKeySubdued
-                                             : kKey;
+  const lv_color_t fill = definition.accent    ? gui2_core::ui.accent
+                          : definition.subdued ? gui2_core::ui.key_subdued
+                                               : gui2_core::ui.key_fill;
   if (inside_group) {
     // The group already draws the background; the keys only take the press.
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_bg_color(button, lv_color_white(), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(button, gui2_core::ui.tint, LV_PART_MAIN | LV_STATE_PRESSED);
   } else {
-    lv_obj_set_style_bg_color(button, lv_color_hex(fill), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(button, lv_color_hex(definition.accent ? kAccent : kKeyPressed),
+    lv_obj_set_style_bg_color(button, fill, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button,
+                              definition.accent ? gui2_core::ui.accent : gui2_core::ui.key_pressed,
                               LV_PART_MAIN | LV_STATE_PRESSED);
   }
   if (definition.kind == key_kind::CARET) {
@@ -362,10 +361,11 @@ lv_obj_t* keyboard::add_key(lv_obj_t* parent, const key& definition, int width, 
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, definition.label.c_str());
   lv_obj_center(label);
-  lv_obj_set_style_text_color(
-      label,
-      definition.kind == key_kind::CARET ? metrics_->secondary_text : lv_color_white(),
-      LV_PART_MAIN);
+  lv_obj_set_style_text_color(label,
+                              definition.kind == key_kind::CARET ? gui2_core::ui.secondary_text
+                              : definition.accent                ? gui2_core::ui.on_accent
+                                                                 : gui2_core::ui.primary_text,
+                              LV_PART_MAIN);
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   if (definition.symbol_font) {
     lv_obj_set_style_text_font(label, &lv_font_montserrat_48, LV_PART_MAIN);
@@ -404,7 +404,7 @@ void keyboard::build_rows() {
   for (const auto& row : rows)
     for (const key& k : row) keys_.push_back(k);
 
-  const int usable_width = metrics_->width - g.side_pad * 2;
+  const int usable_width = g.key_area;
   // The home row sits inside the row above it, the way every phone keyboard
   // draws it.
   const int home_row_inset =
@@ -416,7 +416,7 @@ void keyboard::build_rows() {
     const int radius = r == 0 ? height / 2 : height * 22 / 100;
     // The shell row pushes the letter rows down by one.
     const int inset = r == (shell_row_ ? 3u : 2u) ? home_row_inset : 0;
-    lv_obj_t* row_object = add_row(height, g.gap);
+    lv_obj_t* row_object = add_row(usable_width, height, g.gap);
     if (inset > 0) {
       lv_obj_set_style_pad_left(row_object, inset, LV_PART_MAIN);
       lv_obj_set_style_pad_right(row_object, inset, LV_PART_MAIN);
@@ -454,7 +454,7 @@ void keyboard::build_rows() {
         lv_obj_set_style_border_width(group_object, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(group_object, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_column(group_object, 0, LV_PART_MAIN);
-        gui2_core::set_surface_style(group_object, lv_color_hex(kKeySubdued));
+        gui2_core::set_surface_style(group_object, gui2_core::ui.key_subdued);
         gui2_core::disable_scrolling(group_object);
         lv_obj_set_flex_flow(group_object, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(group_object, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
@@ -471,9 +471,9 @@ void keyboard::build_rows() {
   }
 }
 
-lv_obj_t* keyboard::add_row(int height, int gap) {
+lv_obj_t* keyboard::add_row(int width, int height, int gap) {
   lv_obj_t* row = lv_obj_create(rows_);
-  lv_obj_set_size(row, LV_PCT(100), height);
+  lv_obj_set_size(row, width, height);
   lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_column(row, gap, LV_PART_MAIN);
   lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
@@ -609,6 +609,22 @@ void keyboard::hidden_anim_done(lv_anim_t* anim) {
   lv_obj_set_y(self->root_, self->resting_y_);
 }
 
+// Scrolls the page so the field clears the keyboard's resting top edge.
+static void reveal_field(lv_obj_t* textarea, lv_obj_t* keyboard_root, int resting_y) {
+  if (textarea == nullptr || keyboard_root == nullptr) return;
+  lv_obj_t* scroller = lv_obj_get_parent(textarea);
+  while (scroller != nullptr && !lv_obj_has_flag(scroller, LV_OBJ_FLAG_SCROLLABLE))
+    scroller = lv_obj_get_parent(scroller);
+  if (scroller == nullptr) return;
+  lv_obj_update_layout(scroller);
+  lv_area_t field;
+  lv_area_t host;
+  lv_obj_get_coords(textarea, &field);
+  lv_obj_get_coords(lv_obj_get_parent(keyboard_root), &host);
+  const int32_t overlap = field.y2 + gui2_core::ui.card_gap - (host.y1 + resting_y);
+  if (overlap > 0) lv_obj_scroll_by(scroller, 0, -overlap, LV_ANIM_ON);
+}
+
 void keyboard::show() {
   if (root_ == nullptr) return;
   current_keyboard = this;
@@ -626,6 +642,7 @@ void keyboard::show() {
   if (from == resting_y_) return;
   lv_obj_set_y(root_, from);
   if (shown_callback_ != nullptr) shown_callback_(user_data_);
+  reveal_field(textarea_, root_, resting_y_);
 
   // Slide up rather than appearing all at once.
   lv_anim_t anim;

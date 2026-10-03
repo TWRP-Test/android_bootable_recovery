@@ -24,13 +24,10 @@ lv_obj_t* create_icon_card(lv_obj_t* parent, const icon_card_options& options) {
   lv_obj_set_style_radius(card, card_height / 4, LV_PART_MAIN);
   lv_obj_set_style_bg_color(card, metrics.card_color, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(card, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.card_color, 18),
-                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(card, gui2_core::tinted(metrics.card_color, 18), LV_STATE_PRESSED);
   lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(card, 0, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(card, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(card, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(card, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(card);
   if (options.press_guard_callback != nullptr)
     lv_obj_add_event_cb(card, options.press_guard_callback, LV_EVENT_ALL, nullptr);
   if (options.event_callback != nullptr)
@@ -69,6 +66,7 @@ lv_obj_t* create_icon_card(lv_obj_t* parent, const icon_card_options& options) {
   if (options.show_arrow) {
     lv_obj_t* arrow =
         create_svg_image(card, &kGui2IconArrowRight, gui2_core::ui_px(48), gui2_core::ui_px(48));
+    tint_on_surface(arrow, metrics.primary_text);
     lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -side_padding, 0);
   }
   return card;
