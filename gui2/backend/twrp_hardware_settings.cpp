@@ -40,15 +40,7 @@ int haptic_default(haptic_channel channel) {
 
 }  // namespace
 
-twrp_hardware_settings::twrp_hardware_settings(settings_store* settings)
-    : settings_(settings),
-#ifdef TW_NO_HAPTICS
-      haptics_available_(false) {
-}
-#else
-      haptics_available_(haptics_available() != 0) {
-}
-#endif
+twrp_hardware_settings::twrp_hardware_settings(settings_store* settings) : settings_(settings) {}
 
 bool twrp_hardware_settings::has_brightness() const {
   return DataManager::GetIntValue("tw_has_brightnesss_file") != 0 &&
@@ -74,8 +66,9 @@ bool twrp_hardware_settings::set_brightness_percent(int percent) {
          settings_->set_persistent("tw_brightness_pct", std::to_string(percent));
 }
 
+// The legacy settings page offers the vibration tab on tw_disable_haptics.
 bool twrp_hardware_settings::has_haptics() const {
-  return haptics_available_;
+  return DataManager::GetIntValue("tw_disable_haptics") == 0;
 }
 
 int twrp_hardware_settings::haptic_duration_ms(haptic_channel channel) const {

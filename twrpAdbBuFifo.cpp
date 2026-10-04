@@ -156,6 +156,7 @@ bool twrpAdbBuFifo::Backup_ADB_Command(std::string Options) {
 	DataManager::SetValue(TW_BACKUP_NAME, gui_lookup("auto_generate", "(Auto Generate)"));
 	if (!ret) {
 		gui_err("backup_fail=Backup failed");
+		gui_changePage("main");
 		return false;
 	}
 	gui_msg("backup_complete=Backup Complete");

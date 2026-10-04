@@ -1403,6 +1403,22 @@ void PageManager::LoadLanguage(std::string filename) {
 	PartitionManager.Translate_Partition_Display_Names();
 }
 
+// Loading the theme for this builds every page, and GUIButton draws to the
+// framebuffer while it is constructed.
+void PageManager::TranslatePartitionNames(const std::string& language)
+{
+	PageSet* previous = mCurrentSet;
+	mCurrentSet = new PageSet();
+	char* base = LoadFileToBuffer(TWRES "languages/en.xml", NULL);
+	if (base) {
+		mCurrentSet->LoadLanguage(base, NULL);
+		free(base);
+	}
+	LoadLanguage(language);
+	delete mCurrentSet;
+	mCurrentSet = previous;
+}
+
 int PageManager::LoadPackage(std::string name, std::string package, std::string startpage)
 {
 	std::string mainxmlfilename = package;

@@ -27,11 +27,13 @@ struct hardware_page_options {
   size_t slider_count = 0;
   lv_event_cb_t value_changed_callback = nullptr;
   lv_event_cb_t pressed_callback = nullptr;
+  lv_event_cb_t press_guard_callback = nullptr;
 };
 
 struct hardware_page_view {
   lv_obj_t* body = nullptr;
   lv_obj_t* error_label = nullptr;
+  lv_obj_t* slider_cards[4] = {};
 };
 
 hardware_page_view build_hardware_page(const hardware_page_options& options);

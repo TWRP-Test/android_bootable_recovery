@@ -233,6 +233,7 @@ static GRRect direct_pending_damage;
 static int displayed_buffer = -1;
 static bool legacy_page_flip = true;
 static bool atomic_page_flip = true;
+static int atomic_page_flip_failures = 0;
 static bool direct_scanout;
 static bool warned_empty_damage;
 static uint64_t stats_frames;
@@ -1159,12 +1160,16 @@ static int present_atomic_buffer(int buffer) {
       ret = wait_for_page_flip(&waiting);
     if (ret == 0) {
       displayed_buffer = buffer;
+      atomic_page_flip_failures = 0;
       return 0;
     }
 
-    printf("Atomic page flip failed ret=%d; falling back to blocking commit\n", ret);
-    fflush(stdout);
-    atomic_page_flip = false;
+    if (++atomic_page_flip_failures >= 8) {
+      printf("Atomic page flip failed ret=%d %d times; falling back to blocking commit\n", ret,
+             atomic_page_flip_failures);
+      fflush(stdout);
+      atomic_page_flip = false;
+    }
   }
 
   int ret = commit_atomic_buffer(buffer, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
@@ -1272,6 +1277,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return nullptr;
   }
 
+  gr_set_physical_size(main_monitor_connector->mmWidth, main_monitor_connector->mmHeight);
   main_monitor_crtc = find_crtc_for_connector(drm_fd, res, main_monitor_connector);
 
   if (!main_monitor_crtc) {
@@ -1306,6 +1312,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   displayed_buffer = -1;
   legacy_page_flip = true;
   atomic_page_flip = true;
+  atomic_page_flip_failures = 0;
   direct_scanout = legacy_modeset ||
       android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
   warned_empty_damage = false;
@@ -1585,6 +1592,7 @@ static void drm_exit(minui_backend* backend __unused) {
     legacy_modeset = false;
     legacy_page_flip = true;
     atomic_page_flip = true;
+    atomic_page_flip_failures = 0;
     spr_enabled = 0;
     spr_bypass = 0;
     spr_prop_name.clear();

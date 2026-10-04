@@ -8,7 +8,6 @@
 
 #include <android-base/properties.h>
 
-#include "src/themes/default/lv_theme_default.h"
 #include "twrpminui/minui.h"
 
 static bool frame_dirty;
@@ -87,6 +86,11 @@ static void flush_cb(lv_display_t* display, const lv_area_t* area, uint8_t* px_m
 }
 
 bool gui2_display_present(gui2_backend::screen_backend* screen, uint64_t monotonic_ms) {
+  if (screen != nullptr && screen->is_screen_off()) {
+    submit_recording_frame(screen, monotonic_ms);
+    return false;
+  }
+
   // A refresh may contain multiple flushes; present before capturing.
   const bool presented = frame_dirty;
   if (presented) {

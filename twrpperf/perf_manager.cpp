@@ -691,6 +691,11 @@ struct TwrpPerfManager::Impl {
       backends[backend_index]->Deactivate();
       ++backend_index;
     }
+    backend_index = 0;
+    if (!activation_exhausted_reported) {
+      activation_exhausted_reported = true;
+      LOG(WARNING) << "TwrpPerfManager: no backend accepted a boost; retrying on later activity";
+    }
     return false;
   }
 
@@ -723,6 +728,7 @@ struct TwrpPerfManager::Impl {
     affinity_enabled = false;
     boost_deadline_ns = 0;
     next_property_check_ns = 0;
+    activation_exhausted_reported = false;
   }
 
   mutable std::mutex mutex;
@@ -732,6 +738,7 @@ struct TwrpPerfManager::Impl {
   int64_t boost_deadline_ns = 0;
   int64_t next_property_check_ns = 0;
   int hold_ms = 300;
+  bool activation_exhausted_reported = false;
   bool initialized = false;
   bool enabled = false;
   bool affinity_enabled = false;

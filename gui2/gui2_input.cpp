@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <deque>
+#include <set>
 
 #include "twrpminui/minui.h"
 
@@ -18,15 +20,30 @@ static bool input_activity;
 static bool power_down;
 static bool volume_down;
 static bool key_combo_consumed;
-static uint64_t power_down_ms;
 static bool queued_screenshot;
 static bool queued_toggle_screen;
 static bool queued_back;
+static bool queued_home;
 static bool screen_off_input;
 static bool touch_state_pending;
 static lv_indev_state_t pending_touch_state = LV_INDEV_STATE_RELEASED;
 static int primary_touch_id = -1;
 static constexpr float kRelativeMouseScale = 2.5f;
+static int power_key = KEY_POWER;
+
+// HardwareKeyboard's state, and InputHandler's key repeat: 500 ms to the first
+// repeat, then every 100 ms.
+static std::set<int> pressed_keys;
+static std::deque<int> typed_chars;
+static std::deque<int> typed_keys;
+static int last_key_char;
+static int last_key;
+static bool key_held;
+static bool key_repeating;
+static uint64_t key_timer_ms;
+static constexpr int KEYBOARD_ACTION = 13;
+static constexpr int KEYBOARD_BACKSPACE = 8;
+static constexpr int KEYBOARD_TAB = 9;
 
 static int clamp_pointer_x(int value) {
   return std::clamp(value, 0, std::max(0, gr_fb_width() - 1));
@@ -57,8 +74,114 @@ static void queue_key_action(gui2_key_action action) {
     queued_screenshot = true;
   else if (action == gui2_key_action::BACK)
     queued_back = true;
+  else if (action == gui2_key_action::HOME)
+    queued_home = true;
   else
     queued_toggle_screen = true;
+}
+
+// Map keys to other keys.
+static int TranslateKeyCode(int key_code) {
+  switch (key_code) {
+    case KEY_SLEEP:  // Lock key on Asus Transformer hardware keyboard
+      return KEY_POWER;
+  }
+  return key_code;
+}
+
+static int KeyCodeToChar(int key_code, bool shiftkey, bool ctrlkey) {
+  int keyboard = -1;
+
+  static const struct {
+    int code;
+    char plain;
+    char shifted;
+  } kKeys[] = {
+    { KEY_A, 'a', 'A' }, { KEY_B, 'b', 'B' }, { KEY_C, 'c', 'C' }, { KEY_D, 'd', 'D' },
+    { KEY_E, 'e', 'E' }, { KEY_F, 'f', 'F' }, { KEY_G, 'g', 'G' }, { KEY_H, 'h', 'H' },
+    { KEY_I, 'i', 'I' }, { KEY_J, 'j', 'J' }, { KEY_K, 'k', 'K' }, { KEY_L, 'l', 'L' },
+    { KEY_M, 'm', 'M' }, { KEY_N, 'n', 'N' }, { KEY_O, 'o', 'O' }, { KEY_P, 'p', 'P' },
+    { KEY_Q, 'q', 'Q' }, { KEY_R, 'r', 'R' }, { KEY_S, 's', 'S' }, { KEY_T, 't', 'T' },
+    { KEY_U, 'u', 'U' }, { KEY_V, 'v', 'V' }, { KEY_W, 'w', 'W' }, { KEY_X, 'x', 'X' },
+    { KEY_Y, 'y', 'Y' }, { KEY_Z, 'z', 'Z' }, { KEY_0, '0', ')' }, { KEY_1, '1', '!' },
+    { KEY_2, '2', '@' }, { KEY_3, '3', '#' }, { KEY_4, '4', '$' }, { KEY_5, '5', '%' },
+    { KEY_6, '6', '^' }, { KEY_7, '7', '&' }, { KEY_8, '8', '*' }, { KEY_9, '9', '(' },
+    { KEY_SLASH, '/', '?' }, { KEY_DOT, '.', '>' }, { KEY_COMMA, ',', '<' },
+    { KEY_MINUS, '-', '_' }, { KEY_GRAVE, '`', '~' }, { KEY_EQUAL, '=', '+' },
+    { KEY_LEFTBRACE, '[', '{' }, { KEY_RIGHTBRACE, ']', '}' }, { KEY_BACKSLASH, '\\', '|' },
+    { KEY_SEMICOLON, ';', ':' }, { KEY_APOSTROPHE, '\'', '\"' },
+  };
+  for (const auto& entry : kKeys) {
+    if (entry.code == key_code) {
+      keyboard = shiftkey ? entry.shifted : entry.plain;
+      break;
+    }
+  }
+  switch (key_code) {
+    case KEY_SPACE:
+      keyboard = ' ';
+      break;
+    case KEY_BACKSPACE:
+      keyboard = KEYBOARD_BACKSPACE;
+      break;
+    case KEY_TAB:
+      keyboard = KEYBOARD_TAB;
+      break;
+    case KEY_ENTER:
+      keyboard = KEYBOARD_ACTION;
+      break;
+  }
+  if (ctrlkey) {
+    if (keyboard >= 96)
+      keyboard -= 96;
+    else
+      keyboard = -1;
+  }
+  return keyboard;
+}
+
+static bool is_key_down(int key_code) {
+  return pressed_keys.find(key_code) != pressed_keys.end();
+}
+
+// HardwareKeyboard::KeyDown, with the page's side left to the loop.
+static void keyboard_key_down(int key_code) {
+  pressed_keys.insert(key_code);
+
+  bool ctrlkey = is_key_down(KEY_LEFTCTRL) || is_key_down(KEY_RIGHTCTRL);
+  bool shiftkey = is_key_down(KEY_LEFTSHIFT) || is_key_down(KEY_RIGHTSHIFT);
+
+  int ch = KeyCodeToChar(key_code, shiftkey, ctrlkey);
+
+  if (ch != -1) {
+    last_key_char = ch;
+    typed_chars.push_back(ch);
+  } else {
+    last_key_char = 0;
+    // The page's <action key=...> runs once, on release (GUIAction::NotifyKey).
+    if (key_code == KEY_BACK || key_code == KEY_HOMEPAGE) {
+      last_key = 0;
+    } else {
+      last_key = key_code;
+      typed_keys.push_back(key_code);
+    }
+  }
+}
+
+static void keyboard_key_up(int key_code) {
+  if (pressed_keys.erase(key_code) == 0) return;
+  if (key_code == KEY_BACK)
+    queue_key_action(gui2_key_action::BACK);
+  else if (key_code == KEY_HOMEPAGE)
+    queue_key_action(gui2_key_action::HOME);
+}
+
+// HardwareKeyboard::KeyRepeat
+static void keyboard_key_repeat(void) {
+  if (last_key_char)
+    typed_chars.push_back(last_key_char);
+  else if (last_key)
+    typed_keys.push_back(last_key);
 }
 
 static void process_key_event(const input_event& event) {
@@ -69,17 +192,28 @@ static void process_key_event(const input_event& event) {
     return;
   }
 
-  if (event.code != KEY_POWER && event.code != KEY_VOLUMEDOWN) return;
+  const int code = TranslateKeyCode(event.code);
+  if (code != power_key && code != KEY_VOLUMEDOWN) {
+    if (event.value != 0) {
+      // This is a key press
+      keyboard_key_down(code);
+      key_held = true;
+      key_repeating = false;
+      key_timer_ms = key_clock_ms();
+    } else {
+      // This is a key release
+      keyboard_key_up(code);
+      key_held = false;
+    }
+    return;
+  }
 
   // Ignore key autorepeat.
   if (event.value == 2) return;
 
-  if (event.code == KEY_POWER) {
+  if (code == power_key) {
     if (event.value != 0) {
-      if (!power_down) {
-        power_down = true;
-        power_down_ms = key_clock_ms();
-      }
+      power_down = true;
       if (volume_down && !key_combo_consumed) {
         key_combo_consumed = true;
         queued_screenshot = true;
@@ -109,13 +243,40 @@ static void process_key_event(const input_event& event) {
 }
 
 static void expire_power_key(void) {
-  // Wait briefly for the screenshot chord partner.
-  if (power_down && !key_combo_consumed && key_clock_ms() - power_down_ms >= 250) {
-    key_combo_consumed = true;
-    queue_key_action(gui2_key_action::TOGGLE_SCREEN);
-  }
-
   if (!power_down && !volume_down) key_combo_consumed = false;
+}
+
+// InputHandler::processHoldAndRepeat for keys.
+static void repeat_held_key(void) {
+  if (!key_held) return;
+  const uint64_t now = key_clock_ms();
+  if (!key_repeating && now - key_timer_ms > 500) {
+    key_timer_ms = now;
+    key_repeating = true;
+    keyboard_key_repeat();
+  } else if (key_repeating && now - key_timer_ms > 100) {
+    key_timer_ms = now;
+    keyboard_key_repeat();
+  }
+}
+
+void gui2_input_set_power_key(int key_code) {
+  power_key = key_code > 0 ? key_code : KEY_POWER;
+}
+
+bool gui2_input_take_char(int* ch) {
+  repeat_held_key();
+  if (ch == nullptr || typed_chars.empty()) return false;
+  *ch = typed_chars.front();
+  typed_chars.pop_front();
+  return true;
+}
+
+bool gui2_input_take_key(int* key_code) {
+  if (key_code == nullptr || typed_keys.empty()) return false;
+  *key_code = typed_keys.front();
+  typed_keys.pop_front();
+  return true;
 }
 
 static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
@@ -198,7 +359,7 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
 
     if (event.type == EV_KEY && event.code != BTN_LEFT && event.code != BTN_TOUCH) {
       process_key_event(event);
-      if (event.code != KEY_POWER && event.code != KEY_VOLUMEDOWN) input_activity = true;
+      if (TranslateKeyCode(event.code) != power_key) input_activity = true;
       break;
     }
 
@@ -261,6 +422,7 @@ finish:
   data->point = pointer_state.point;
   data->state = screen_off_input ? LV_INDEV_STATE_RELEASED : pointer_state.state;
   data->timestamp = lv_tick_get();
+  data->continue_reading = touch_frame_seen;
 }
 
 bool gui2_input_take_activity(void) {
@@ -286,6 +448,11 @@ bool gui2_input_take_key_action(gui2_key_action* action) {
     *action = gui2_key_action::BACK;
     return true;
   }
+  if (queued_home) {
+    queued_home = false;
+    *action = gui2_key_action::HOME;
+    return true;
+  }
   if (queued_toggle_screen) {
     queued_toggle_screen = false;
     *action = gui2_key_action::TOGGLE_SCREEN;
@@ -308,10 +475,10 @@ lv_indev_t* gui2_input_init(void) {
   power_down = false;
   volume_down = false;
   key_combo_consumed = false;
-  power_down_ms = 0;
   queued_screenshot = false;
   queued_toggle_screen = false;
   queued_back = false;
+  queued_home = false;
   screen_off_input = false;
   primary_touch_id = -1;
   touch_state_pending = false;

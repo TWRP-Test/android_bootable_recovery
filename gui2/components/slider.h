@@ -13,6 +13,8 @@ lv_obj_t* create_slider(lv_obj_t* parent, int x, int y, int width, int height, i
                         lv_color_t thumb, slider* component);
 
 int get_value(const slider* component);
+
+void set_enabled(slider* component, bool enabled);
 void set_value(slider* component, int value);
 void refresh_slider(slider* component);
 

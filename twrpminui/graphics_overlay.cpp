@@ -582,6 +582,7 @@ static GRSurface* overlay_init(minui_backend* backend) {
         close(fd);
         return NULL;
     }
+    gr_set_physical_size(static_cast<int>(vi.width), static_cast<int>(vi.height));
 
     // We print this out for informational purposes only, but
     // throughout we assume that the framebuffer device uses an RGBX

@@ -32,6 +32,9 @@
 
 #include "gui.hpp"
 #include "objects.hpp"
+#include "terminal.hpp"
+
+#include <sys/select.h>
 #include "rapidxml.hpp"
 #include "twcommon.h"
 #include "twrpminui/minui.h"
@@ -778,6 +781,73 @@ private:
 
 // The one and only terminal engine for now
 TerminalEngine gEngine;
+
+namespace twrp_terminal {
+
+void start()
+{
+	gEngine.initPty();
+}
+
+bool running()
+{
+	return gEngine.status();
+}
+
+void stop()
+{
+	gEngine.stop();
+}
+
+void set_size(int columns, int rows)
+{
+	gEngine.setSize(columns, rows, 0, 0);
+}
+
+void pump()
+{
+	// The pty is a blocking descriptor. gui.cpp only reads it once select says
+	// there is something there; reading it blind stalls the caller until the
+	// shell writes again. Drain what is ready and no more.
+	for (int round = 0; round < 64 && gEngine.status() && g_pty_fd > 0; ++round) {
+		fd_set ready;
+		FD_ZERO(&ready);
+		FD_SET(g_pty_fd, &ready);
+		struct timeval no_wait = { 0, 0 };
+		if (select(g_pty_fd + 1, &ready, NULL, NULL, &no_wait) <= 0 || !FD_ISSET(g_pty_fd, &ready))
+			break;
+		gEngine.readPty();
+	}
+}
+
+int update_counter()
+{
+	return gEngine.getUpdateCounter();
+}
+
+size_t line_count()
+{
+	return gEngine.getLinesCount();
+}
+
+std::string line(size_t index)
+{
+	if (index >= gEngine.getLinesCount())
+		return std::string();
+	return gEngine.getLine(index).text;
+}
+
+void input_char(int codepoint)
+{
+	gEngine.inputChar(codepoint);
+}
+
+void input_key(int key)
+{
+	gEngine.inputKey(key);
+}
+
+}  // namespace twrp_terminal
 
 void terminal_pty_read()
 {

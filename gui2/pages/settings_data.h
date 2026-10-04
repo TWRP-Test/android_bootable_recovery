@@ -7,12 +7,13 @@
 
 namespace gui2_pages {
 
+// The timezone page's listbox values, in its order.
 inline constexpr const char* timezone_values[24] = {
     "BST11;BDT", "HST10;HDT", "AST9;ADT", "PST8;PDT,M3.2.0,M11.1.0",
     "MST7;MDT,M3.2.0,M11.1.0", "CST6;CDT,M3.2.0,M11.1.0",
     "EST5;EDT,M3.2.0,M11.1.0", "AST4;ADT", "GRNLNDST3;GRNLNDDT",
     "FALKST2;FALKDT", "AZOREST1;AZOREDT", "GMT0;BST,M3.5.0,M10.5.0",
-    "CET-1;CEST,M3.5.0,M10.5.0", "WET-2;WET,M3.2.0,M10.5.0", "SAUST-3;SAUDT",
+    "CET-1;CEST,M3.5.0,M10.5.0", "WET-2;WET,M3.5.0,M10.5.0", "SAUST-3;SAUDT",
     "WST-4;WDT", "PAKST-5;PAKDT", "TASHST-6;TASHDT", "THAIST-7;THAIDT",
     "TAIST-8;TAIDT", "JST-9;JSTDT", "EET-10;EETDT", "MET-11;METDT", "NZST-12;NZDT",
 };
@@ -24,6 +25,23 @@ inline constexpr int timezone_indices[24] = {
 inline constexpr int offset_indices[4] = { 0, 1, 2, 3 };
 inline constexpr int format_indices[2] = { 0, 1 };
 inline constexpr int recording_fps_values[5] = { 15, 24, 30, 45, 60 };
+
+// The legacy slider runs 15-300 seconds; its "Enable screen timeout" box off
+// is the last step, 0.
+inline constexpr int screen_timeout_values[8] = { 15, 30, 45, 60, 120, 180, 300, 0 };
+inline constexpr int screen_timeout_count = 8;
+
+inline int screen_timeout_index_for(int seconds) {
+  if (seconds <= 0) return screen_timeout_count - 1;
+  for (int i = 0; i < screen_timeout_count - 1; ++i) {
+    if (seconds <= screen_timeout_values[i]) return i;
+  }
+  return screen_timeout_count - 2;
+}
+
+inline int screen_timeout_at(int index) {
+  return screen_timeout_values[std::clamp(index, 0, screen_timeout_count - 1)];
+}
 
 inline int recording_fps_limit(const gui2_backend::screen_backend* screen) {
   return screen == nullptr ? 60 : std::clamp(screen->max_recording_fps(), 15, 60);

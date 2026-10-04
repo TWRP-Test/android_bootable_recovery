@@ -25,17 +25,17 @@ lv_obj_t* build_action_page(const action_page_options& options) {
   const auto& action_text =
       options.strings->actions[static_cast<int>(options.definition->id)];
   lv_obj_t* body = lv_obj_create(options.content);
-  lv_obj_set_pos(body, metrics.outer_margin, 0);
+  lv_obj_set_pos(body, metrics.content_left, 0);
   lv_obj_set_width(body, metrics.content_width);
   lv_obj_set_height(body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(body, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(body);
-  lv_obj_set_style_pad_bottom(body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  gui2_core::set_card_grid(body);
 
   int info_height = std::max(metrics.card_height, gui2_core::ui_px(168));
   const int side_padding = card_inner_padding(metrics);
@@ -44,9 +44,7 @@ lv_obj_t* build_action_page(const action_page_options& options) {
   gui2_core::set_surface_style(info, metrics.card_color);
   lv_obj_set_style_radius(info, info_height / 4, LV_PART_MAIN);
   lv_obj_set_style_pad_all(info, 0, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(info, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(info, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(info, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(info);
   gui2_core::disable_scrolling(info);
 
   const int icon_size = std::min(metrics.icon_size, info_height - gui2_core::ui_px(32));
@@ -75,7 +73,7 @@ lv_obj_t* build_action_page(const action_page_options& options) {
   lv_obj_set_flex_flow(text_block, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(text_block, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START);
-  lv_obj_clear_flag(text_block, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(text_block, false);
   gui2_core::disable_scrolling(text_block);
 
   lv_obj_t* title = lv_label_create(text_block);

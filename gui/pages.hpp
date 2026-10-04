@@ -63,6 +63,8 @@ extern std::vector<language_struct> Language_List;
 int ConvertStrToColor(std::string str, COLOR* color);
 int gui_forceRender(void);
 int gui_changePage(std::string newPage);
+// Told about every page change; gui2 follows the adb backup's action page.
+void gui_set_page_change_hook(void (*hook)(const std::string& page));
 int gui_changeOverlay(std::string newPage);
 
 class Resource;
@@ -160,6 +162,8 @@ public:
 	static char* LoadFileToBuffer(std::string filename, ZipArchiveHandle package);
 	static void LoadLanguageList(ZipArchiveHandle package);
 	static void LoadLanguage(std::string filename);
+	// Partition display names in that language, without loading a theme.
+	static void TranslatePartitionNames(const std::string& language);
 	static int LoadPackage(std::string name, std::string package, std::string startpage);
 	static PageSet* SelectPackage(std::string name);
 	static int ReloadPackage(std::string name, std::string package);

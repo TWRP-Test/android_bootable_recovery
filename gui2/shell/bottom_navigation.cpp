@@ -25,7 +25,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
   const int button_height = height > 0 ? height : size;
   lv_obj_set_size(button, button_width, button_height);
   gui2_core::disable_scrolling(button);
-  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(button, true);
   if (embedded) {
     lv_obj_set_style_radius(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -36,10 +36,10 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
     lv_obj_set_style_radius(button, radius_size / 2, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, metrics.nav_color, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(button, lv_color_mix(lv_color_hex(0xFFFFFF), metrics.nav_color, 18),
+    lv_obj_set_style_bg_color(button, gui2_core::tinted(metrics.nav_color, 18),
                               LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(button, gui2_core::ui_px(4), LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, metrics.dark ? gui2_core::ui_px(4) : 0, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, metrics.outline, LV_PART_MAIN);
     lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
   }
   lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
@@ -52,6 +52,7 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
   const int icon_size =
       std::clamp(button_height * 58 / 100, gui2_core::ui_px(52), gui2_core::ui_px(84));
   lv_obj_t* image = gui2_components::create_svg_image(button, source, icon_size, icon_size);
+  gui2_components::tint_on_surface(image, metrics.primary_text);
   lv_obj_center(image);
   return button;
 }
@@ -61,7 +62,8 @@ lv_obj_t* create_button(lv_obj_t* parent, const lv_image_dsc_t* source, int size
 bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
                                                 const gui2_core::ui_metrics& metrics,
                                                 bool home_active, lv_event_cb_t event_callback,
-                                                lv_event_cb_t press_guard_callback) {
+                                                lv_event_cb_t press_guard_callback,
+                                                bool show_console) {
   bottom_navigation_view view;
   if (screen == nullptr) return view;
 
@@ -98,31 +100,32 @@ bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
   gui2_core::set_surface_style(pill, metrics.nav_color);
   lv_obj_set_style_pad_all(pill, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(pill, pill_height / 2, LV_PART_MAIN);
-  lv_obj_set_style_border_width(pill, gui2_core::ui_px(4), LV_PART_MAIN);
-  lv_obj_set_style_border_color(pill, lv_color_hex(0x3B3B3B), LV_PART_MAIN);
+  lv_obj_set_style_border_width(pill, metrics.dark ? gui2_core::ui_px(4) : 0, LV_PART_MAIN);
+  lv_obj_set_style_border_color(pill, metrics.outline, LV_PART_MAIN);
   lv_obj_set_style_border_opa(pill, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(pill, gui2_core::ui_px(10), LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(pill, 45, LV_PART_MAIN);
-  lv_obj_set_style_shadow_offset_y(pill, gui2_core::ui_px(3), LV_PART_MAIN);
+  gui2_core::set_card_shadow(pill);
   lv_obj_set_layout(pill, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(pill, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(pill, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(pill, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(pill);
 
-  const int item_width = pill_width / 3;
+  const int item_width = pill_width / (show_console ? 3 : 2);
   const int icon_size = std::min(pill_height - gui2_core::ui_px(12), gui2_core::ui_px(108));
   lv_obj_t* home = create_button(pill, home_active ? &kGui2IconHomeFilled : &kGui2IconHomeOutlined,
                                  icon_size, metrics, kHomeAction, event_callback,
                                  press_guard_callback, item_width, pill_height, true);
   lv_obj_t* console =
-      create_button(pill, &kGui2IconConsoleOutline, icon_size, metrics, kLogAction, event_callback,
-                    press_guard_callback, item_width, pill_height, true);
-  lv_obj_t* power =
-      create_button(pill, &kGui2IconPower, icon_size, metrics, kPowerAction, event_callback,
-                    press_guard_callback, pill_width - item_width * 2, pill_height, true);
+      show_console ? create_button(pill, &kGui2IconConsoleOutline, icon_size, metrics, kLogAction,
+                                   event_callback, press_guard_callback, item_width, pill_height,
+                                   true)
+                   : nullptr;
+  lv_obj_t* power = create_button(pill, &kGui2IconPower, icon_size, metrics, kPowerAction,
+                                  event_callback, press_guard_callback,
+                                  pill_width - item_width * (show_console ? 2 : 1), pill_height,
+                                  true);
   view.home_icon = lv_obj_get_child(home, 0);
-  view.console_icon = lv_obj_get_child(console, 0);
+  view.console_icon = console == nullptr ? nullptr : lv_obj_get_child(console, 0);
   view.power_icon = lv_obj_get_child(power, 0);
   return view;
 }

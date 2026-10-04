@@ -202,6 +202,25 @@ void GUIConsole::Clear_For_Retranslation()
 	pthread_mutex_unlock(&console_lock);
 }
 
+size_t GUIConsole::Get_Lines(size_t from, std::vector<std::string>* lines,
+							 std::vector<std::string>* colors)
+{
+	Translate_Now();
+
+	pthread_mutex_lock(&console_lock);
+	const size_t total = gConsole.size();
+	if (from > total)
+		from = total;
+	for (size_t i = from; i < total; i++) {
+		if (lines)
+			lines->push_back(gConsole[i]);
+		if (colors)
+			colors->push_back(i < gConsoleColor.size() ? gConsoleColor[i] : "normal");
+	}
+	pthread_mutex_unlock(&console_lock);
+	return total;
+}
+
 GUIConsole::GUIConsole(rapidxml::xml_node<>* node) : GUIScrollList(node)
 {
 	rapidxml::xml_node<>* child;

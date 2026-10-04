@@ -30,7 +30,7 @@ void configure_row(lv_obj_t* row, const gui2_core::ui_metrics& metrics, int heig
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   if (wrap) lv_obj_set_style_pad_row(row, metrics.card_gap, LV_PART_MAIN);
   gui2_core::disable_scrolling(row);
-  lv_obj_add_flag(row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_overflow_visible(row, true);
 }
 
 }  // namespace
@@ -50,13 +50,12 @@ timezone_page_view build_timezone_page(const timezone_page_options& options) {
   const int row_width = std::max(1, metrics.content_width - padding * 2);
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.outer_margin, 0);
+  lv_obj_set_pos(view.body, metrics.content_left, 0);
   lv_obj_set_width(view.body, metrics.content_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(view.body, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.body);
-  lv_obj_set_style_pad_bottom(view.body, gui2_core::navigation_safe_area(), LV_PART_MAIN);
   lv_obj_set_style_pad_row(view.body, metrics.card_gap, LV_PART_MAIN);
   lv_obj_set_layout(view.body, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(view.body, LV_FLEX_FLOW_COLUMN);

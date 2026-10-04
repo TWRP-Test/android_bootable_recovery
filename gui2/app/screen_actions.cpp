@@ -51,6 +51,7 @@ void screen_actions::process_after_present() {
       const uint64_t now_ms = static_cast<uint64_t>(ts.tv_sec) * 1000ULL + ts.tv_nsec / 1000000ULL;
       feedback_->show_screenshot(now_ms);
     }
+    if (screenshot_result_ != nullptr) screenshot_result_(callback_user_data_, result);
   }
   if (pending_screen_off_) {
     pending_screen_off_ = false;
