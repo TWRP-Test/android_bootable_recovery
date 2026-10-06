@@ -44,7 +44,7 @@ int gr_save_screenshot(const char *dest)
     if(!fp)
         goto exit;
 
-    img_data = (uint8_t *)malloc(gr_mem_surface.stride * gr_mem_surface.height * gr_draw->pixel_bytes);
+    img_data = (uint8_t *)malloc(gr_mem_surface.stride * gr_mem_surface.height * 4);
     if (!img_data) {
         printf("gr_save_screenshot failed to malloc img_data\n");
         goto exit;
