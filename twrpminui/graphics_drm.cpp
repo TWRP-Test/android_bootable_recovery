@@ -1146,6 +1146,10 @@ static void switch_to_fast_mode(int buffer) {
   drmModeAtomicFree(atomic_req);
 
   if (ret == 0) {
+    drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+    crtc_res.mode_blob_id = fast_mode_blob_id;
+    fast_mode_blob_id = 0;
+    main_monitor_crtc->mode = fast_mode;
     printf("Switched to %ux%u@%u\n", (unsigned)fast_mode.hdisplay,
            (unsigned)fast_mode.vdisplay, fast_mode.vrefresh);
   } else {
