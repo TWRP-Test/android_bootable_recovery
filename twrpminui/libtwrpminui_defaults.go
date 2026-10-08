@@ -11,6 +11,10 @@ import (
 func globalFlags(ctx android.BaseContext) []string {
 	var cflags []string
 
+	if getMakeVars(ctx, "TW_DRM_TWO_STAGE_MODESET") == "true" {
+		cflags = append(cflags, "-DTW_DRM_TWO_STAGE_MODESET")
+	}
+
 	matches, err := filepath.Glob("external/libdrm/Android.*")
 	_ = matches
 	if err == nil {
