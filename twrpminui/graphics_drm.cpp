@@ -1308,15 +1308,22 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   int width = main_monitor_crtc->mode.hdisplay;
   int height = main_monitor_crtc->mode.vdisplay;
 
-  printf("width: %d, height: %d, enabling at %u Hz\n", width, height,
-         main_monitor_crtc->mode.vrefresh);
-
   fast_mode = {};
   uint32_t fastest = selected_mode;
   if (!legacy_modeset && android::base::GetBoolProperty("twrp.drm.fast_mode", false) &&
       pick_fastest_mode(main_monitor_connector, width, height, &fastest) &&
       main_monitor_connector->modes[fastest].vrefresh > main_monitor_crtc->mode.vrefresh)
     fast_mode = main_monitor_connector->modes[fastest];
+
+#ifndef TW_DRM_TWO_STAGE_MODESET
+  if (fast_mode.vrefresh != 0) {
+    main_monitor_crtc->mode = fast_mode;
+    fast_mode = {};
+  }
+#endif
+
+  printf("width: %d, height: %d, enabling at %u Hz\n", width, height,
+         main_monitor_crtc->mode.vrefresh);
 
   drmModeFreeResources(res);
 
