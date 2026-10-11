@@ -252,7 +252,8 @@ static struct Connector conn_res;
 static struct Plane plane_res[NUM_PLANES];
 static uint32_t number_of_lms = DEFAULT_NUM_LMS;
 static bool legacy_modeset = false;
-// On top of main_monitor_crtc->mode, not in place of it.
+// Optional higher-refresh mode for direct or two-stage modesetting.
+// Enable TW_DRM_TWO_STAGE_MODESET if switching during takeover blanks the panel.
 static drmModeModeInfo fast_mode;
 static uint32_t fast_mode_blob_id;
 static uint32_t spr_enabled;
