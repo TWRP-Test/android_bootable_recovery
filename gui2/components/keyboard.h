@@ -84,8 +84,10 @@ class keyboard {
     return root_;
   }
 
-  // The keyboard on screen, which a hardware keyboard types through.
+  // The active editing target, including a temporarily hidden keyboard.
   static keyboard* current();
+  // Synchronizes evdev presence without discarding the active editing target.
+  static void update_hardware_keyboard(bool connected);
   // HardwareKeyboard's characters (8 backspace, 13 enter) and the arrow keys.
   void type(int ch);
   void move_cursor(bool right);
@@ -125,8 +127,11 @@ class keyboard {
   lv_obj_t* add_key(lv_obj_t* parent, const key& definition, int width, int height, int radius,
                     bool inside_group);
   void handle(const key& definition);
+  void focus_next();
+  void hide_internal();
   static void key_event_cb(lv_event_t* event);
   static void focus_event_cb(lv_event_t* event);
+  static void root_delete_cb(lv_event_t* event);
 
   std::vector<key> function_row() const;
   std::vector<key> shell_row() const;
@@ -139,6 +144,7 @@ class keyboard {
   const gui2_core::ui_metrics* metrics_ = nullptr;
   const gui2_i18n::language_pack* strings_ = nullptr;
   lv_obj_t* textarea_ = nullptr;
+  std::vector<lv_obj_t*> fields_;
   keyboard_layout layout_ = keyboard_layout::LETTERS;
   bool shifted_ = true;
   bool shell_row_ = false;
@@ -150,6 +156,9 @@ class keyboard {
   static void slide_y_cb(void* target, int32_t value);
   static void hidden_anim_done(lv_anim_t* anim);
   int resting_y_ = 0;
+  bool hardware_connected_ = false;
+  bool restore_after_hardware_ = false;
+  bool manually_hidden_ = false;
 
   std::vector<key> keys_;  // stable storage the buttons point into
 };

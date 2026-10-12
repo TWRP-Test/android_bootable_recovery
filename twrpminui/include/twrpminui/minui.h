@@ -134,6 +134,7 @@ int ev_init(void);
 void ev_exit(void);
 int ev_get(struct input_event* ev, int timeout_ms);
 int ev_has_mouse(void);
+int ev_has_keyboard(void);
 
 // Return the next complete multitouch frame assembled by ev_get().
 int twrp_input_take_touch_events(TWRPTouchPoint* points, int max_points);

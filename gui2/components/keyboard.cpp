@@ -11,6 +11,23 @@ namespace {
 
 // Set from settings before any keyboard exists.
 int lift_pixels = 0;
+keyboard* current_keyboard = nullptr;
+bool hardware_keyboard_connected = false;
+std::vector<keyboard*> active_keyboards;
+
+bool field_available(lv_obj_t* field) {
+  if (field == nullptr || (lv_obj_get_state(field) & LV_STATE_DISABLED)) return false;
+  for (lv_obj_t* parent = field; parent != nullptr; parent = lv_obj_get_parent(parent))
+    if (lv_obj_is_hidden(parent)) return false;
+  return true;
+}
+
+void unregister_keyboard(keyboard* value) {
+  active_keyboards.erase(std::remove(active_keyboards.begin(), active_keyboards.end(), value),
+                         active_keyboards.end());
+  if (current_keyboard == value)
+    current_keyboard = active_keyboards.empty() ? nullptr : active_keyboards.back();
+}
 
 // A clipboard of its own: recovery has no system one, and the copy and paste
 // keys are useless without somewhere to put the text.
@@ -286,6 +303,7 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
 
   const geometry g = measure(*metrics_, layout_);
   root_ = lv_obj_create(options.parent);
+  lv_obj_add_event_cb(root_, root_delete_cb, LV_EVENT_DELETE, this);
   lv_obj_set_size(root_, metrics_->width, keyboard_height(*metrics_, layout_, shell_row_));
   lv_obj_set_style_pad_all(root_, g.side_pad, LV_PART_MAIN);
   lv_obj_set_style_pad_bottom(root_, g.side_pad + keyboard_lift(), LV_PART_MAIN);
@@ -302,23 +320,52 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
 
   rows_ = root_;
   build_rows();
-  if (options.start_hidden) lv_obj_set_hidden(root_, true);
+  hardware_connected_ = false;
+  manually_hidden_ = options.start_hidden;
+  restore_after_hardware_ = hardware_keyboard_connected && !options.start_hidden;
+  if (options.start_hidden || hardware_keyboard_connected) lv_obj_set_hidden(root_, true);
+  fields_.clear();
+  bind(textarea_);
+  unregister_keyboard(this);
+  active_keyboards.push_back(this);
+  current_keyboard = this;
   return root_;
+}
+
+void keyboard::root_delete_cb(lv_event_t* event) {
+  auto* self = static_cast<keyboard*>(lv_event_get_user_data(event));
+  if (self != nullptr) self->detach();
 }
 
 void keyboard::focus_event_cb(lv_event_t* event) {
   auto* self = static_cast<keyboard*>(lv_event_get_user_data(event));
   auto* textarea = static_cast<lv_obj_t*>(lv_event_get_target(event));
   if (self == nullptr || textarea == nullptr) return;
+  const auto code = lv_event_get_code(event);
+  if (code == LV_EVENT_DELETE) {
+    self->fields_.erase(std::remove(self->fields_.begin(), self->fields_.end(), textarea),
+                        self->fields_.end());
+    if (self->textarea_ == textarea) {
+      self->textarea_ = self->fields_.empty() ? nullptr : self->fields_.front();
+      if (blink_field == textarea) blink_field = nullptr;
+      blink_field_is(self->textarea_);
+    }
+    return;
+  }
+  if (code != LV_EVENT_CLICKED && code != LV_EVENT_FOCUSED) return;
   self->textarea_ = textarea;
+  current_keyboard = self;
   blink_field_is(textarea);
-  self->show();
+  if (code == LV_EVENT_CLICKED || !hardware_keyboard_connected) self->show();
 }
 
 void keyboard::bind(lv_obj_t* textarea) {
-  if (textarea == nullptr) return;
+  if (textarea == nullptr || std::find(fields_.begin(), fields_.end(), textarea) != fields_.end())
+    return;
+  fields_.push_back(textarea);
+  if (textarea_ == nullptr) textarea_ = textarea;
   prepare_field(textarea, gui2_core::ui.primary_text);
-  lv_obj_add_event_cb(textarea, focus_event_cb, LV_EVENT_CLICKED, this);
+  lv_obj_add_event_cb(textarea, focus_event_cb, LV_EVENT_ALL, this);
 }
 
 void keyboard::clear_rows() {
@@ -557,16 +604,44 @@ void keyboard::handle(const key& definition) {
   }
 }
 
-namespace {
-keyboard* current_keyboard = nullptr;
-}  // namespace
-
 keyboard* keyboard::current() {
-  return current_keyboard != nullptr && current_keyboard->visible() ? current_keyboard : nullptr;
+  if (current_keyboard == nullptr || current_keyboard->root_ == nullptr) return nullptr;
+  if (!field_available(current_keyboard->textarea_)) {
+    const auto field = std::find_if(current_keyboard->fields_.begin(),
+                                    current_keyboard->fields_.end(), field_available);
+    if (field == current_keyboard->fields_.end()) return nullptr;
+    current_keyboard->textarea_ = *field;
+  }
+  return current_keyboard;
+}
+
+void keyboard::update_hardware_keyboard(bool connected) {
+  hardware_keyboard_connected = connected;
+  const auto keyboards = active_keyboards;
+  for (keyboard* value : keyboards) {
+    if (std::find(active_keyboards.begin(), active_keyboards.end(), value) == active_keyboards.end())
+      continue;
+    if (value->hardware_connected_ != connected) {
+      value->hardware_connected_ = connected;
+      if (connected) {
+        value->restore_after_hardware_ = value->restore_after_hardware_ ||
+                                          (value->visible() && !value->manually_hidden_);
+        if (value->restore_after_hardware_) value->hide_internal();
+      }
+    }
+    if (!connected && value->restore_after_hardware_ && value == current()) {
+      value->restore_after_hardware_ = false;
+      value->show();
+    }
+  }
 }
 
 void keyboard::type(int ch) {
   key definition;
+  if (ch == 9) {
+    focus_next();
+    return;
+  }
   if (ch == 8) {
     definition.kind = key_kind::BACKSPACE;
   } else if (ch == 13) {
@@ -576,17 +651,37 @@ void keyboard::type(int ch) {
   } else {
     return;
   }
+  if (!hardware_keyboard_connected &&
+      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   handle(definition);
 }
 
 void keyboard::move_cursor(bool right) {
+  if (!hardware_keyboard_connected &&
+      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   key definition;
   definition.kind = right ? key_kind::CURSOR_RIGHT : key_kind::CURSOR_LEFT;
   handle(definition);
 }
 
+void keyboard::focus_next() {
+  if (fields_.empty()) return;
+  const auto current = std::find(fields_.begin(), fields_.end(), textarea_);
+  size_t index = current == fields_.end() ? fields_.size() - 1
+                                         : static_cast<size_t>(current - fields_.begin());
+  for (size_t i = 0; i < fields_.size(); ++i) {
+    index = (index + 1) % fields_.size();
+    if (field_available(fields_[index])) {
+      lv_obj_send_event(fields_[index], LV_EVENT_FOCUSED, nullptr);
+      return;
+    }
+  }
+}
+
 void keyboard::detach() {
-  if (current_keyboard == this) current_keyboard = nullptr;
+  unregister_keyboard(this);
+  for (lv_obj_t* field : fields_) lv_obj_remove_event_cb_with_user_data(field, focus_event_cb, this);
+  fields_.clear();
   // The timer outlives the page otherwise, and its field is already gone.
   blink_stop();
   root_ = nullptr;
@@ -627,6 +722,7 @@ static void reveal_field(lv_obj_t* textarea, lv_obj_t* keyboard_root, int restin
 
 void keyboard::show() {
   if (root_ == nullptr) return;
+  manually_hidden_ = false;
   current_keyboard = this;
   // The page sets the keyboard's position after create(); its y only leaves
   // that resting place while a slide is running.
@@ -656,6 +752,12 @@ void keyboard::show() {
 }
 
 void keyboard::hide() {
+  manually_hidden_ = true;
+  restore_after_hardware_ = false;
+  hide_internal();
+}
+
+void keyboard::hide_internal() {
   if (root_ != nullptr && !lv_obj_is_hidden(root_)) {
     if (lv_anim_get(root_, slide_y_cb) == nullptr) resting_y_ = lv_obj_get_y(root_);
     lv_anim_delete(root_, slide_y_cb);
@@ -675,7 +777,9 @@ void keyboard::hide() {
 }
 
 void keyboard::dismiss() {
-  if (current_keyboard == this) current_keyboard = nullptr;
+  unregister_keyboard(this);
+  for (lv_obj_t* field : fields_) lv_obj_remove_event_cb_with_user_data(field, focus_event_cb, this);
+  fields_.clear();
   blink_stop();
   if (root_ != nullptr) {
     lv_anim_delete(root_, slide_y_cb);

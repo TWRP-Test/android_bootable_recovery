@@ -15,6 +15,7 @@ struct input_state {
 };
 
 static input_state pointer_state;
+static bool pointer_is_mouse;
 static int wheel_delta;
 static bool input_activity;
 static bool power_down;
@@ -30,6 +31,11 @@ static lv_indev_state_t pending_touch_state = LV_INDEV_STATE_RELEASED;
 static int primary_touch_id = -1;
 static constexpr float kRelativeMouseScale = 2.5f;
 static int power_key = KEY_POWER;
+static unsigned input_batch_steps;
+static bool input_batch_continues;
+static std::chrono::steady_clock::time_point input_batch_started;
+static constexpr unsigned kMaxInputBatchSteps = 256;
+static constexpr auto kMaxInputBatchTime = std::chrono::milliseconds(2);
 
 // HardwareKeyboard's state, and InputHandler's key repeat: 500 ms to the first
 // repeat, then every 100 ms.
@@ -185,7 +191,7 @@ static void keyboard_key_repeat(void) {
 }
 
 static void process_key_event(const input_event& event) {
-  if (event.type != EV_KEY) return;
+  if (event.type != EV_KEY || event.value == 2) return;
 
   if (event.code == BTN_SIDE) {
     if (event.value == 1) queue_key_action(gui2_key_action::BACK);
@@ -207,9 +213,6 @@ static void process_key_event(const input_event& event) {
     }
     return;
   }
-
-  // Ignore key autorepeat.
-  if (event.value == 2) return;
 
   if (code == power_key) {
     if (event.value != 0) {
@@ -285,12 +288,23 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
   lv_indev_touch_data_t gesture_touches[TWRP_MAX_TOUCH_EVENTS];
   bool touch_frame_seen = false;
 
+  if (!input_batch_continues) {
+    input_batch_steps = 0;
+    input_batch_started = std::chrono::steady_clock::now();
+  }
+  ++input_batch_steps;
+  const auto within_input_budget = []() {
+    return input_batch_steps < kMaxInputBatchSteps &&
+           std::chrono::steady_clock::now() - input_batch_started < kMaxInputBatchTime;
+  };
+
   auto consume_touch_frame = [&]() {
     const int touch_count = twrp_input_take_touch_events(touch_events, TWRP_MAX_TOUCH_EVENTS);
     if (touch_count <= 0) return false;
 
     const int copied_touch_count = std::min(touch_count, TWRP_MAX_TOUCH_EVENTS);
     touch_frame_seen = true;
+    pointer_is_mouse = false;
     input_activity = true;
 
     int primary_index = -1;
@@ -351,7 +365,7 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
   if (consume_touch_frame()) {
     goto finish;
   }
-  for (;;) {
+  for (; within_input_budget(); ++input_batch_steps) {
     const int result = ev_get(&event, 0);
     if (consume_touch_frame()) break;
     if (result == -2) break;
@@ -367,12 +381,14 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
       const int x = event.value >> 16;
       const int y = event.value & 0xffff;
       if (event.code == TWRP_ABS_MOUSE_POSITION) {
+        pointer_is_mouse = true;
         pointer_state.point.x = clamp_pointer_x(x);
         pointer_state.point.y = clamp_pointer_y(y);
         input_activity = true;
         break;
       }
       if (event.code == 1 || event.code == 0) {
+        pointer_is_mouse = false;
         pointer_state.point.x = clamp_pointer_x(x);
         pointer_state.point.y = clamp_pointer_y(y);
         if (touch_state_pending) {
@@ -389,20 +405,24 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
     if (event.type == EV_KEY && (event.code == BTN_LEFT || event.code == BTN_TOUCH)) {
       input_activity = true;
       if (event.code == BTN_TOUCH) {
+        pointer_is_mouse = false;
         pending_touch_state = event.value != 0 ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
         touch_state_pending = true;
         continue;
       }
+      pointer_is_mouse = true;
       pointer_state.state = event.value != 0 ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
       break;
     }
 
     if (event.type == EV_REL && event.code == REL_X) {
+      pointer_is_mouse = true;
       update_relative_pointer(event.value, 0);
       input_activity = true;
       break;
     }
     if (event.type == EV_REL && event.code == REL_Y) {
+      pointer_is_mouse = true;
       update_relative_pointer(0, event.value);
       input_activity = true;
       break;
@@ -415,6 +435,11 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
   }
 
 finish:
+  if (pointer_is_mouse && !ev_has_mouse()) {
+    lv_indev_reset(indev, nullptr);
+    pointer_state.state = LV_INDEV_STATE_RELEASED;
+    pointer_is_mouse = false;
+  }
 #if LV_USE_GESTURE_RECOGNITION
   if (touch_frame_seen && !screen_off_input) lv_indev_gesture_recognizers_set_data(indev, data);
 #endif
@@ -422,7 +447,9 @@ finish:
   data->point = pointer_state.point;
   data->state = screen_off_input ? LV_INDEV_STATE_RELEASED : pointer_state.state;
   data->timestamp = lv_tick_get();
-  data->continue_reading = touch_frame_seen;
+  // Share the budget across LVGL's outer drain as well as this callback.
+  data->continue_reading = touch_frame_seen && within_input_budget();
+  input_batch_continues = data->continue_reading;
 }
 
 bool gui2_input_take_activity(void) {
@@ -469,6 +496,7 @@ int gui2_input_take_wheel(void) {
 
 lv_indev_t* gui2_input_init(void) {
   pointer_state = {};
+  pointer_is_mouse = false;
   pointer_state.point = { gr_fb_width() / 2, gr_fb_height() / 2 };
   wheel_delta = 0;
   input_activity = false;
@@ -480,7 +508,17 @@ lv_indev_t* gui2_input_init(void) {
   queued_back = false;
   queued_home = false;
   screen_off_input = false;
+  pressed_keys.clear();
+  typed_chars.clear();
+  typed_keys.clear();
+  last_key_char = 0;
+  last_key = 0;
+  key_held = false;
+  key_repeating = false;
+  key_timer_ms = 0;
   primary_touch_id = -1;
+  input_batch_steps = 0;
+  input_batch_continues = false;
   touch_state_pending = false;
   pending_touch_state = LV_INDEV_STATE_RELEASED;
 
