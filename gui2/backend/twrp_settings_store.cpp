@@ -49,7 +49,7 @@ void twrp_settings_store::update_timezone() {
   if (dst != 0) NewTimeZone += DSTZone;
 
   DataManager::SetValue(TW_TIME_ZONE_VAR, NewTimeZone);
-  DataManager::update_tz_environment_variables();
+  DataManager::UpdateTimezoneEnvironment();
 }
 
 // GUIAction::restoredefaultsettings

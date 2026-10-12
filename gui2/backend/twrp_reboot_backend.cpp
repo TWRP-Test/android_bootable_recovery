@@ -11,7 +11,7 @@
 #include "twcommon.h"
 #include "twrp_operation.h"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "variables.h"
 
 namespace gui2_backend {

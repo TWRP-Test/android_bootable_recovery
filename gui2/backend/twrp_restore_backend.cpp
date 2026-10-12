@@ -10,7 +10,7 @@
 
 #include "data.hpp"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrp_file_list.h"
 #include "twrp_operation.h"
 #include "variables.h"
@@ -68,27 +68,21 @@ void twrp_restore_backend::join_finished_thread() {
   if (!running_.load() && worker_.joinable()) worker_.join();
 }
 
-// The restore page's file selector: tw_backups_folder, created when missing,
-// its folders and the adb backups among its .ab files, in tw_gui_sort_order.
+// List local backup folders in tw_gui_sort_order.
 std::vector<restore_backup> twrp_restore_backend::backups() {
   std::string folder;
   DataManager::GetValue(TW_BACKUPS_FOLDER_VAR, folder);
   if (folder.empty()) return {};
 
-  const file_listing listing = twrp_file_list(folder, { ".ab", "" }, true);
+  const file_listing listing = twrp_file_list(folder, {}, true);
   std::vector<restore_backup> result;
-  result.reserve(listing.folders.size() + listing.files.size());
-  for (const auto* list : { &listing.folders, &listing.files }) {
-    for (const file_entry& entry : *list) {
-      const std::string path = folder + "/" + entry.name;
-      std::string detail = human_time(static_cast<time_t>(entry.modified));
-      // An adb backup sits among the folders but is a single file.
-      struct stat info;
-      const bool real_folder = stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
-      const std::string size = human_size(real_folder ? folder_size(path) : entry.size);
-      detail = detail.empty() ? size : detail + " · " + size;
-      result.push_back({ entry.name, path, detail });
-    }
+  result.reserve(listing.folders.size());
+  for (const file_entry& entry : listing.folders) {
+    const std::string path = folder + "/" + entry.name;
+    std::string detail = human_time(static_cast<time_t>(entry.modified));
+    const std::string size = human_size(folder_size(path));
+    detail = detail.empty() ? size : detail + " · " + size;
+    result.push_back({ entry.name, path, detail });
   }
   return result;
 }
@@ -150,7 +144,7 @@ bool twrp_restore_backend::unlock(const std::string& password) {
     Restore_Path += "/";
     DataManager::GetValue("tw_restore_password", Password);
     TWFunc::SetPerformanceMode(true);
-    if (TWFunc::Try_Decrypting_Backup(Restore_Path, Password))
+    if (TWFunc::TryDecryptingBackup(Restore_Path, Password))
       op_status = 0;  // success
     else
       op_status = 1;  // fail
@@ -189,24 +183,8 @@ void twrp_restore_backend::run() {
   int ret = 0;
 
   std::string Restore_Name;
-  int gui_adb_backup;
-
   DataManager::GetValue("tw_restore", Restore_Name);
-  DataManager::GetValue("tw_enable_adb_backup", gui_adb_backup);
-  if (gui_adb_backup) {
-    DataManager::SetValue("tw_operation_state", 1);
-    if (TWFunc::stream_adb_backup(Restore_Name) == 0)
-      ret = 0;  // success
-    else
-      ret = 1;  // failure
-    DataManager::SetValue("tw_enable_adb_backup", 0);
-    ret = 0;  // assume success???
-  } else {
-    if (PartitionManager.Run_Restore(Restore_Name))
-      ret = 0;  // success
-    else
-      ret = 1;  // failure
-  }
+  ret = PartitionManager.Run_Restore(Restore_Name) ? 0 : 1;
   operation_end(ret);
 
   {

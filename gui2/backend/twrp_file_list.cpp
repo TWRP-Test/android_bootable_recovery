@@ -12,8 +12,7 @@
 #include "data.hpp"
 #include "partitions.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
-#include "twrpadbbu/libtwrpadbbu.hpp"
+#include "twrp_functions.hpp"
 #include "variables.h"
 
 namespace gui2_backend {
@@ -56,8 +55,8 @@ file_listing twrp_file_list(const std::string& folder, const file_filter& filter
   // leave the path variable pointing somewhere nobody asked for. Only make
   // it while the storage is up, or it lands on the ramdisk under a mount
   // point with nothing mounted on it.
-  if (mPathCreate && !TWFunc::Path_Exists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
-    TWFunc::Recursive_Mkdir(folder);
+  if (mPathCreate && !TWFunc::IsPathExists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
+    TWFunc::RecursiveMkdir(folder);
 
   d = opendir(folder.c_str());
   if (d == NULL) {
@@ -86,7 +85,7 @@ file_listing twrp_file_list(const std::string& folder, const file_filter& filter
     data.modified = static_cast<int64_t>(st.st_mtime);
 
     if (fileType == DT_UNKNOWN) {
-      fileType = TWFunc::Get_D_Type_From_Stat(path);
+      fileType = TWFunc::GetDTypeFromStat(path);
     }
     if (fileType == DT_DIR) {
       data.directory = true;
@@ -98,12 +97,7 @@ file_listing twrp_file_list(const std::string& folder, const file_filter& filter
         if (mExtnName.empty() ||
             (data.name.length() >= mExtnName.length() &&
              data.name.substr(data.name.length() - mExtnName.length()) == mExtnName)) {
-          if (mExtnName == ".ab" && twadbbu::Check_ADB_Backup_File(path)) {
-            data.directory = true;
-            result.folders.push_back(data);
-          } else {
-            result.files.push_back(data);
-          }
+          result.files.push_back(data);
           match = true;
           break;
         }

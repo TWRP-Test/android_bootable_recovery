@@ -14,7 +14,7 @@
 #include "partitions.hpp"
 #include "twcommon.h"
 #include "twinstall/adb_install.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrp_operation.h"
 
 // The child's pid, shared with the legacy action code.
@@ -55,7 +55,7 @@ bool twrp_sideload_backend::start(bool wipe_dalvik, bool wipe_cache) {
 void twrp_sideload_backend::run() {
   operation_start("Sideload");
   gui_msg("start_sideload=Starting ADB sideload feature...");
-  bool mtp_was_enabled = TWFunc::Toggle_MTP(false);
+  bool mtp_was_enabled = TWFunc::ToggleMtp(false);
 
   // wait for the adb connection
   Device::BuiltinAction reboot_action = Device::REBOOT_BOOTLOADER;
@@ -73,7 +73,7 @@ void twrp_sideload_backend::run() {
     if (wipe_cache || DataManager::GetIntValue("tw_wipe_cache")) PartitionManager.Wipe_By_Path("/cache");
     if (wipe_dalvik) PartitionManager.Wipe_Dalvik_Cache();
   }
-  TWFunc::Toggle_MTP(mtp_was_enabled);
+  TWFunc::ToggleMtp(mtp_was_enabled);
   operation_end(ret);
 
   {

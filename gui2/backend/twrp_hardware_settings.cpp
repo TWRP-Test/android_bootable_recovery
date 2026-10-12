@@ -5,7 +5,7 @@
 
 #include "data.hpp"
 #include "settings_store.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpminui/minui.h"
 
 namespace gui2_backend {
@@ -60,7 +60,7 @@ bool twrp_hardware_settings::set_brightness_percent(int percent) {
   percent = std::clamp(percent, kMinBrightnessPercent, kMaxBrightnessPercent);
   const int maximum = DataManager::GetIntValue("tw_brightness_max");
   const int value = maximum * percent / 100;
-  if (TWFunc::Set_Brightness(std::to_string(value)) != 0) return false;
+  if (TWFunc::SetBrightness(std::to_string(value)) != 0) return false;
 
   return settings_->set_persistent("tw_brightness", std::to_string(value)) &&
          settings_->set_persistent("tw_brightness_pct", std::to_string(percent));

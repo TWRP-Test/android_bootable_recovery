@@ -4,7 +4,7 @@
 #include "gui/gui.hpp"
 #include "gui/twmsg.h"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrp_operation.h"
 #include "variables.h"
 
@@ -32,7 +32,7 @@ std::vector<backup_target> twrp_backup_backend::targets() {
 // generatebackupname
 std::string twrp_backup_backend::generate_name() {
   operation_start("GenerateBackupName");
-  TWFunc::Auto_Generate_Backup_Name();
+  TWFunc::AutoGenerateBackupName();
   operation_end(0);
   return DataManager::GetStrValue(TW_BACKUP_NAME);
 }
@@ -41,7 +41,7 @@ std::string twrp_backup_backend::generate_name() {
 std::string twrp_backup_backend::append_date(const std::string& name) {
   operation_start("AppendDateToBackupName");
   std::string Backup_Name = name;
-  Backup_Name += TWFunc::Get_Current_Date();
+  Backup_Name += TWFunc::GetCurrentDate();
   if (Backup_Name.size() > MAX_BACKUP_NAME_LEN) Backup_Name.resize(MAX_BACKUP_NAME_LEN);
   DataManager::SetValue(TW_BACKUP_NAME, Backup_Name);
   operation_end(0);
@@ -79,7 +79,7 @@ void twrp_backup_backend::run() {
   if (Backup_Name == auto_gen || Backup_Name == gui_lookup("curr_date", "(Current Date)") ||
       Backup_Name == "0" || Backup_Name == "(" ||
       PartitionManager.Check_Backup_Name(Backup_Name, true, true) == 0) {
-    ret = PartitionManager.Run_Backup(false);
+    ret = PartitionManager.Run_Backup();
     DataManager::SetValue("tw_encrypt_backup", 0);  // reset value so we don't encrypt every subsequent backup
     if (!PartitionManager.stop_backup) {
       if (ret == false)

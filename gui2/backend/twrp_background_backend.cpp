@@ -14,7 +14,6 @@
 #include <thread>
 
 #include "data.hpp"
-#include "gui/pages.hpp"
 #include "openrecoveryscript.hpp"
 #include "orscmd/orscmd.h"
 #include "partitions.hpp"
@@ -30,16 +29,6 @@ std::mutex ors_mutex;
 int ors_read_fd = -1;
 FILE* orsout = NULL;
 std::atomic<bool> command_active{ false };
-// twrpAdbBuFifo shows action_page while an adb backup or restore streams, and
-// main when it is over.
-std::atomic<bool> adb_backup_active{ false };
-
-void page_changed(const std::string& page) {
-  if (page == "action_page")
-    adb_backup_active.store(true);
-  else if (page == "main")
-    adb_backup_active.store(false);
-}
 std::thread command_thread;
 
 void setup_ors_command() {
@@ -147,7 +136,6 @@ void twrp_background_backend::start() {
   std::lock_guard<std::mutex> lock(ors_mutex);
   DataManager::SetValue("tw_page_done", 0);
   setup_ors_command();
-  gui_set_page_change_hook(page_changed);
 }
 
 // One pass of runPages' loop body, minus drawing and input.
@@ -179,7 +167,7 @@ void twrp_background_backend::poll() {
 }
 
 bool twrp_background_backend::command_running() {
-  return command_active.load() || adb_backup_active.load();
+  return command_active.load();
 }
 
 }  // namespace gui2_backend

@@ -15,7 +15,7 @@
 #include "partitions.hpp"
 #include "twcommon.h"
 #include "twinstall.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrp_operation.h"
 #include "variables.h"
 
@@ -24,11 +24,11 @@ namespace {
 
 #ifdef TW_OZIP_DECRYPT_KEY
 int ozip_decrypt(std::string zip_path) {
-  if (!TWFunc::Path_Exists("/system/bin/ozip_decrypt")) {
+  if (!TWFunc::IsPathExists("/system/bin/ozip_decrypt")) {
     return 1;
   }
   gui_msg("ozip_decrypt_decryption=Starting Ozip Decryption...");
-  TWFunc::Exec_Cmd("ozip_decrypt " + (std::string)TW_OZIP_DECRYPT_KEY + " '" + zip_path + "'");
+  TWFunc::ExecCmd("ozip_decrypt " + (std::string)TW_OZIP_DECRYPT_KEY + " '" + zip_path + "'");
   gui_msg("ozip_decrypt_finish=Ozip Decryption Finished!");
   return 0;
 }
@@ -47,11 +47,11 @@ int flash_zip(std::string filename, int* wipe_cache) {
     return -1;
   }
 
-  if (!TWFunc::Path_Exists(filename)) {
+  if (!TWFunc::IsPathExists(filename)) {
     if (!PartitionManager.Mount_By_Path(filename, true)) {
       return -1;
     }
-    if (!TWFunc::Path_Exists(filename)) {
+    if (!TWFunc::IsPathExists(filename)) {
       gui_msg(Msg(msg::kError, "unable_to_locate=Unable to locate {1}.")(filename));
       return -1;
     }
@@ -71,7 +71,7 @@ int flash_zip(std::string filename, int* wipe_cache) {
     DataManager::SetValue("tw_operation", "Configuring TWRP");
     DataManager::SetValue("tw_partition", "");
     gui_msg("config_twrp=Configuring TWRP...");
-    if (TWFunc::Exec_Cmd("/system/bin/installTwrp reinstall") < 0) {
+    if (TWFunc::ExecCmd("/system/bin/installTwrp reinstall") < 0) {
       gui_msg("config_twrp_err=Unable to configure TWRP with this kernel.");
     }
   }
@@ -124,7 +124,7 @@ void twrp_install_backend::run_zip(std::vector<std::string> zip_queue) {
       }
       zip_filename = (zip_filename.substr(0, zip_filename.size() - 4)).append("zip");
       zip_path = (zip_path.substr(0, zip_path.size() - 4)).append("zip");
-      if (!TWFunc::Path_Exists(zip_path)) {
+      if (!TWFunc::IsPathExists(zip_path)) {
         LOGERR("Unable to find decrypted zip");
         break;
       }

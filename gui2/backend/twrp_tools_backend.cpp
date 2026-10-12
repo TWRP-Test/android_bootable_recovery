@@ -9,7 +9,7 @@
 #include "gui/twmsg.h"
 #include "partitions.hpp"
 #include "twcommon.h"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrpRepacker.hpp"
 #include "twrpinstall/include/set_metadata.h"
 #include "twrp_operation.h"
@@ -86,7 +86,7 @@ int cmd(std::string arg) {
 
   operation_start("Command");
   LOGINFO("Running command: '%s'\n", arg.c_str());
-  op_status = TWFunc::Exec_Cmd(arg);
+  op_status = TWFunc::ExecCmd(arg);
   if (op_status != 0) op_status = 1;
 
   operation_end(op_status);
@@ -106,10 +106,10 @@ int copylog() {
     PartitionManager.Mount_Current_Storage(true);
     curr_storage = DataManager::GetCurrentStoragePath();
     dst = curr_storage + "/recovery.log";
-    TWFunc::copy_file("/tmp/recovery.log", dst.c_str(), 0755);
+    TWFunc::CopyFile("/tmp/recovery.log", dst.c_str(), 0755);
     tw_set_default_metadata(dst.c_str());
-    if (copy_kernel_log) TWFunc::copy_kernel_log(curr_storage);
-    if (copy_logcat) TWFunc::copy_logcat(curr_storage);
+    if (copy_kernel_log) TWFunc::CopyKernelLog(curr_storage);
+    if (copy_logcat) TWFunc::CopyLogcat(curr_storage);
     sync();
     gui_msg(Msg("copy_log=Copied recovery log to {1}")(dst));
   }
@@ -196,7 +196,7 @@ int applycustomtwrpfolder(std::string arg) {
   std::string prevFolder = storageFolder + DataManager::GetStrValue(TW_RECOVERY_FOLDER_VAR);
   bool ret = false;
 
-  if (TWFunc::Path_Exists(newFolder)) {
+  if (TWFunc::IsPathExists(newFolder)) {
     gui_msg(Msg(msg::kError, "tw_folder_exists=A folder with that name already exists!"));
   } else {
     ret = true;
@@ -205,13 +205,13 @@ int applycustomtwrpfolder(std::string arg) {
   if (newFolder != prevFolder && ret) {
     // Nothing has been put under the old name until a backup or a theme
     // lands there, so there may be nothing to move.
-    if (TWFunc::Path_Exists(prevFolder))
-      ret = TWFunc::Exec_Cmd("mv -f \"" + prevFolder + "\" \"" + newFolder + '\"') == 0;
+    if (TWFunc::IsPathExists(prevFolder))
+      ret = TWFunc::ExecCmd("mv -f \"" + prevFolder + "\" \"" + newFolder + '\"') == 0;
   } else {
     gui_msg(Msg(msg::kError, "tw_folder_exists=A folder with that name already exists!"));
   }
 
-  if (ret) ret = TWFunc::Recursive_Mkdir(newBackupFolder) ? true : false;
+  if (ret) ret = TWFunc::RecursiveMkdir(newBackupFolder) ? true : false;
 
   if (ret) {
     DataManager::SetValue(TW_RECOVERY_FOLDER_VAR, '/' + arg);
@@ -232,7 +232,7 @@ int fixabrecoverybootloop() {
 
   operation_start("Repack Image");
   {
-    if (!TWFunc::Path_Exists("/system/bin/magiskboot")) {
+    if (!TWFunc::IsPathExists("/system/bin/magiskboot")) {
       LOGERR("Image repacking tool not present in this TWRP build!");
       goto exit;
     }
@@ -253,18 +253,18 @@ int fixabrecoverybootloop() {
     std::string command = "cd " REPACK_ORIG_DIR
                           " && /system/bin/magiskboot hexpatch kernel "
                           "77616E745F696E697472616D667300 736B69705F696E697472616D667300";
-    if (TWFunc::Exec_Cmd(command) != 0) {
+    if (TWFunc::ExecCmd(command) != 0) {
       gui_msg(Msg(msg::kError, "fix_recovery_loop_patch_error=Error patching kernel."));
       goto exit;
     }
     std::string header_path = REPACK_ORIG_DIR;
     header_path += "header";
-    if (TWFunc::Path_Exists(header_path)) {
+    if (TWFunc::IsPathExists(header_path)) {
       command = "cd " REPACK_ORIG_DIR
                 " && sed -i \"s|$(grep '^cmdline=' header | cut -d= -f2-)|$(grep '^cmdline=' "
                 "header | cut -d= -f2- | sed -e 's/skip_override//' -e 's/  */ /g' -e "
                 "'s/[ \t]*$//')|\" header";
-      if (TWFunc::Exec_Cmd(command) != 0) {
+      if (TWFunc::ExecCmd(command) != 0) {
         gui_msg(Msg(msg::kError, "fix_recovery_loop_patch_error=Error patching kernel."));
         goto exit;
       }
@@ -272,7 +272,7 @@ int fixabrecoverybootloop() {
     DataManager::SetProgress(.5);
     gui_msg(Msg("repacking_image=Repacking {1}...")(part->Get_Display_Name()));
     command = "cd " REPACK_ORIG_DIR " && /system/bin/magiskboot repack " REPACK_ORIG_DIR "boot.img";
-    if (TWFunc::Exec_Cmd(command) != 0) {
+    if (TWFunc::ExecCmd(command) != 0) {
       gui_msg(Msg(msg::kError, "repack_error=Error repacking image."));
       goto exit;
     }
@@ -285,7 +285,7 @@ int fixabrecoverybootloop() {
       goto exit;
     }
     DataManager::SetProgress(1);
-    TWFunc::removeDir(REPACK_ORIG_DIR, false);
+    TWFunc::RemoveDir(REPACK_ORIG_DIR, false);
   }
   op_status = 0;
 exit:
@@ -359,19 +359,19 @@ bool twrp_tools_backend::details(const std::string& mount_point, partition_detai
     DataManager::SetValue("tw_partition_can_resize", 1);
   else
     DataManager::SetValue("tw_partition_can_resize", 0);
-  if (TWFunc::Path_Exists("/system/bin/mkfs.fat"))
+  if (TWFunc::IsPathExists("/system/bin/mkfs.fat"))
     DataManager::SetValue("tw_partition_vfat", 1);
   else
     DataManager::SetValue("tw_partition_vfat", 0);
-  if (TWFunc::Path_Exists("/system/bin/mkfs.exfat"))
+  if (TWFunc::IsPathExists("/system/bin/mkfs.exfat"))
     DataManager::SetValue("tw_partition_exfat", 1);
   else
     DataManager::SetValue("tw_partition_exfat", 0);
-  if (TWFunc::Path_Exists("/system/bin/make_f2fs"))
+  if (TWFunc::IsPathExists("/system/bin/make_f2fs"))
     DataManager::SetValue("tw_partition_f2fs", 1);
   else
     DataManager::SetValue("tw_partition_f2fs", 0);
-  if (TWFunc::Path_Exists("/system/bin/mke2fs"))
+  if (TWFunc::IsPathExists("/system/bin/mke2fs"))
     DataManager::SetValue("tw_partition_ext", 1);
   else
     DataManager::SetValue("tw_partition_ext", 0);
@@ -424,7 +424,7 @@ std::string twrp_tools_backend::storage_path() {
 }
 
 bool twrp_tools_backend::path_exists(const std::string& path) {
-  return TWFunc::Path_Exists(path);
+  return TWFunc::IsPathExists(path);
 }
 
 bool twrp_tools_backend::users_locked() {

@@ -15,7 +15,7 @@
 #include "gui/gui.hpp"
 #include "gui/twmsg.h"
 #include "partitions.hpp"
-#include "twrp-functions.hpp"
+#include "twrp_functions.hpp"
 #include "twrp_operation.h"
 #include "twrpminui/minui.h"
 
@@ -93,7 +93,7 @@ std::string twrp_screen_backend::make_media_path(const char* directory, const ch
   // Use /tmp when storage is unavailable.
   std::string folder = mounted ? root + "/" + directory : root;
   while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
-  if (!TWFunc::Create_Dir_Recursive(folder, 0775, kMediaUid, kMediaGid)) return {};
+  if (!TWFunc::CreateDirRecursive(folder, 0775, kMediaUid, kMediaGid)) return {};
 
   const std::string base = folder + "/" + timestamped_name(prefix, extension);
   if (access(base.c_str(), F_OK) != 0) return base;
@@ -120,7 +120,7 @@ capture_result twrp_screen_backend::save_screenshot() {
     strcpy(path, "/tmp/");
   }
 
-  if (!TWFunc::Create_Dir_Recursive(path, 0775, uid, gid))
+  if (!TWFunc::CreateDirRecursive(path, 0775, uid, gid))
     return { false, {}, "Unable to create screenshot directory" };
 
   tm = time(NULL);
@@ -167,17 +167,17 @@ void twrp_screen_backend::checkForTimeout() {
   const int sleepTimer = DataManager::GetIntValue("tw_screen_timeout_secs");
   timespec curTime, diff;
   clock_gettime(CLOCK_MONOTONIC, &curTime);
-  diff = TWFunc::timespec_diff(btimer, curTime);
+  diff = TWFunc::TimespecDiff(btimer, curTime);
   if (sleepTimer > 2 && diff.tv_sec > (sleepTimer - 2) && state == kOn) {
     orig_brightness = getBrightness();
     state = kDim;
-    TWFunc::Set_Brightness("5");
+    TWFunc::SetBrightness("5");
   }
   if (sleepTimer && diff.tv_sec > sleepTimer && state < kOff) {
     state = kOff;
     stop_recording();
-    TWFunc::Set_Brightness("0");
-    TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+    TWFunc::SetBrightness("0");
+    TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
     if (before_screen_off_callback_ != nullptr)
       before_screen_off_callback_(before_screen_off_user_data_);
   }
@@ -208,12 +208,12 @@ void twrp_screen_backend::resetTimerAndUnblank() {
 #ifndef TW_NO_SCREEN_BLANK
       gr_fb_blank(false);
 #endif
-      TWFunc::check_and_run_script("/system/bin/postscreenunblank.sh", "unblank");
+      TWFunc::CheckAndRunScript("/system/bin/postscreenunblank.sh", "unblank");
       [[fallthrough]];
     case kOff:
       [[fallthrough]];
     case kDim:
-      if (!orig_brightness.empty()) TWFunc::Set_Brightness(orig_brightness);
+      if (!orig_brightness.empty()) TWFunc::SetBrightness(orig_brightness);
       state = kOn;
       [[fallthrough]];
     case kOn:
@@ -228,8 +228,8 @@ void twrp_screen_backend::blank() {
     orig_brightness = getBrightness();
     state = kOff;
     stop_recording();
-    TWFunc::Set_Brightness("0");
-    TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+    TWFunc::SetBrightness("0");
+    TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
   }
 #ifndef TW_NO_SCREEN_BLANK
   if (state == kOff) {

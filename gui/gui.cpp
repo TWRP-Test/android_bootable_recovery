@@ -838,18 +838,9 @@ int gui_forceRender(void)
 	return 0;
 }
 
-static std::atomic<void (*)(const std::string& page)> page_change_hook{NULL};
-
-void gui_set_page_change_hook(void (*hook)(const std::string& page))
-{
-	page_change_hook = hook;
-}
-
 int gui_changePage(std::string newPage)
 {
 	LOGINFO("Set page: '%s'\n", newPage.c_str());
-	if (auto hook = page_change_hook.load())
-		hook(newPage);
 	PageManager::ChangePage(newPage);
 	gForceRender = true;
 	return 0;
@@ -966,7 +957,7 @@ int gui_init_reuse_display()
 	if (gr_fb_pixel_bytes() <= 0)
 		return -1;
 
-	TWFunc::Set_Brightness(DataManager::GetStrValue("tw_brightness"));
+	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
 
 	if (PageManager::LoadPackage("splash", TWRES "splash.xml", "splash")) {
 		LOGERR("Failed to load splash screen XML.\n");

@@ -388,8 +388,6 @@ static bool run_early_startup(startup_hooks* hooks) {
 
 	hooks->step(gui2_backend::startup_step::STORAGE);
 	PartitionManager.Setup_Fstab_Partitions(true);
-	if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
-		TWFunc::UseTmpfsCache();
 
 	hooks->step(gui2_backend::startup_step::SETTINGS);
 	DataManager::ReadSettingsFile();
@@ -424,8 +422,6 @@ static bool run_fastboot_startup(startup_hooks* hooks) {
 #endif
 
 	hooks->step(gui2_backend::startup_step::SETTINGS);
-	if (TWFunc::GetLogDir() == DATA_LOGS_DIR && !TWFunc::IsPathExists(DATA_LOGS_DIR))
-		TWFunc::UseTmpfsCache();
 	DataManager::ReadSettingsFile();
 	TWFunc::ClearBootloaderMessage();
 
