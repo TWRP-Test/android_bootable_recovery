@@ -12,8 +12,11 @@
 #include <string>
 
 #include "data.hpp"
+#include "gui/gui.hpp"
+#include "gui/twmsg.h"
 #include "partitions.hpp"
 #include "twrp-functions.hpp"
+#include "twrp_operation.h"
 #include "twrpminui/minui.h"
 
 namespace gui2_backend {
@@ -65,7 +68,8 @@ std::string timestamped_name(const char* prefix, const char* extension, int suff
 }  // namespace
 
 twrp_screen_backend::twrp_screen_backend(settings_store* settings) : settings_(settings) {
-  last_activity_ms_ = 0;
+  orig_brightness = getBrightness();
+  setTimer();
 }
 
 twrp_screen_backend::~twrp_screen_backend() {
@@ -79,13 +83,6 @@ bool twrp_screen_backend::has_screenshot() const {
 bool twrp_screen_backend::has_brightness() const {
   return DataManager::GetIntValue("tw_has_brightnesss_file") != 0 &&
          !DataManager::GetStrValue("tw_brightness_file").empty();
-}
-
-std::string twrp_screen_backend::current_brightness() const {
-  if (!has_brightness()) return {};
-  std::string value = settings_ == nullptr ? DataManager::GetStrValue("tw_brightness")
-                                           : settings_->get_string("tw_brightness", "");
-  return value.empty() ? "255" : value;
 }
 
 std::string twrp_screen_backend::make_media_path(const char* directory, const char* prefix,
@@ -108,18 +105,41 @@ std::string twrp_screen_backend::make_media_path(const char* directory, const ch
   return {};
 }
 
+// GUIAction::screenshot; gui2 draws its own flash once the file is written.
 capture_result twrp_screen_backend::save_screenshot() {
-  if (!has_screenshot()) return { false, {}, "Screenshot is unavailable" };
+  time_t tm;
+  char path[256];
+  int path_len;
+  uid_t uid = AID_MEDIA_RW;
+  gid_t gid = AID_MEDIA_RW;
 
-  // Match legacy screenshot ownership and mode.
-  const std::string path = make_media_path("Pictures/Screenshots/", "Screenshot_", ".png");
-  if (path.empty()) return { false, {}, "Unable to create screenshot directory" };
+  const std::string storage = DataManager::GetCurrentStoragePath();
+  if (PartitionManager.Is_Mounted_By_Path(storage)) {
+    snprintf(path, sizeof(path), "%s/Pictures/Screenshots/", storage.c_str());
+  } else {
+    strcpy(path, "/tmp/");
+  }
 
-  if (gr_save_screenshot(path.c_str()) != 0) return { false, path, "Unable to save screenshot" };
+  if (!TWFunc::Create_Dir_Recursive(path, 0775, uid, gid))
+    return { false, {}, "Unable to create screenshot directory" };
 
-  if (chmod(path.c_str(), 0666) != 0 || chown(path.c_str(), kMediaUid, kMediaGid) != 0)
-    return { false, path, "Unable to set screenshot permissions" };
-  return { true, path, {} };
+  tm = time(NULL);
+  path_len = strlen(path);
+
+  // Screenshot_2014-01-01-18-21-38.png
+  strftime(path + path_len, sizeof(path) - path_len, "Screenshot_%Y-%m-%d-%H-%M-%S.png",
+           localtime(&tm));
+
+  int res = gr_save_screenshot(path);
+  if (res == 0) {
+    chmod(path, 0666);
+    chown(path, uid, gid);
+
+    gui_msg(Msg("screenshot_saved=Screenshot was saved to {1}")(path));
+    return { true, path, {} };
+  }
+  gui_err("screenshot_err=Failed to take a screenshot!");
+  return { false, path, "Unable to save screenshot" };
 }
 
 bool twrp_screen_backend::has_screen_off() const {
@@ -135,21 +155,88 @@ bool twrp_screen_backend::has_screen_off() const {
 }
 
 bool twrp_screen_backend::is_screen_off() const {
-  return static_cast<int>(state_) >= static_cast<int>(screen_state::OFF);
+  return state >= kOff;
 }
 
-void twrp_screen_backend::blank_locked() {
-  if (static_cast<int>(state_) >= static_cast<int>(screen_state::OFF)) return;
-  if (before_screen_off_callback_ != nullptr)
-    before_screen_off_callback_(before_screen_off_user_data_);
-  // Preserve the pre-dimming brightness.
-  if (state_ == screen_state::ON) original_brightness_ = current_brightness();
-  state_ = screen_state::OFF;
-  if (has_brightness()) TWFunc::Set_Brightness("0");
-  TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+void twrp_screen_backend::setTimer() {
+  clock_gettime(CLOCK_MONOTONIC, &btimer);
+}
+
+void twrp_screen_backend::checkForTimeout() {
+#ifndef TW_NO_SCREEN_TIMEOUT
+  const int sleepTimer = DataManager::GetIntValue("tw_screen_timeout_secs");
+  timespec curTime, diff;
+  clock_gettime(CLOCK_MONOTONIC, &curTime);
+  diff = TWFunc::timespec_diff(btimer, curTime);
+  if (sleepTimer > 2 && diff.tv_sec > (sleepTimer - 2) && state == kOn) {
+    orig_brightness = getBrightness();
+    state = kDim;
+    TWFunc::Set_Brightness("5");
+  }
+  if (sleepTimer && diff.tv_sec > sleepTimer && state < kOff) {
+    state = kOff;
+    stop_recording();
+    TWFunc::Set_Brightness("0");
+    TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+    if (before_screen_off_callback_ != nullptr)
+      before_screen_off_callback_(before_screen_off_user_data_);
+  }
 #ifndef TW_NO_SCREEN_BLANK
-  gr_fb_blank(true);
-  state_ = screen_state::BLANKED;
+  if (state == kOff) {
+    gr_fb_blank(true);
+    state = kBlanked;
+  }
+#endif
+#endif
+}
+
+std::string twrp_screen_backend::getBrightness() const {
+  std::string result;
+
+  if (DataManager::GetIntValue("tw_has_brightnesss_file")) {
+    DataManager::GetValue("tw_brightness", result);
+    if (result.empty()) result = "255";
+  }
+  return result;
+}
+
+void twrp_screen_backend::resetTimerAndUnblank() {
+#ifndef TW_NO_SCREEN_TIMEOUT
+  setTimer();
+  switch (state) {
+    case kBlanked:
+#ifndef TW_NO_SCREEN_BLANK
+      gr_fb_blank(false);
+#endif
+      TWFunc::check_and_run_script("/system/bin/postscreenunblank.sh", "unblank");
+      [[fallthrough]];
+    case kOff:
+      [[fallthrough]];
+    case kDim:
+      if (!orig_brightness.empty()) TWFunc::Set_Brightness(orig_brightness);
+      state = kOn;
+      [[fallthrough]];
+    case kOn:
+      break;
+  }
+#endif
+}
+
+void twrp_screen_backend::blank() {
+#ifndef TW_NO_SCREEN_TIMEOUT
+  if (state == kOn) {
+    orig_brightness = getBrightness();
+    state = kOff;
+    stop_recording();
+    TWFunc::Set_Brightness("0");
+    TWFunc::check_and_run_script("/system/bin/postscreenblank.sh", "blank");
+  }
+#ifndef TW_NO_SCREEN_BLANK
+  if (state == kOff) {
+    gr_fb_blank(true);
+    state = kBlanked;
+  }
+#endif
 #endif
 }
 
@@ -158,78 +245,45 @@ void twrp_screen_backend::set_before_screen_off_callback(void (*callback)(void*)
   before_screen_off_user_data_ = user_data;
 }
 
-void twrp_screen_backend::unblank_locked() {
-  if (state_ == screen_state::ON) return;
-#ifndef TW_NO_SCREEN_BLANK
-  if (state_ == screen_state::BLANKED) gr_fb_blank(false);
-#endif
-  if (static_cast<int>(state_) >= static_cast<int>(screen_state::OFF))
-    TWFunc::check_and_run_script("/system/bin/postscreenunblank.sh", "unblank");
-  if (!original_brightness_.empty()) TWFunc::Set_Brightness(original_brightness_);
-  state_ = screen_state::ON;
-  dim_start_ms_ = 0;
-  last_dim_brightness_ = -1;
-}
-
+// The power key: blanktimer::toggleBlank, split in its two halves.
 bool twrp_screen_backend::screen_off() {
   if (!has_screen_off()) return false;
-  stop_recording_locked();
-  blank_locked();
+  if (state != kOn) {
+    resetTimerAndUnblank();
+    return false;
+  }
+  blank();
+  if (before_screen_off_callback_ != nullptr)
+    before_screen_off_callback_(before_screen_off_user_data_);
   return true;
 }
 
 bool twrp_screen_backend::screen_on() {
   if (!has_screen_off()) return false;
-  // Synchronize hardware when an explicit wake is requested.
-  if (state_ == screen_state::ON) {
-#ifndef TW_NO_SCREEN_BLANK
-    gr_fb_blank(false);
-#endif
-    const std::string brightness = current_brightness();
-    if (!brightness.empty()) TWFunc::Set_Brightness(brightness);
-    last_activity_ms_ = last_tick_ms_;
-    return true;
-  }
-  unblank_locked();
-  last_activity_ms_ = last_tick_ms_;
+  resetTimerAndUnblank();
   return true;
 }
 
+// InputHandler::processInput: input only counts while the screen is on.
 void twrp_screen_backend::on_input_activity() {
-  if (!has_screen_off()) return;
-  if (state_ != screen_state::ON) unblank_locked();
-  last_activity_ms_ = last_tick_ms_;
+#ifndef TW_NO_SCREEN_BLANK
+  if (!is_screen_off())
+#endif
+    resetTimerAndUnblank();
 }
 
 void twrp_screen_backend::tick(uint64_t monotonic_ms) {
+#ifdef TW_SCREEN_BLANK_ON_BOOT
+  // gui_init, once the display is up.
+  if (last_tick_ms_ == 0) {
+    printf("TW_SCREEN_BLANK_ON_BOOT := true\n");
+    blank();
+    resetTimerAndUnblank();
+  }
+#endif
   last_tick_ms_ = monotonic_ms;
-  if (!has_screen_off()) return;
-  if (last_activity_ms_ == 0) last_activity_ms_ = monotonic_ms;
-
-  const int timeout = settings_ == nullptr ? DataManager::GetIntValue("tw_screen_timeout_secs")
-                                           : settings_->get_int("tw_screen_timeout_secs", 0);
-  if (timeout <= 0 || static_cast<int>(state_) >= static_cast<int>(screen_state::OFF)) return;
-
-  const uint64_t elapsed = monotonic_ms >= last_activity_ms_ ? monotonic_ms - last_activity_ms_ : 0;
-  if (timeout > 2 && state_ == screen_state::ON &&
-      elapsed >= static_cast<uint64_t>(timeout - 2) * 1000) {
-    original_brightness_ = current_brightness();
-    state_ = screen_state::DIM;
-    dim_start_ms_ = monotonic_ms;
-    last_dim_brightness_ = -1;
-  }
-  if (state_ == screen_state::DIM && has_brightness()) {
-    // Interpolate the final two seconds and write only on value changes.
-    const int original = std::max(5, std::atoi(original_brightness_.c_str()));
-    const uint64_t dim_elapsed = monotonic_ms >= dim_start_ms_ ? monotonic_ms - dim_start_ms_ : 0;
-    const int progress = static_cast<int>(std::min<uint64_t>(1000, dim_elapsed * 1000 / 2000));
-    const int value = original - (original - 5) * progress / 1000;
-    if (value != last_dim_brightness_) {
-      TWFunc::Set_Brightness(std::to_string(value));
-      last_dim_brightness_ = value;
-    }
-  }
-  if (elapsed >= static_cast<uint64_t>(timeout) * 1000) blank_locked();
+  if (take_operation_ended()) resetTimerAndUnblank();
+  checkForTimeout();
 }
 
 bool twrp_screen_backend::has_recording() const {
@@ -272,23 +326,30 @@ capture_result twrp_screen_backend::start_recording() {
   (void)format;
 
   const std::string path = make_media_path("Pictures/Screen recordings/", "Screenrecord_", ".webm");
-  if (path.empty()) return { false, {}, "Unable to create recording directory" };
-  return recorder_.start(path, width, height, recording_fps(),
-                         last_tick_ms_ == 0 ? 0 : last_tick_ms_);
-}
-
-capture_result twrp_screen_backend::stop_recording_locked() {
-  capture_result result = recorder_.stop(last_tick_ms_);
-  if (!result.path.empty() && result.success) {
-    if (chmod(result.path.c_str(), 0666) != 0 ||
-        chown(result.path.c_str(), kMediaUid, kMediaGid) != 0)
-      return { false, result.path, "Unable to set recording permissions" };
-  }
+  capture_result result =
+      path.empty() ? capture_result{ false, {}, "Unable to create recording directory" }
+                   : recorder_.start(path, width, height, recording_fps(),
+                                     last_tick_ms_ == 0 ? 0 : last_tick_ms_);
+  if (result.success)
+    gui_msg(Msg("screenrecord_started=Screen recording started: {1}")(path));
+  else
+    gui_err("screenrecord_start_err=Unable to start screen recording!");
   return result;
 }
 
 capture_result twrp_screen_backend::stop_recording() {
-  return stop_recording_locked();
+  if (!recorder_.is_recording()) return {};
+  capture_result result = recorder_.stop(last_tick_ms_);
+  if (!result.path.empty() && result.success) {
+    if (chmod(result.path.c_str(), 0666) != 0 ||
+        chown(result.path.c_str(), kMediaUid, kMediaGid) != 0)
+      result = { false, result.path, "Unable to set recording permissions" };
+  }
+  if (result.success)
+    gui_msg(Msg("screenrecord_saved=Screen recording was saved to {1}")(result.path));
+  else
+    gui_err("screenrecord_save_err=Failed to save the screen recording!");
+  return result;
 }
 
 void twrp_screen_backend::submit_frame(const frame_view& frame, uint64_t monotonic_ms) {

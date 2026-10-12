@@ -23,7 +23,8 @@ struct bottom_navigation_view {
 bottom_navigation_view create_bottom_navigation(lv_obj_t* screen,
                                                 const gui2_core::ui_metrics& metrics,
                                                 bool home_active, lv_event_cb_t event_callback,
-                                                lv_event_cb_t press_guard_callback);
+                                                lv_event_cb_t press_guard_callback,
+                                                bool show_console = true);
 void refresh_bottom_navigation(const bottom_navigation_view& view, bool home_active);
 
 }  // namespace gui2_shell

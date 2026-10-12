@@ -11,6 +11,9 @@ enum class page_transition {
   PUSH,
   POP,
   REPLACE,
+  // The new page fades in over the old one; used when a job hands over to the
+  // page it was run for.
+  FADE,
 };
 
 }  // namespace gui2_core

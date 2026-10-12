@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "components/icon.h"
+#include "core/ui_event_guard.h"
 #include "core/ui_helpers.h"
 #include "gui2_svg_assets.h"
 
@@ -16,11 +17,11 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   track_ = lv_obj_create(parent);
   lv_obj_set_size(track_, width, height);
   lv_obj_set_pos(track_, x, y);
-  gui2_core::set_surface_style(track_, lv_color_hex(0x454545));
+  gui2_core::set_surface_style(track_, metrics.control_track);
   lv_obj_set_style_radius(track_, height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(track_, 0, LV_PART_MAIN);
   gui2_core::disable_scrolling(track_);
-  lv_obj_add_flag(track_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(track_, true);
 
   inner_margin_ = std::clamp(height / 10, gui2_core::ui_px(10), gui2_core::ui_px(22));
   const int inner_height = height - inner_margin_ * 2;
@@ -33,28 +34,29 @@ lv_obj_t* swipe_slider::create(lv_obj_t* parent, const gui2_core::ui_metrics& me
   lv_label_set_text(prompt_, text == nullptr ? "" : text);
   lv_obj_set_width(prompt_, std::max(1, inner_width - knob_width_ + prompt_inset_));
   lv_obj_set_style_text_align(prompt_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-  lv_obj_set_style_text_color(prompt_, lv_color_hex(0xBDBDBD), LV_PART_MAIN);
+  lv_obj_set_style_text_color(prompt_, metrics.control_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(prompt_, metrics.text_font, LV_PART_MAIN);
   lv_obj_update_layout(prompt_);
   lv_obj_set_pos(prompt_, inner_margin_ + knob_width_ - prompt_inset_,
                  (height - lv_obj_get_height(prompt_)) / 2);
-  lv_obj_clear_flag(prompt_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(prompt_, false);
   gui2_core::disable_scrolling(prompt_);
 
   fill_ = lv_obj_create(track_);
   lv_obj_set_size(fill_, knob_width_, inner_height);
   lv_obj_set_pos(fill_, inner_margin_, inner_margin_);
-  gui2_core::set_surface_style(fill_, lv_color_hex(0x9BC5E9));
+  gui2_core::set_surface_style(fill_, metrics.accent_soft);
   lv_obj_set_style_radius(fill_, inner_height / 2, LV_PART_MAIN);
-  lv_obj_clear_flag(fill_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(fill_, false);
   gui2_core::disable_scrolling(fill_);
 
   knob_ = lv_obj_create(track_);
   lv_obj_set_size(knob_, knob_width_, inner_height);
   lv_obj_set_pos(knob_, inner_margin_, inner_margin_);
-  gui2_core::set_surface_style(knob_, lv_color_hex(0x347FF1));
+  gui2_core::set_surface_style(knob_, metrics.accent);
   lv_obj_set_style_radius(knob_, inner_height / 2, LV_PART_MAIN);
-  lv_obj_add_flag(knob_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_clickable(knob_, true);
+  lv_obj_set_press_lock(knob_, true);
   gui2_core::disable_scrolling(knob_);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSED, this);
   lv_obj_add_event_cb(knob_, event_callback, LV_EVENT_PRESSING, this);
@@ -81,14 +83,23 @@ void swipe_slider::set_progress(int progress) {
   lv_obj_set_x(prompt_, inner_margin_ + knob_width_ - prompt_inset_);
 }
 
+void swipe_slider::begin_drag(lv_point_t point) {
+  dragging_ = true;
+  grab_offset_ = 0;
+  if (track_ == nullptr || knob_ == nullptr) return;
+  lv_area_t area;
+  lv_obj_get_coords(track_, &area);
+  grab_offset_ = std::clamp(point.x - area.x1 - lv_obj_get_x(knob_), 0, knob_width_);
+}
+
 void swipe_slider::update_from_point(lv_point_t point) {
   if (track_ == nullptr) return;
   lv_area_t area;
   lv_obj_get_coords(track_, &area);
-  const int local_x = std::clamp(point.x - area.x1, 0, static_cast<int>(lv_area_get_width(&area)));
   const int inner_width = lv_obj_get_width(track_) - inner_margin_ * 2;
   const int travel = std::max(1, inner_width - knob_width_);
-  set_progress((local_x - inner_margin_ - knob_width_ / 2) * 1000 / travel);
+  const int knob_x = point.x - area.x1 - grab_offset_ - inner_margin_;
+  set_progress(knob_x * 1000 / travel);
 }
 
 void swipe_slider::finish_drag(bool cancelled) {
@@ -97,6 +108,7 @@ void swipe_slider::finish_drag(bool cancelled) {
     set_progress(0);
     return;
   }
+  gui2_core::vibrate_slider();
   if (callback_ != nullptr) callback_(user_data_);
 }
 
@@ -108,10 +120,9 @@ void swipe_slider::event_callback(lv_event_t* event) {
   if (indev == nullptr) return;
   const lv_event_code_t code = lv_event_get_code(event);
   if (code == LV_EVENT_PRESSED) {
-    slider->dragging_ = true;
     lv_point_t point;
     lv_indev_get_point(indev, &point);
-    slider->update_from_point(point);
+    slider->begin_drag(point);
   } else if (code == LV_EVENT_PRESSING && slider->dragging_) {
     lv_point_t point;
     lv_indev_get_point(indev, &point);
@@ -125,7 +136,30 @@ void swipe_slider::event_callback(lv_event_t* event) {
 
 void swipe_slider::reset() {
   dragging_ = false;
+  grab_offset_ = 0;
   set_progress(0);
+}
+
+void swipe_slider::set_enabled(bool enabled) {
+  if (track_ == nullptr) return;
+  lv_obj_set_style_opa(track_, enabled ? LV_OPA_COVER : LV_OPA_40, LV_PART_MAIN);
+  if (enabled) {
+    lv_obj_set_clickable(track_, true);
+    if (knob_ != nullptr) lv_obj_set_clickable(knob_, true);
+  } else {
+    dragging_ = false;
+    lv_obj_set_clickable(track_, false);
+    if (knob_ != nullptr) lv_obj_set_clickable(knob_, false);
+  }
+}
+
+void swipe_slider::set_danger(bool danger) {
+  if (knob_ != nullptr)
+    lv_obj_set_style_bg_color(knob_, danger ? gui2_core::ui.danger : gui2_core::ui.accent,
+                              LV_PART_MAIN);
+  if (fill_ != nullptr)
+    lv_obj_set_style_bg_color(fill_, danger ? gui2_core::ui.danger_soft : gui2_core::ui.accent_soft,
+                              LV_PART_MAIN);
 }
 
 void swipe_slider::detach() {
@@ -139,6 +173,7 @@ void swipe_slider::detach() {
   knob_width_ = 0;
   prompt_inset_ = 0;
   progress_ = 0;
+  grab_offset_ = 0;
   dragging_ = false;
 }
 

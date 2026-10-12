@@ -694,6 +694,10 @@
 		<string name="min_queue">已達到最大刷機包刷入佇列！</string>
 		<string name="screenshot_saved">截圖已儲存到：{1}</string>
 		<string name="screenshot_err">截圖失敗！</string>
+		<string name="screenrecord_started">已開始錄影：{1}</string>
+		<string name="screenrecord_start_err">無法開始錄影！</string>
+		<string name="screenrecord_saved">錄影已儲存到：{1}</string>
+		<string name="screenrecord_save_err">錄影儲存失敗！</string>
 		<string name="zip_wipe_cache">一個或多個刷機包請求清除 Cache -- 正在清除 Cache。</string>
 		<string name="and_sec_wipe_err">無法清除 Android Secure</string>
 		<string name="dalvik_wipe_err">清除 Dalvik 失敗</string>

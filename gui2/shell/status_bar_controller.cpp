@@ -10,7 +10,6 @@ bool status_bar_controller::start(gui2_backend::settings_store* settings,
   view_ = view;
   recording_refresh_ = recording_refresh;
   provider_ = std::make_unique<gui2_backend::status_backend>(settings);
-  provider_->start();
   timer_ = lv_timer_create(timer_callback, 1000, this);
   refresh();
   return true;
@@ -32,10 +31,7 @@ void status_bar_controller::stop() {
     lv_timer_del(timer_);
     timer_ = nullptr;
   }
-  if (provider_ != nullptr) {
-    provider_->stop();
-    provider_.reset();
-  }
+  provider_.reset();
   recording_refresh_ = nullptr;
   view_ = {};
 }

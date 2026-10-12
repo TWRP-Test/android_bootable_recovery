@@ -15,7 +15,7 @@ lv_obj_t* create_confirm_dialog(const confirm_dialog_options& options) {
   lv_obj_t* overlay = lv_obj_create(lv_layer_top());
   lv_obj_set_size(overlay, metrics.width, metrics.height);
   lv_obj_set_pos(overlay, 0, 0);
-  lv_obj_set_style_bg_color(overlay, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(overlay, metrics.scrim, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(overlay, LV_OPA_70, LV_PART_MAIN);
   lv_obj_set_style_border_width(overlay, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(overlay, 0, LV_PART_MAIN);
@@ -52,7 +52,7 @@ lv_obj_t* create_confirm_dialog(const confirm_dialog_options& options) {
     gui2_core::set_surface_style(button, color);
     lv_obj_set_style_radius(button, gui2_core::ui_px(24), LV_PART_MAIN);
     gui2_core::disable_scrolling(button);
-    lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_clickable(button, true);
     if (options.press_guard_callback != nullptr)
       lv_obj_add_event_cb(button, options.press_guard_callback, LV_EVENT_ALL, nullptr);
     if (callback != nullptr) lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, overlay);
@@ -64,8 +64,8 @@ lv_obj_t* create_confirm_dialog(const confirm_dialog_options& options) {
   };
   create_button(options.cancel, metrics.background, metrics.primary_text, LV_ALIGN_BOTTOM_LEFT,
                 options.cancel_callback);
-  create_button(options.confirm, lv_color_hex(0x347FF1), lv_color_hex(0xFFFFFF),
-                LV_ALIGN_BOTTOM_RIGHT, options.confirm_callback);
+  create_button(options.confirm, metrics.accent, metrics.on_accent, LV_ALIGN_BOTTOM_RIGHT,
+                options.confirm_callback);
   return overlay;
 }
 

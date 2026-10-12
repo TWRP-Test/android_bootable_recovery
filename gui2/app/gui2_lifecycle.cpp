@@ -1,9 +1,12 @@
 #include "app/gui2_lifecycle.h"
 
+#include <cstdio>
+
 #include "core/ui_metrics.h"
 #include "gui2_display.h"
 #include "gui2_input.h"
 #include "gui2_svg_cache.h"
+#include "shell/gui_shell_base.h"
 #include "twrpminui/minui.h"
 
 namespace gui2_app {
@@ -23,7 +26,10 @@ bool initialize_graphics(const gui2_context* context, graphics_state* state,
   state->lv_initialized = true;
   lv_tick_set_cb(tick_callback);
 
-  gui2_core::ui.scale = gui2_core::ui_scale_for(gr_fb_width(), gr_fb_height());
+  const int short_side_mm = gui2_shell::panel_short_side_mm();
+  gui2_core::ui.scale = gui2_core::ui_scale_for(gr_fb_width(), gr_fb_height(), short_side_mm);
+  fprintf(stderr, "gui2: %dx%d, short side %d mm, scale %.2f\n", gr_fb_width(), gr_fb_height(),
+          short_side_mm, gui2_core::ui.scale);
   if (!state->fonts.initialize(gui2_core::ui.scale)) {
     shutdown_graphics(state, false);
     return false;
@@ -31,6 +37,9 @@ bool initialize_graphics(const gui2_context* context, graphics_state* state,
   state->text_font = state->fonts.text();
   state->status_font = state->fonts.status();
   state->brand_font = state->fonts.brand();
+  state->keyboard_font = state->fonts.keyboard();
+  for (int i = 0; i < gui2_theme::font_manager::console_count(); ++i)
+    state->console_fonts[i] = state->fonts.console(i);
 
   if (gui2_display_init() == nullptr) {
     shutdown_graphics(state, false);
@@ -61,6 +70,8 @@ void shutdown_graphics(graphics_state* state, bool keep_display) {
   state->text_font = nullptr;
   state->status_font = nullptr;
   state->brand_font = nullptr;
+  state->keyboard_font = nullptr;
+  for (lv_font_t*& font : state->console_fonts) font = nullptr;
   state->pointer_indev = nullptr;
   if (state->events_initialized) {
     ev_exit();
