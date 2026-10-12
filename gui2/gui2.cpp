@@ -5455,7 +5455,8 @@ static void create_gui2_shell(lv_obj_t* screen) {
       !fastboot_mode);
 
   create_quick_menu();
-  mouse_cursor = gui2_shell::create_mouse_cursor(pointer_indev, ev_has_mouse(), ui);
+  if (mouse_cursor == nullptr)
+    mouse_cursor = gui2_shell::create_mouse_cursor(pointer_indev, ev_has_mouse(), ui);
 }
 
 static void screen_lock_unlocked(void*) {
@@ -5508,8 +5509,7 @@ static void rebuild_for_theme(void*) {
   quick_feedback = nullptr;
   quick_brightness_binding = {};
   quick_brightness_dirty = false;
-  if (mouse_cursor != nullptr) lv_obj_delete(mouse_cursor);
-  mouse_cursor = nullptr;
+  // The system-layer cursor belongs to the input device and survives shell rebuilds.
   lv_obj_clean(lv_layer_top());
   lv_obj_clean(lv_screen_active());
   status_view = {};
@@ -5625,6 +5625,7 @@ static void poll_startup(uint64_t now_ms) {
   if (!startup_input_rescanned && status.step > gui2_backend::startup_step::PARTITIONS) {
     ev_exit();
     ev_init();
+    gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
     startup_input_rescanned = true;
   }
 
@@ -5852,12 +5853,17 @@ static bool gui2_loop_should_exit(void*) {
 }
 
 static void gui2_loop_tick(void*, uint64_t now_ms) {
+  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   poll_startup(now_ms);
   if (splash_dismiss_pending && gui2_shell::splash_intro_finished()) {
     gui2_shell::dismiss_splash(&splash_view);
     splash_dismiss_pending = false;
   }
   if (!shell_ready) return;
+  const bool has_mouse = ev_has_mouse() != 0;
+  if (has_mouse && mouse_cursor == nullptr)
+    mouse_cursor = gui2_shell::create_mouse_cursor(pointer_indev, true, ui);
+  if (mouse_cursor != nullptr) lv_obj_set_hidden(mouse_cursor, !has_mouse);
   // The legacy page loop runs whenever a page is up, which during startup is
   // only while it waits on one.
   if (background != nullptr &&
@@ -5963,6 +5969,7 @@ static bool terminal_has_focus(void) {
 // the on-screen keyboard is typing into.
 static void gui2_loop_char(void*, int ch) {
   if (!shell_ready || input_locked()) return;
+  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   if (terminal_has_focus()) {
     terminal->send_char(ch);
     return;
@@ -5972,6 +5979,7 @@ static void gui2_loop_char(void*, int ch) {
 
 static void gui2_loop_key(void*, int key_code) {
   if (!shell_ready || input_locked()) return;
+  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   if (terminal_has_focus()) {
     terminal->send_key(key_code);
     return;
@@ -6052,6 +6060,7 @@ int gui2_start(const gui2_context* context) {
   pointer_indev = graphics.pointer_indev;
   gui2_core::configure_click_guard(pointer_indev, hardware);
   gui2_input_set_power_key(settings->get_int("tw_power_button", 0));
+  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
 
   if (startup != nullptr) {
     gui2_shell::gui_shell_base_options metrics_options;

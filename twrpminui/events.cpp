@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string>
+#include <time.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <fstream>
@@ -49,6 +51,8 @@ static const std::string kVibratorInstance = std::string(IVibrator::descriptor) 
 static std::atomic_int vib_on_count = 0;
 #endif
 #endif
+
+#include <cutils/properties.h>
 
 #include "common.h"
 #include "twcommon.h"
@@ -134,6 +138,7 @@ struct ev {
     struct position p, mt_p;
     int down;
     int absolute_mouse;
+    bool keyboard;
 
     // Independent Type-B state for consumers which need all contacts. The
     // legacy vk_modify() path continues to use mt_p unchanged.
@@ -156,8 +161,14 @@ static struct pollfd ev_fds[MAX_DEVICES];
 static struct ev evs[MAX_DEVICES];
 static unsigned ev_count = 0;
 static struct timeval lastInputStat;
-static time_t lastInputMTime;
+static std::string input_names[MAX_DEVICES];
+static struct stat input_identity[MAX_DEVICES];
+static unsigned next_input = 0;
 static int has_mouse = 0;
+static int has_keyboard = 0;
+// Sensor orientation relative to the active framebuffer, not USB pointers.
+static int touch_rotation = 0;
+extern unsigned int gr_rotation;
 
 // Frames were kept one at a time, so a press and the release after it landing
 // inside the same UI tick overwrote each other and the tap was never seen.
@@ -313,12 +324,24 @@ static int vk_init(struct ev *e)
     printf("Event object: %s\n", e->deviceName);
 #endif
 
+    e->deviceName[sizeof(e->deviceName) - 1] = '\0';
+
     unsigned long capabilities[EV_MAX][NBITS(KEY_MAX)];
     memset(capabilities, 0, sizeof(capabilities));
-    ioctl(e->fd->fd, EVIOCGBIT(0, EV_MAX), capabilities[0]);
+    if (ioctl(e->fd->fd, EVIOCGBIT(0, EV_MAX), capabilities[0]) < 0)
+        return -1;
+    if (test_bit(EV_KEY, capabilities[0])) {
+        if (ioctl(e->fd->fd, EVIOCGBIT(EV_KEY, KEY_MAX), capabilities[EV_KEY]) < 0)
+            return -1;
+        // Text-key capabilities exclude power buttons and pointer-only devices.
+        e->keyboard = test_bit(KEY_A, capabilities[EV_KEY]) &&
+                      test_bit(KEY_Z, capabilities[EV_KEY]) &&
+                      test_bit(KEY_SPACE, capabilities[EV_KEY]) &&
+                      test_bit(KEY_ENTER, capabilities[EV_KEY]);
+    }
     if (test_bit(EV_ABS, capabilities[0]) && test_bit(EV_KEY, capabilities[0])) {
-        ioctl(e->fd->fd, EVIOCGBIT(EV_ABS, KEY_MAX), capabilities[EV_ABS]);
-        ioctl(e->fd->fd, EVIOCGBIT(EV_KEY, KEY_MAX), capabilities[EV_KEY]);
+        if (ioctl(e->fd->fd, EVIOCGBIT(EV_ABS, KEY_MAX), capabilities[EV_ABS]) < 0)
+            return -1;
         const bool has_absolute_xy = test_bit(ABS_X, capabilities[EV_ABS]) &&
                                      test_bit(ABS_Y, capabilities[EV_ABS]);
         const bool has_mouse_button = test_bit(BTN_LEFT, capabilities[EV_KEY]);
@@ -381,27 +404,26 @@ static int vk_init(struct ev *e)
     {
         len = read(vk_fd, vks, sizeof(vks)-1);
         close(vk_fd);
-        if (len <= 0)
-            return -1;
+        if (len <= 0) {
+            LOGI("minui: unable to read optional virtual keys from %s\n", vk_path);
+        } else {
+            vks[len] = '\0';
 
-        vks[len] = '\0';
+            /* Parse a line like:
+                keytype:keycode:centerx:centery:width:height:keytype2:keycode2:centerx2:...
+            */
+            for (ts = vks, e->vk_count = 1; *ts; ++ts) {
+                if (*ts == ':')
+                    ++e->vk_count;
+            }
 
-        /* Parse a line like:
-            keytype:keycode:centerx:centery:width:height:keytype2:keycode2:centerx2:...
-        */
-        for (ts = vks, e->vk_count = 1; *ts; ++ts) {
-            if (*ts == ':')
-                ++e->vk_count;
+            if (e->vk_count % 6) {
+                LOGI("minui: %s is %d %% 6\n", vk_path, e->vk_count % 6);
+            }
+            e->vk_count /= 6;
+            if (e->vk_count > 0)
+                e->down = DOWN_NOT;
         }
-
-        if (e->vk_count % 6) {
-            LOGI("minui: %s is %d %% 6\n", vk_path, e->vk_count % 6);
-        }
-        e->vk_count /= 6;
-        if (e->vk_count <= 0)
-            return -1;
-
-        e->down = DOWN_NOT;
     }
 
     ioctl(e->fd->fd, EVIOCGABS(ABS_X), &e->p.xi);
@@ -475,67 +497,165 @@ int ev_has_mouse(void)
 	return has_mouse;
 }
 
-int ev_init(void)
+int ev_has_keyboard(void)
 {
-    DIR *dir;
-    struct dirent *de;
-    int fd;
+    return has_keyboard;
+}
 
+static void update_input_presence(void)
+{
     has_mouse = 0;
-    pending_touch_head = 0;
-    pending_touch_tail = 0;
-    pending_touch_queued = 0;
+    has_keyboard = 0;
+    for (unsigned i = 0; i < ev_count; ++i) {
+        if (evs[i].ignored)
+            continue;
+        if (evs[i].keyboard)
+            has_keyboard = 1;
+        if (evs[i].absolute_mouse)
+            has_mouse = 1;
+        else
+            check_mouse(ev_fds[i].fd, evs[i].deviceName);
+    }
+}
 
-	dir = opendir("/dev/input");
-    if(dir != 0) {
-        while((de = readdir(dir))) {
-#ifdef _EVENT_LOGGING
-            fprintf(stderr,"/dev/input/%s\n", de->d_name);
-#endif
-            if(strncmp(de->d_name,"event",5)) continue;
-            fd = openat(dirfd(dir), de->d_name, O_RDONLY);
-            if(fd < 0) continue;
+static struct timeval input_clock(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    struct timeval value = {now.tv_sec, now.tv_nsec / 1000};
+    return value;
+}
 
-			ev_fds[ev_count].fd = fd;
-            ev_fds[ev_count].events = POLLIN;
-            evs[ev_count].fd = &ev_fds[ev_count];
+static bool same_input_device(const struct stat& a, const struct stat& b)
+{
+    return a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_rdev == b.st_rdev;
+}
 
-            /* Load virtualkeys if there are any */
-            vk_init(&evs[ev_count]);
+static void remove_input_device(unsigned n)
+{
+    free(evs[n].vks);
+    close(ev_fds[n].fd);
+    for (unsigned i = n; i + 1 < ev_count; ++i) {
+        evs[i] = evs[i + 1];
+        ev_fds[i] = ev_fds[i + 1];
+        evs[i].fd = &ev_fds[i];
+        input_names[i] = input_names[i + 1];
+        input_identity[i] = input_identity[i + 1];
+    }
+    --ev_count;
+    evs[ev_count] = {};
+    ev_fds[ev_count] = {};
+    input_names[ev_count].clear();
+    next_input = 0;
+    update_input_presence();
+}
 
-            if (!evs[ev_count].ignored) {
-                if (evs[ev_count].absolute_mouse) {
-                    has_mouse = 1;
-                    LOGI("Found absolute mouse '%s'\n", evs[ev_count].deviceName);
-                } else {
-                    check_mouse(fd, evs[ev_count].deviceName);
-                }
-            }
+static bool open_input_device(DIR* dir, const char* name, struct ev* device,
+                              struct pollfd* pfd, struct stat* identity)
+{
+    *device = {};
+    *pfd = {};
+    pfd->fd = openat(dirfd(dir), name, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (pfd->fd < 0)
+        return false;
+    pfd->events = POLLIN;
+    device->fd = pfd;
+    struct stat node;
+    if (fstat(pfd->fd, identity) < 0 ||
+        fstatat(dirfd(dir), name, &node, 0) < 0 ||
+        !same_input_device(*identity, node) || vk_init(device) < 0) {
+        free(device->vks);
+        close(pfd->fd);
+        return false;
+    }
+    return true;
+}
 
-            ev_count++;
-            if(ev_count == MAX_DEVICES) break;
+static void refresh_input_devices(void)
+{
+    DIR* dir = opendir("/dev/input");
+    if (dir == nullptr)
+        return;
+
+    // Keep working descriptors when discovery fails or a replacement is not ready.
+    for (unsigned i = 0; i < ev_count;) {
+        struct stat node;
+        if (fstatat(dirfd(dir), input_names[i].c_str(), &node, 0) < 0 &&
+            errno == ENOENT) {
+            remove_input_device(i);
+        } else {
+            ++i;
         }
-        closedir(dir);
     }
 
-    struct stat st;
-    if(stat("/dev/input", &st) >= 0)
-        lastInputMTime = st.st_mtime;
-    gettimeofday(&lastInputStat, NULL);
+    struct dirent* de;
+    while ((de = readdir(dir))) {
+        if (strncmp(de->d_name, "event", 5))
+            continue;
+        struct stat node;
+        if (fstatat(dirfd(dir), de->d_name, &node, 0) < 0)
+            continue;
+        unsigned n = 0;
+        while (n < ev_count && input_names[n] != de->d_name)
+            ++n;
+        if (n < ev_count && same_input_device(input_identity[n], node))
+            continue;
+        if (n == ev_count && ev_count == MAX_DEVICES)
+            continue;
 
+        struct ev device;
+        struct pollfd pfd;
+        struct stat identity;
+        if (!open_input_device(dir, de->d_name, &device, &pfd, &identity))
+            continue;
+
+        if (n < ev_count) {
+            free(evs[n].vks);
+            close(ev_fds[n].fd);
+        } else {
+            ++ev_count;
+        }
+        evs[n] = device;
+        ev_fds[n] = pfd;
+        evs[n].fd = &ev_fds[n];
+        input_names[n] = de->d_name;
+        input_identity[n] = identity;
+        LOGI("Opened input device '%s' (%s)\n", de->d_name, evs[n].deviceName);
+    }
+    closedir(dir);
+    update_input_presence();
+}
+
+int ev_init(void)
+{
+    ev_exit();
+    char rotation[PROPERTY_VALUE_MAX];
+    const bool has_rotation = property_get("ro.twrp.touch.rotation", rotation, "") > 0;
+    char* end = nullptr;
+    const long sensor_rotation = strtol(rotation, &end, 10);
+    // An unset property preserves the historical input mapping for other SKUs.
+    touch_rotation = 0;
+    if (has_rotation && *end == '\0' && (sensor_rotation == 0 || sensor_rotation == 90 ||
+                         sensor_rotation == 180 || sensor_rotation == 270))
+        touch_rotation = (sensor_rotation + 360 - gr_rotation) % 360;
+    refresh_input_devices();
+    lastInputStat = input_clock();
     return 0;
 }
 
 void ev_exit(void)
 {
-	while (ev_count-- > 0) {
-		if (evs[ev_count].vk_count) {
-			free(evs[ev_count].vks);
-			evs[ev_count].vk_count = 0;
-		}
-		close(ev_fds[ev_count].fd);
-	}
-	ev_count = 0;
+    while (ev_count > 0) {
+        --ev_count;
+        free(evs[ev_count].vks);
+        close(ev_fds[ev_count].fd);
+        evs[ev_count] = {};
+        ev_fds[ev_count] = {};
+        input_names[ev_count].clear();
+    }
+    next_input = 0;
+    has_mouse = 0;
+    has_keyboard = 0;
     pending_touch_head = 0;
     pending_touch_tail = 0;
     pending_touch_queued = 0;
@@ -552,7 +672,7 @@ void ev_exit(void)
     return (screen_pos >= 0 && screen_pos < screen_size);
 }*/
 
-static int vk_tp_to_screen(struct position *p, int *x, int *y)
+static int vk_tp_to_screen(struct position *p, int *x, int *y, int rotation = 0)
 {
     if (p->xi.minimum == p->xi.maximum || p->yi.minimum == p->yi.maximum)
     {
@@ -575,8 +695,33 @@ static int vk_tp_to_screen(struct position *p, int *x, int *y)
     int fb_height = gr_fb_width();
 #endif
 
-    *x = (p->x - p->xi.minimum) * (fb_width - 1) / (p->xi.maximum - p->xi.minimum);
-    *y = (p->y - p->yi.minimum) * (fb_height - 1) / (p->yi.maximum - p->yi.minimum);
+    const bool swap_axes = rotation == 90 || rotation == 270;
+    const int x_size = swap_axes ? fb_height : fb_width;
+    const int y_size = swap_axes ? fb_width : fb_height;
+    const int sensor_x = static_cast<int>(
+        (static_cast<int64_t>(p->x) - p->xi.minimum) * (x_size - 1) /
+        (static_cast<int64_t>(p->xi.maximum) - p->xi.minimum));
+    const int sensor_y = static_cast<int>(
+        (static_cast<int64_t>(p->y) - p->yi.minimum) * (y_size - 1) /
+        (static_cast<int64_t>(p->yi.maximum) - p->yi.minimum));
+    switch (rotation) {
+        case 90:
+            *x = fb_width - 1 - sensor_y;
+            *y = sensor_x;
+            break;
+        case 180:
+            *x = fb_width - 1 - sensor_x;
+            *y = fb_height - 1 - sensor_y;
+            break;
+        case 270:
+            *x = sensor_y;
+            *y = fb_height - 1 - sensor_x;
+            break;
+        default:
+            *x = sensor_x;
+            *y = sensor_y;
+            break;
+    }
 
     if (*x >= 0 && *x < fb_width &&
         *y >= 0 && *y < fb_height)
@@ -595,7 +740,7 @@ static bool mt_point_to_screen(const struct ev *e, int raw_x, int raw_y, int *x,
     point.xi = e->mt_p.xi;
     point.yi = e->mt_p.yi;
 
-    if (vk_tp_to_screen(&point, x, y) != 0)
+    if (vk_tp_to_screen(&point, x, y, touch_rotation) != 0)
         return false;
 
 #ifdef RECOVERY_TOUCHSCREEN_SWAP_XY
@@ -1147,11 +1292,11 @@ static int vk_modify(struct ev *e, struct input_event *ev)
     // Retrieve where the x,y position is
     if (e->p.synced & 0x03)
     {
-        vk_tp_to_screen(&e->p, &x, &y);
+        vk_tp_to_screen(&e->p, &x, &y, touch_rotation);
     }
     else if (e->mt_p.synced & 0x03)
     {
-        vk_tp_to_screen(&e->mt_p, &x, &y);
+        vk_tp_to_screen(&e->mt_p, &x, &y, touch_rotation);
     }
     else
     {
@@ -1235,44 +1380,46 @@ static int vk_modify(struct ev *e, struct input_event *ev)
 
 int ev_get(struct input_event *ev, int timeout_ms)
 {
-    int r;
-    unsigned n;
-    struct timeval curr;
-
-    gettimeofday(&curr, NULL);
-    if(curr.tv_sec - lastInputStat.tv_sec >= 2)
-    {
-        struct stat st;
-        stat("/dev/input", &st);
-        if (st.st_mtime > lastInputMTime)
-        {
-            LOGI("Reloading input devices\n");
-            ev_exit();
-            ev_init();
-            lastInputMTime = st.st_mtime;
-        }
+    const struct timeval curr = input_clock();
+    if (curr.tv_sec - lastInputStat.tv_sec >= 2) {
+        refresh_input_devices();
         lastInputStat = curr;
     }
 
-    r = poll(ev_fds, ev_count, timeout_ms);
+    const int ready = poll(ev_fds, ev_count, timeout_ms);
+    if (ready <= 0)
+        return -2;
 
-    if(r > 0) {
-        for(n = 0; n < ev_count; n++) {
-            if(ev_fds[n].revents & POLLIN) {
-                r = read(ev_fds[n].fd, ev, sizeof(*ev));
-                if(r == sizeof(*ev)) {
-                    // Assemble the raw multitouch frame before vk_modify()
-                    // compresses it into the legacy single-pointer event.
-                    mt_process_event(&evs[n], ev);
-                    if (!vk_modify(&evs[n], ev))
-                        return 0;
-                }
-            }
+    // Remove dead descriptors before rotating through the remaining devices.
+    for (unsigned n = 0; n < ev_count;) {
+        if ((ev_fds[n].revents & (POLLERR | POLLNVAL)) ||
+            ((ev_fds[n].revents & POLLHUP) && !(ev_fds[n].revents & POLLIN))) {
+            remove_input_device(n);
+        } else {
+            ++n;
         }
-        return -1;
     }
-
-    return -2;
+    bool input_read = false;
+    const unsigned first = ev_count == 0 ? 0 : next_input % ev_count;
+    for (unsigned i = 0; i < ev_count; ++i) {
+        const unsigned n = (first + i) % ev_count;
+        if (!(ev_fds[n].revents & POLLIN))
+            continue;
+        const ssize_t bytes = read(ev_fds[n].fd, ev, sizeof(*ev));
+        if (bytes == 0 || (bytes < 0 && (errno == ENODEV || errno == EBADF))) {
+            remove_input_device(n);
+            return input_read ? -1 : -2;
+        }
+        if (bytes != sizeof(*ev))
+            continue;
+        input_read = true;
+        next_input = (n + 1) % ev_count;
+        mt_process_event(&evs[n], ev);
+        if (!vk_modify(&evs[n], ev))
+            return 0;
+    }
+    // -1 asks callers to keep draining; errors alone make no progress.
+    return input_read ? -1 : -2;
 }
 
 int twrp_input_take_touch_events(TWRPTouchPoint* points, int max_points)
