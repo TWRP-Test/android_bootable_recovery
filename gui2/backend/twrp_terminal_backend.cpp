@@ -13,6 +13,14 @@ bool twrp_terminal_backend::running() {
   return twrp_terminal::running();
 }
 
+bool twrp_terminal_backend::alternate_screen() {
+  return twrp_terminal::alternate_screen();
+}
+
+bool twrp_terminal_backend::foreground_job() { return twrp_terminal::foreground_job(); }
+int twrp_terminal_backend::cursor_x() { return twrp_terminal::cursor_x(); }
+int twrp_terminal_backend::cursor_y() { return twrp_terminal::cursor_y(); }
+
 void twrp_terminal_backend::stop() {
   twrp_terminal::stop();
 }

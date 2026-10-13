@@ -180,6 +180,16 @@ std::vector<keyboard::key> keyboard::function_row() const {
   const char* paste = strings_ != nullptr ? strings_->keyboard_paste : "Paste";
 
   std::vector<key> row;
+  if (input_callback_ != nullptr) {
+    row.push_back({key_kind::CURSOR_LEFT, LV_SYMBOL_LEFT, "", 1.0f, true, false, true, 0});
+    row.push_back({key_kind::CURSOR_DOWN, LV_SYMBOL_DOWN, "", 1.0f, true, false, true, 0});
+    row.push_back({key_kind::CURSOR_UP, LV_SYMBOL_UP, "", 1.0f, true, false, true, 0});
+    row.push_back({key_kind::CURSOR_RIGHT, LV_SYMBOL_RIGHT, "", 1.0f, true, false, true, 0});
+    row.push_back({key_kind::CTRL, "Ctrl", "", 1.5f, false, false, true, 0});
+    row.push_back({key_kind::TAB, "Tab", "", 1.3f, false, false, true, 0});
+    row.push_back({key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.3f, true, false, true, 0});
+    return row;
+  }
   // The cursor pad is one control: the caret in the middle only marks where the
   // arrows act, so it shares their background and does nothing when pressed.
   row.push_back({key_kind::CURSOR_LEFT, LV_SYMBOL_LEFT, "", 1.0f, true, false, true, 1});
@@ -190,7 +200,8 @@ std::vector<keyboard::key> keyboard::function_row() const {
   // A PIN has no use for punctuation, and dropping it lets the keys that are
   // left take the width instead.
   if (layout_ != keyboard_layout::NUMBER) {
-    row.push_back({key_kind::CHARACTER, "/", "/", 1.0f, false, false, true, 0});
+    if (!shell_row_)
+      row.push_back({key_kind::CHARACTER, "/", "/", 1.0f, false, false, true, 0});
     row.push_back({key_kind::CHARACTER, "\"", "\"", 1.0f, false, false, true, 0});
     row.push_back({key_kind::CHARACTER, "'", "'", 1.0f, false, false, true, 0});
   }
@@ -295,10 +306,14 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
   shell_row_ = options.shell_row;
   // Start lowercase: a field that is not a sentence is the common case here.
   shifted_ = false;
+  ctrl_pending_ = false;
+  ctrl_button_ = nullptr;
   accept_callback_ = options.accept_callback;
   hidden_callback_ = options.hidden_callback;
   shown_callback_ = options.shown_callback;
   key_callback_ = options.key_callback;
+  input_callback_ = options.input_callback;
+  action_callback_ = options.action_callback;
   user_data_ = options.user_data;
 
   const geometry g = measure(*metrics_, layout_);
@@ -369,6 +384,7 @@ void keyboard::bind(lv_obj_t* textarea) {
 }
 
 void keyboard::clear_rows() {
+  ctrl_button_ = nullptr;
   if (rows_ != nullptr) lv_obj_clean(rows_);
   keys_.clear();
 }
@@ -427,6 +443,11 @@ lv_obj_t* keyboard::add_key(lv_obj_t* parent, const key& definition, int width, 
     if (font != nullptr) lv_obj_set_style_text_font(label, font, LV_PART_MAIN);
   }
 
+  if (definition.kind == key_kind::CTRL) {
+    ctrl_button_ = button;
+    lv_obj_set_style_bg_color(button, gui2_core::ui.accent, LV_PART_MAIN | LV_STATE_CHECKED);
+    if (ctrl_pending_) lv_obj_add_state(button, LV_STATE_CHECKED);
+  }
   lv_obj_add_event_cb(button, key_event_cb, LV_EVENT_CLICKED, this);
   lv_obj_set_user_data(button, const_cast<key*>(&definition));
   return button;
@@ -548,17 +569,29 @@ void keyboard::handle(const key& definition) {
 
   switch (definition.kind) {
     case key_kind::CHARACTER:
-      if (textarea_ != nullptr) lv_textarea_add_text(textarea_, definition.text.c_str());
+      if (input_callback_ != nullptr && !definition.text.empty()) {
+        const int character = static_cast<unsigned char>(definition.text[0]);
+        const int input = ctrl_pending_ ? character & 0x1f : character;
+        ctrl_pending_ = false;
+        if (ctrl_button_ != nullptr) lv_obj_remove_state(ctrl_button_, LV_STATE_CHECKED);
+        input_callback_(user_data_, input);
+      }
+      else if (textarea_ != nullptr) lv_textarea_add_text(textarea_, definition.text.c_str());
       break;
     case key_kind::SHIFT:
       shifted_ = !shifted_;
       build_rows();
       break;
     case key_kind::BACKSPACE:
-      if (textarea_ != nullptr) lv_textarea_delete_char(textarea_);
+      if (input_callback_ != nullptr)
+        input_callback_(user_data_, 8);
+      else if (textarea_ != nullptr)
+        lv_textarea_delete_char(textarea_);
       break;
     case key_kind::ENTER:
-      if (accept_callback_ != nullptr)
+      if (input_callback_ != nullptr)
+        input_callback_(user_data_, 13);
+      else if (accept_callback_ != nullptr)
         accept_callback_(user_data_);
       else
         hide();
@@ -575,11 +608,34 @@ void keyboard::handle(const key& definition) {
     case key_kind::HIDE:
       hide();
       break;
+    case key_kind::CTRL:
+      ctrl_pending_ = !ctrl_pending_;
+      if (ctrl_button_ != nullptr) {
+        if (ctrl_pending_) lv_obj_add_state(ctrl_button_, LV_STATE_CHECKED);
+        else lv_obj_remove_state(ctrl_button_, LV_STATE_CHECKED);
+      }
+      break;
+    case key_kind::ESCAPE:
+      if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::ESCAPE);
+      break;
+    case key_kind::TAB:
+      if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::TAB);
+      break;
+    case key_kind::CURSOR_UP:
+      if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::UP);
+      break;
+    case key_kind::CURSOR_DOWN:
+      if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::DOWN);
+      break;
     case key_kind::CURSOR_LEFT:
-      if (textarea_ != nullptr) lv_textarea_cursor_left(textarea_);
+      if (input_callback_ != nullptr) {
+        if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::LEFT);
+      } else if (textarea_ != nullptr) lv_textarea_cursor_left(textarea_);
       break;
     case key_kind::CURSOR_RIGHT:
-      if (textarea_ != nullptr) lv_textarea_cursor_right(textarea_);
+      if (input_callback_ != nullptr) {
+        if (action_callback_ != nullptr) action_callback_(user_data_, keyboard_action::RIGHT);
+      } else if (textarea_ != nullptr) lv_textarea_cursor_right(textarea_);
       break;
     case key_kind::COPY:
       if (textarea_ != nullptr) {
@@ -606,6 +662,7 @@ void keyboard::handle(const key& definition) {
 
 keyboard* keyboard::current() {
   if (current_keyboard == nullptr || current_keyboard->root_ == nullptr) return nullptr;
+  if (current_keyboard->input_callback_ != nullptr) return current_keyboard;
   if (!field_available(current_keyboard->textarea_)) {
     const auto field = std::find_if(current_keyboard->fields_.begin(),
                                     current_keyboard->fields_.end(), field_available);
@@ -637,6 +694,10 @@ void keyboard::update_hardware_keyboard(bool connected) {
 }
 
 void keyboard::type(int ch) {
+  if (input_callback_ != nullptr) {
+    input_callback_(user_data_, ch);
+    return;
+  }
   key definition;
   if (ch == 9) {
     focus_next();
@@ -661,6 +722,14 @@ void keyboard::move_cursor(bool right) {
       (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   key definition;
   definition.kind = right ? key_kind::CURSOR_RIGHT : key_kind::CURSOR_LEFT;
+  handle(definition);
+}
+
+void keyboard::move_vertical(bool down) {
+  if (!hardware_keyboard_connected &&
+      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
+  key definition;
+  definition.kind = down ? key_kind::CURSOR_DOWN : key_kind::CURSOR_UP;
   handle(definition);
 }
 

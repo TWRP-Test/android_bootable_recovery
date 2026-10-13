@@ -27,6 +27,7 @@ class font_manager {
     return keyboard_;
   }
   lv_font_t* console(int index) const;
+  lv_font_t* terminal() const { return terminal_; }
   static int console_count() {
     return kConsoleSizeCount;
   }
@@ -38,6 +39,7 @@ class font_manager {
   lv_font_t* status_ = nullptr;
   lv_font_t* brand_ = nullptr;
   lv_font_t* keyboard_ = nullptr;
+  lv_font_t* terminal_ = nullptr;
   lv_font_t* console_[kConsoleSizeCount] = {};
 };
 

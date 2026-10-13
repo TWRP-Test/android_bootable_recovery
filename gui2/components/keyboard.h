@@ -23,6 +23,19 @@ enum class keyboard_layout {
 };
 
 using keyboard_callback = void (*)(void* user_data);
+using keyboard_input_callback = void (*)(void* user_data, int codepoint);
+
+enum class keyboard_action {
+  CTRL,
+  ESCAPE,
+  TAB,
+  BACKSPACE,
+  UP,
+  DOWN,
+  LEFT,
+  RIGHT,
+};
+using keyboard_action_callback = void (*)(void* user_data, keyboard_action action);
 
 struct keyboard_options {
   lv_obj_t* parent = nullptr;
@@ -42,6 +55,8 @@ struct keyboard_options {
   keyboard_callback shown_callback = nullptr;
   // Fired for every key so the caller can add its own feedback.
   keyboard_callback key_callback = nullptr;
+  keyboard_input_callback input_callback = nullptr;
+  keyboard_action_callback action_callback = nullptr;
   void* user_data = nullptr;
 };
 
@@ -91,6 +106,7 @@ class keyboard {
   // HardwareKeyboard's characters (8 backspace, 13 enter) and the arrow keys.
   void type(int ch);
   void move_cursor(bool right);
+  void move_vertical(bool down);
 
  private:
   enum class key_kind {
@@ -101,6 +117,11 @@ class keyboard {
     TO_SYMBOLS,
     TO_LETTERS,
     HIDE,
+    CTRL,
+    ESCAPE,
+    TAB,
+    CURSOR_UP,
+    CURSOR_DOWN,
     CURSOR_LEFT,
     CURSOR_RIGHT,
     COPY,
@@ -147,11 +168,15 @@ class keyboard {
   std::vector<lv_obj_t*> fields_;
   keyboard_layout layout_ = keyboard_layout::LETTERS;
   bool shifted_ = true;
+  bool ctrl_pending_ = false;
+  lv_obj_t* ctrl_button_ = nullptr;
   bool shell_row_ = false;
   keyboard_callback accept_callback_ = nullptr;
   keyboard_callback hidden_callback_ = nullptr;
   keyboard_callback shown_callback_ = nullptr;
   keyboard_callback key_callback_ = nullptr;
+  keyboard_input_callback input_callback_ = nullptr;
+  keyboard_action_callback action_callback_ = nullptr;
   void* user_data_ = nullptr;
   static void slide_y_cb(void* target, int32_t value);
   static void hidden_anim_done(lv_anim_t* anim);

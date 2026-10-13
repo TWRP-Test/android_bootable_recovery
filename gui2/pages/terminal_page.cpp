@@ -27,15 +27,20 @@ void layout_terminal_output(terminal_page_view* view, const gui2_core::ui_metric
                             int top_offset, bool keyboard_visible) {
   if (view == nullptr || view->output.body == nullptr) return;
 
-  // The console sizes itself against the whole viewport and knows nothing about
-  // the command row or the keyboard below it.
-  const int scroll_top = metrics.heading_top + metrics.heading_height + metrics.cards_top_gap;
-  const int reserved = keyboard_visible ? terminal_bottom_reserved(metrics)
-                                        : gui2_core::navigation_safe_area();
-  const int available = metrics.height - metrics.status_height - scroll_top - reserved - top_offset;
-  const int height =
-      std::max(gui2_core::ui_px(240), available - command_row_height(metrics) -
-                                          metrics.cards_top_gap);
+  const int scroll_top = view->fullscreen ? metrics.outer_margin :
+      metrics.heading_top + metrics.heading_height + metrics.cards_top_gap;
+  const int reserved = keyboard_visible ?
+      gui2_components::keyboard_height(metrics, gui2_components::keyboard_layout::LETTERS,
+                                       !view->fullscreen) + metrics.cards_top_gap :
+      (view->fullscreen ? metrics.outer_margin : gui2_core::navigation_safe_area());
+  const int controls = view->fullscreen ? 0 : command_row_height(metrics) + metrics.cards_top_gap;
+  const int available = metrics.height - metrics.status_height - scroll_top - reserved -
+                        top_offset - controls;
+  const int height = std::max(view->cell_height, available);
+  lv_obj_update_layout(view->output.body);
+  view->rows = std::max(1, (height - view->output.padding * 2) / view->cell_height);
+  view->columns = std::max(1, (lv_obj_get_width(view->output.body) -
+                              view->output.padding * 2) / view->cell_width);
   lv_obj_set_height(view->output.body, height);
   view->output.minimum_height = height;
 }
@@ -48,10 +53,20 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   const auto& metrics = *options.metrics;
   const auto& strings = *options.strings;
   const int row_height = command_row_height(metrics);
+  view.fullscreen = options.fullscreen;
+  const int pane_width = options.fullscreen ? metrics.width - metrics.outer_margin * 2 :
+                                            metrics.content_width;
+  lv_font_glyph_dsc_t glyph{};
+  if (options.console_font != nullptr &&
+      lv_font_get_glyph_dsc(options.console_font, &glyph, 'M', 0))
+    view.cell_width = std::max(1, static_cast<int>(glyph.adv_w));
+  view.cell_height = options.console_font == nullptr ? gui2_core::ui_px(34) :
+                                                     options.console_font->line_height;
 
   view.body = lv_obj_create(options.content);
-  lv_obj_set_pos(view.body, metrics.content_left, options.top_offset);
-  lv_obj_set_width(view.body, metrics.content_width);
+  lv_obj_set_pos(view.body, options.fullscreen ? metrics.outer_margin : metrics.content_left,
+                 options.top_offset + (options.fullscreen ? metrics.outer_margin : 0));
+  lv_obj_set_width(view.body, pane_width);
   lv_obj_set_height(view.body, LV_SIZE_CONTENT);
   gui2_core::set_surface_style(view.body, metrics.background, LV_OPA_TRANSP);
   lv_obj_set_style_pad_all(view.body, 0, LV_PART_MAIN);
@@ -61,22 +76,31 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   gui2_core::disable_scrolling(view.body);
 
-  console_page_options output;
-  output.content = view.body;
-  output.metrics = &metrics;
-  output.empty_text = strings.terminal_empty;
-  output.font = options.console_font;
-  output.self_scrolling = true;
-  view.output = build_console_page(output);
-  if (view.output.body != nullptr) lv_obj_set_pos(view.output.body, 0, 0);
+  view.output.body = lv_obj_create(view.body);
+  lv_obj_set_width(view.output.body, pane_width);
+  gui2_core::set_surface_style(view.output.body, metrics.card_color);
+  lv_obj_set_style_radius(view.output.body, gui2_core::single_line_card_height() / 4,
+                          LV_PART_MAIN);
+  lv_obj_set_style_clip_corner(view.output.body, true, LV_PART_MAIN);
+  view.output.padding = std::max(gui2_core::ui_px(12), gui2_core::card_inner_padding() / 2);
+  lv_obj_set_style_pad_all(view.output.body, view.output.padding, LV_PART_MAIN);
+  view.output.content = view.output.body;
+  view.output.font = options.console_font;
+  view.output.self_scrolling = !options.fullscreen;
+  if (options.fullscreen) gui2_core::disable_scrolling(view.output.body);
+  else {
+    lv_obj_set_scroll_dir(view.output.body, LV_DIR_VER);
+    gui2_core::style_scrollbar(view.output.body, metrics.secondary_text);
+  }
   layout_terminal_output(&view, metrics, options.top_offset, true);
 
+  if (!options.fullscreen) {
   // The command row sits where the legacy page puts its input line: directly
   // under the output, with the prompt in front of it.
   lv_obj_t* row = lv_obj_create(view.body);
   lv_obj_set_size(row, metrics.content_width, row_height);
   gui2_core::set_surface_style(row, metrics.card_color);
-  lv_obj_set_style_radius(row, row_height / 3, LV_PART_MAIN);
+  lv_obj_set_style_radius(row, gui2_core::single_line_card_height() / 4, LV_PART_MAIN);
   lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_left(row, gui2_core::card_inner_padding(), LV_PART_MAIN);
   lv_obj_set_style_pad_right(row, gui2_core::card_inner_padding() / 2, LV_PART_MAIN);
@@ -126,6 +150,8 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
   lv_obj_set_style_text_font(interrupt_label, options.console_font, LV_PART_MAIN);
   lv_obj_center(interrupt_label);
 
+  }
+
   if (options.keyboard != nullptr) {
     gui2_components::keyboard_options keyboard;
     keyboard.parent = options.overlay_layer != nullptr ? options.overlay_layer : options.content;
@@ -133,23 +159,77 @@ terminal_page_view build_terminal_page(const terminal_page_options& options) {
     keyboard.strings = &strings;
     keyboard.textarea = view.input;
     keyboard.layout = gui2_components::keyboard_layout::LETTERS;
-    keyboard.shell_row = true;
+    keyboard.shell_row = !options.fullscreen;
     keyboard.accept_callback = options.run_callback;
     keyboard.key_callback = options.key_callback;
+    keyboard.input_callback = options.input_callback;
+    keyboard.action_callback = options.action_callback;
     keyboard.shown_callback = options.shown_callback;
     keyboard.hidden_callback = options.hidden_callback;
     keyboard.user_data = options.keyboard_user_data;
     view.keyboard = options.keyboard->create(keyboard);
+    if (options.fullscreen)
+      lv_obj_add_event_cb(view.output.body, [](lv_event_t* event) {
+        auto* widget = static_cast<gui2_components::keyboard*>(lv_event_get_user_data(event));
+        if (widget != nullptr) widget->show();
+      }, LV_EVENT_CLICKED, options.keyboard);
     if (view.keyboard != nullptr && options.overlay_layer != nullptr) {
       lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
       lv_obj_set_pos(view.keyboard, 0,
                      metrics.height -
                          gui2_components::keyboard_height(
-                             metrics, gui2_components::keyboard_layout::LETTERS, true));
+                             metrics, gui2_components::keyboard_layout::LETTERS,
+                             !options.fullscreen));
       options.keyboard->bind(view.input);
     }
   }
+  layout_terminal_output(&view, metrics, options.top_offset,
+                         options.keyboard != nullptr && options.keyboard->visible());
   return view;
+}
+
+void render_terminal_screen(terminal_page_view* view, const std::vector<std::string>& lines,
+                            int cursor_x, int cursor_y) {
+  if (view == nullptr || view->output.body == nullptr) return;
+  const size_t count = view->fullscreen ? static_cast<size_t>(view->rows) : lines.size();
+  while (view->screen_lines.size() > count) {
+    lv_obj_delete(view->screen_lines.back());
+    view->screen_lines.pop_back();
+  }
+  while (view->screen_lines.size() < count) {
+    lv_obj_t* line = lv_label_create(view->output.body);
+    lv_label_set_long_mode(line, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_font(line, view->output.font, LV_PART_MAIN);
+    lv_obj_set_style_text_color(line, gui2_core::ui.primary_text, LV_PART_MAIN);
+    lv_obj_set_style_text_letter_space(line, 0, LV_PART_MAIN);
+    lv_obj_set_style_text_line_space(line, 0, LV_PART_MAIN);
+    view->screen_lines.push_back(line);
+  }
+  for (size_t i = 0; i < count; ++i) {
+    lv_obj_t* line = view->screen_lines[i];
+    const char* text = i < lines.size() ? lines[i].c_str() : "";
+    if (std::string(lv_label_get_text(line)) != text) lv_label_set_text(line, text);
+    lv_obj_set_pos(line, 0, static_cast<int>(i) * view->cell_height);
+    lv_obj_set_size(line, view->columns * view->cell_width, view->cell_height);
+  }
+  if (view->cursor == nullptr) {
+    view->cursor = lv_obj_create(view->output.body);
+    gui2_core::set_surface_style(view->cursor, gui2_core::ui.accent);
+    lv_obj_set_style_pad_all(view->cursor, 0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(view->cursor, 0, LV_PART_MAIN);
+    gui2_core::disable_scrolling(view->cursor);
+    lv_obj_set_clickable(view->cursor, false);
+  }
+  const bool cursor_visible = cursor_y >= 0 && cursor_y < static_cast<int>(count);
+  lv_obj_set_hidden(view->cursor, !cursor_visible);
+  if (cursor_visible) {
+    lv_obj_set_size(view->cursor, view->cell_width, std::max(2, gui2_core::ui_px(3)));
+    lv_obj_set_pos(view->cursor, std::clamp(cursor_x, 0, view->columns - 1) * view->cell_width,
+                   (cursor_y + 1) * view->cell_height - gui2_core::ui_px(3));
+    lv_obj_move_foreground(view->cursor);
+  }
+  if (!view->fullscreen && cursor_visible)
+    lv_obj_scroll_to_view(view->screen_lines[cursor_y], LV_ANIM_OFF);
 }
 
 }  // namespace gui2_pages

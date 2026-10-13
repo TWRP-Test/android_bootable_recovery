@@ -154,7 +154,7 @@ extern const language_pack kSimplifiedChinese = {
   "校验摘要",
   "备份密码不正确",
   "存储",
-  "要挂载的分区",
+  "挂载分区",
   "其他",
   "启用 MTP",
   "挂载 USB 存储",

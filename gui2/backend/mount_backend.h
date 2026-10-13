@@ -6,6 +6,11 @@
 
 namespace gui2_backend {
 
+inline bool is_otg_path(const std::string& path) {
+  return path.starts_with("/usbotg") || path.starts_with("/usb-otg") ||
+         path.starts_with("/usb_otg");
+}
+
 struct mount_target {
   std::string name;
   std::string mount_point;

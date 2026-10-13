@@ -85,6 +85,9 @@ struct page_state {
   gui2_components::tab_bar console_tabs;
   terminal_page_view terminal_view;
   gui2_components::keyboard terminal_keyboard_widget;
+  bool terminal_fullscreen = false;
+  bool terminal_ctrl_pending = false;
+  lv_obj_t* terminal_exit_button = nullptr;
   uint64_t terminal_last_poll_ms = 0;
   // How much of the engine's buffer is on screen, and the counter that says
   // whether it changed at all.

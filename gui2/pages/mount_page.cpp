@@ -38,6 +38,7 @@ void build_mount_page(const mount_page_options& options) {
 
   gui2_components::create_section_label(body, metrics, strings.mount_partitions_section);
   for (size_t i = 0; i < options.target_count; ++i) {
+    if (gui2_backend::is_otg_path(options.targets[i].mount_point)) continue;
     gui2_components::create_check_row(
         body, metrics, options.targets[i].name.c_str(), options.targets[i].mounted,
         options.mount_callback,
@@ -53,6 +54,13 @@ void build_mount_page(const mount_page_options& options) {
   }
 
   gui2_components::create_section_label(body, metrics, strings.mount_other_section);
+  for (size_t i = 0; i < options.target_count; ++i) {
+    if (!gui2_backend::is_otg_path(options.targets[i].mount_point)) continue;
+    gui2_components::create_check_row(
+        body, metrics, options.targets[i].name.c_str(), options.targets[i].mounted,
+        options.mount_callback,
+        const_cast<void*>(static_cast<const void*>(&options.target_indices[i])));
+  }
   if (options.mtp_target != nullptr) {
     gui2_components::create_check_row(
         body, metrics, strings.mount_mtp, options.mtp_enabled, options.toggle_callback,

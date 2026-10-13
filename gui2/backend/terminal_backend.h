@@ -16,6 +16,11 @@ class terminal_backend {
   // Starts the shell if it is not already running.
   virtual bool start() = 0;
   virtual bool running() = 0;
+  virtual bool alternate_screen() { return false; }
+  // Whether the PTY foreground process group belongs to a job rather than the shell.
+  virtual bool foreground_job() { return false; }
+  virtual int cursor_x() { return 0; }
+  virtual int cursor_y() { return 0; }
   virtual void stop() = 0;
 
   // How wide and tall the buffer should wrap, in characters.

@@ -15,6 +15,10 @@ class twrp_terminal_backend final : public terminal_backend {
  public:
   bool start() override;
   bool running() override;
+  bool alternate_screen() override;
+  bool foreground_job() override;
+  int cursor_x() override;
+  int cursor_y() override;
   void stop() override;
   void set_size(int columns, int rows) override;
   void pump() override;

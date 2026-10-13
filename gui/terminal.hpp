@@ -30,6 +30,10 @@ namespace twrp_terminal {
 // Starts the shell if it is not already running.
 void start();
 bool running();
+bool alternate_screen();
+bool foreground_job();
+int cursor_x();
+int cursor_y();
 void stop();
 
 // In characters. The engine wraps and scrolls against this.

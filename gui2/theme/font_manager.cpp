@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace gui2_theme {
 
@@ -12,6 +13,13 @@ namespace {
 #define GUI2_UI_FONT_PATH "/twres/fonts/wqy-microhei.ttf"
 #endif
 constexpr const char* kUiFontPath = GUI2_UI_FONT_PATH;
+#ifdef GUI2_HOST_PREVIEW
+const std::string kTerminalFontPath =
+    std::string(kUiFontPath).substr(0, std::string(kUiFontPath).find("extra-languages/fonts/")) +
+    "common/fonts/DroidSansMono.ttf";
+#else
+constexpr const char* kTerminalFontPath = "/twres/fonts/DroidSansMono.ttf";
+#endif
 
 int scaled_size(float scale, int base_size) {
   return std::max(1, static_cast<int>(std::lround(base_size * scale)));
@@ -32,9 +40,15 @@ bool font_manager::initialize(float scale) {
   status_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 42));
   brand_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 104));
   keyboard_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 68));
+#ifdef GUI2_HOST_PREVIEW
+  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath.c_str(), scaled_size(scale, 34));
+#else
+  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath, scaled_size(scale, 34));
+#endif
   for (int i = 0; i < kConsoleSizeCount; ++i)
     console_[i] = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, kConsoleBaseSizes[i]));
-  if (text_ != nullptr && status_ != nullptr && brand_ != nullptr) return true;
+  if (text_ != nullptr && status_ != nullptr && brand_ != nullptr && terminal_ != nullptr)
+    return true;
 #else
   (void)scale;
 #endif
@@ -49,6 +63,7 @@ void font_manager::shutdown() {
   if (status_ != nullptr) lv_tiny_ttf_destroy(status_);
   if (brand_ != nullptr) lv_tiny_ttf_destroy(brand_);
   if (keyboard_ != nullptr) lv_tiny_ttf_destroy(keyboard_);
+  if (terminal_ != nullptr) lv_tiny_ttf_destroy(terminal_);
   for (lv_font_t*& font : console_) {
     if (font != nullptr) lv_tiny_ttf_destroy(font);
     font = nullptr;
@@ -58,6 +73,7 @@ void font_manager::shutdown() {
   status_ = nullptr;
   brand_ = nullptr;
   keyboard_ = nullptr;
+  terminal_ = nullptr;
 }
 
 }  // namespace gui2_theme

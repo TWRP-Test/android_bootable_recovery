@@ -1,6 +1,12 @@
 #include "twrp_mount_backend.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
+
+#include <android-base/properties.h>
 
 #include "data.hpp"
 #include "partitions.hpp"
@@ -57,6 +63,20 @@ int mountsystemtoggle(const std::string& arg) {
   return op_status;
 }
 
+static std::string otg_name(const std::string& path) {
+  if (!is_otg_path(path)) return {};
+  std::vector<PartitionList> list;
+  PartitionManager.Get_Partition_List("mount", &list);
+  std::vector<std::string> paths;
+  for (const auto& item : list)
+    if (is_otg_path(item.Mount_Point)) paths.push_back(item.Mount_Point);
+  std::sort(paths.begin(), paths.end());
+  if (paths.size() <= 1) return "OTG";
+  const auto found = std::find(paths.begin(), paths.end(), path);
+  return found == paths.end() ? "OTG" :
+      "OTG " + std::to_string(std::distance(paths.begin(), found) + 1);
+}
+
 std::vector<mount_target> twrp_mount_backend::targets() {
   std::vector<PartitionList> list;
   PartitionManager.Get_Partition_List("mount", &list);
@@ -64,7 +84,8 @@ std::vector<mount_target> twrp_mount_backend::targets() {
   std::vector<mount_target> result;
   result.reserve(list.size());
   for (const PartitionList& entry : list)
-    result.push_back({ entry.Display_Name, entry.Mount_Point, entry.selected });
+    result.push_back({ is_otg_path(entry.Mount_Point) ? otg_name(entry.Mount_Point) : entry.Display_Name,
+                       entry.Mount_Point, entry.selected });
   return result;
 }
 
@@ -121,7 +142,8 @@ std::vector<storage_device> twrp_mount_backend::storages() {
   std::vector<storage_device> result;
   result.reserve(list.size());
   for (const PartitionList& entry : list)
-    result.push_back({ entry.Display_Name, entry.Mount_Point, entry.selected });
+    result.push_back({ is_otg_path(entry.Mount_Point) ? otg_name(entry.Mount_Point) : entry.Display_Name,
+                       entry.Mount_Point, entry.selected });
   return result;
 }
 
@@ -144,7 +166,8 @@ bool twrp_mount_backend::select_storage(const std::string& path) {
 std::string twrp_mount_backend::storage_name() {
   std::string value;
   DataManager::GetValue("tw_storage_display_name", value);
-  return value;
+  return is_otg_path(DataManager::GetCurrentStoragePath()) ?
+      otg_name(DataManager::GetCurrentStoragePath()) : value;
 }
 
 std::string twrp_mount_backend::storage_free() {
@@ -182,7 +205,19 @@ bool twrp_mount_backend::set_mtp_enabled(bool enabled) {
 }
 
 bool twrp_mount_backend::has_usb_storage() {
-  return DataManager::GetIntValue(TW_HAS_USB_STORAGE) != 0;
+  if (DataManager::GetIntValue(TW_HAS_USB_STORAGE) == 0) return false;
+  // A configfs function directory alone does not configure or bind a gadget.
+  // Check the installed device rules without switching USB mode to probe it.
+  std::ifstream rules("/init.recovery.usb.rc");
+  std::ostringstream text;
+  text << rules.rdbuf();
+  const std::string config = text.str();
+  if (config.find("sys.usb.config=mass_storage,adb") == std::string::npos) return false;
+  if (android::base::GetProperty("sys.usb.configfs", "0") == "1")
+    return config.find("symlink /config/usb_gadget/g1/functions/mass_storage.") !=
+               std::string::npos &&
+           config.find("write /config/usb_gadget/g1/UDC") != std::string::npos;
+  return config.find("/sys/class/android_usb/android0/functions") != std::string::npos;
 }
 
 bool twrp_mount_backend::usb_storage_enabled() {
@@ -194,9 +229,19 @@ bool twrp_mount_backend::usb_storage_enabled() {
 bool twrp_mount_backend::set_usb_storage_enabled(bool enabled) {
   if (enabled) {
     DataManager::SetValue(TW_ACTION_BUSY, 1);
-    PartitionManager.usb_storage_enable();
+    if (!has_usb_storage() || !PartitionManager.usb_storage_enable()) {
+      DataManager::SetValue(TW_ACTION_BUSY, 0);
+      return false;
+    }
+    // The partition manager requests the switch; init acknowledges it.
+    if (!android::base::WaitForProperty("sys.usb.state", "mass_storage,adb",
+                                        std::chrono::milliseconds(1500))) {
+      PartitionManager.usb_storage_disable();
+      DataManager::SetValue(TW_ACTION_BUSY, 0);
+      return false;
+    }
   } else {
-    PartitionManager.usb_storage_disable();
+    if (!PartitionManager.usb_storage_disable()) return false;
     DataManager::SetValue(TW_ACTION_BUSY, 0);
   }
   usb_storage_on_ = enabled;
