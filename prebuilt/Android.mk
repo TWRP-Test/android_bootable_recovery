@@ -12,7 +12,7 @@ ifneq ($(wildcard external/one-true-awk/Android.bp),)
 	RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/awk
 endif
 
-ifneq ($(filter $(PRODUCT_USE_DYNAMIC_PARTITIONS) $(TW_INCLUDE_FASTBOOTD),true),)
+ifneq ($(filter true,$(call twrp_scalar,$(PRODUCT_USE_DYNAMIC_PARTITIONS)) $(call twrp_scalar,$(TW_INCLUDE_FASTBOOTD))),)
 RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/fastbootd
 endif
 RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/bc
@@ -23,7 +23,7 @@ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/tune2fs
 RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/resize2fs
 
 #RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/twrpmtp
-ifneq ($(filter $(PRODUCT_USE_DYNAMIC_PARTITIONS) $(TW_INCLUDE_FASTBOOTD),true),)
+ifneq ($(filter true,$(call twrp_scalar,$(PRODUCT_USE_DYNAMIC_PARTITIONS)) $(call twrp_scalar,$(TW_INCLUDE_FASTBOOTD))),)
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/lib64/android.hardware.fastboot@1.0.so
 endif
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/lib64/ld-android.so
@@ -95,7 +95,6 @@ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libstdc++.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtwrpminui.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libminadbd.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libz.so
-RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtar.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtwrpdigest.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libblkid.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libfusesideload.so
@@ -118,13 +117,13 @@ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/twrp
 
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtwrpmtp-ffs.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libext4_utils.so
-ifneq ($(TW_INCLUDE_JPEG),)
+ifeq ($(call twrp_scalar,$(TW_INCLUDE_JPEG)),true)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libjpeg.so
 endif
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libselinux.so
 
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libhardware.so
-ifeq ($(TW_INCLUDE_CRYPTO), true)
+ifeq ($(call twrp_scalar,$(TW_INCLUDE_CRYPTO)), true)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libcryptfsfde.so
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libdexfile_support.so
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libf2fs_sparseblock.so
@@ -134,7 +133,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)/libnos_datagram.so
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.keymaster@3.0.so
     # FBE files
-    ifeq ($(TW_INCLUDE_CRYPTO_FBE), true)
+    ifeq ($(call twrp_scalar,$(TW_INCLUDE_CRYPTO_FBE)), true)
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libtwrpfscrypt.so
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.security.maintenance-ndk.so
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.system.keystore2-V3-ndk.so
@@ -190,10 +189,10 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.system.suspend@1.0.so
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.system.suspend-V1-ndk.so
         RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/fscryptpolicyget
-        ifeq ($(TW_INCLUDE_ZSTD), true)
+        ifeq ($(call twrp_scalar,$(TW_INCLUDE_ZSTD)), true)
             RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/zstd
         endif
-        ifneq ($(TW_EXCLUDE_LIBXML2), true)
+        ifneq ($(call twrp_scalar,$(TW_EXCLUDE_LIBXML2)), true)
             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libxml2.so
         endif
 
@@ -233,7 +232,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
          #RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libhidl-gen-hash.so
     endif
 endif
-ifeq ($(TW_INCLUDE_WIFI), true)
+ifeq ($(call twrp_scalar,$(TW_INCLUDE_WIFI)), true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/microhttpd
     RECOVERY_BINARY_SOURCE_FILES += $(LOCAL_PATH)/dhcpcd
     include $(CLEAR_VARS)
@@ -253,8 +252,8 @@ ifeq ($(TW_INCLUDE_WIFI), true)
     include $(BUILD_PREBUILT)
 endif
 
-ifeq ($(PRODUCT_USE_DYNAMIC_PARTITIONS),true)
-    ifeq ($(TW_ENABLE_ALL_PARTITION_TOOLS),true)
+ifeq ($(call twrp_scalar,$(PRODUCT_USE_DYNAMIC_PARTITIONS)),true)
+    ifeq ($(call twrp_scalar,$(TW_ENABLE_ALL_PARTITION_TOOLS)),true)
         TW_INCLUDE_LPDUMP := true
         TW_INCLUDE_LPTOOLS := true
         RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/lpmake
@@ -279,7 +278,7 @@ endif
 ifneq ($(wildcard system/core/reboot/Android.*),)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_RECOVERY_ROOT_OUT)/system/bin/reboot
 endif
-ifneq ($(TW_DISABLE_TTF), true)
+ifneq ($(call twrp_scalar,$(TW_DISABLE_TTF)), true)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libft2.so
 endif
 ifneq ($(TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES),)
@@ -294,7 +293,7 @@ endif
 ifneq ($(wildcard external/pcre/Android.mk),)
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libpcre.so
 endif
-ifeq ($(TW_INCLUDE_NTFS_3G),true)
+ifeq ($(call twrp_scalar,$(TW_INCLUDE_NTFS_3G)),true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mount.ntfs
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/fsck.ntfs
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mkfs.ntfs
@@ -305,15 +304,15 @@ else
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/ntfsfix
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mkntfs
 endif
-ifeq ($(BOARD_HAS_NO_REAL_SDCARD),)
+ifneq ($(call twrp_scalar,$(BOARD_HAS_NO_REAL_SDCARD)),true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/sgdisk
 endif
-ifneq ($(TW_OZIP_DECRYPT_KEY),)
+ifneq ($(filter-out "",$(strip $(TW_OZIP_DECRYPT_KEY))),)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/ozip_decrypt
 endif
-ifeq ($(TWRP_INCLUDE_LOGCAT), true)
+ifeq ($(call twrp_scalar,$(TWRP_INCLUDE_LOGCAT)), true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/logcat
-    ifeq ($(TARGET_USES_LOGD), true)
+    ifeq ($(call twrp_scalar,$(TARGET_USES_LOGD)), true)
         RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/logd
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libsysutils.so
         RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libnl.so
@@ -365,7 +364,7 @@ endif
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/liblogwrap.so
 RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libext2_misc.so
 
-ifneq ($(TW_EXCLUDE_BASH), true)
+ifneq ($(call twrp_scalar,$(TW_EXCLUDE_BASH)), true)
     RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_EXECUTABLES)/bash
     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SYSTEM_EXT_SHARED_LIBRARIES)/libncurses.so
 endif
@@ -413,7 +412,7 @@ $(warning vendor_hw: $(LOCAL_POST_INSTALL_CMD))
 
 include $(BUILD_PHONY_PACKAGE)
 
-ifeq ($(TW_USE_TOOLBOX), true)
+ifeq ($(call twrp_scalar,$(TW_USE_TOOLBOX)), true)
    include $(CLEAR_VARS)
    LOCAL_MODULE := mkshrc_twrp
    LOCAL_MODULE_STEM := mkshrc
@@ -424,7 +423,7 @@ ifeq ($(TW_USE_TOOLBOX), true)
    include $(BUILD_PREBUILT)
 endif
 
-ifeq ($(TW_INCLUDE_7ZA), true)
+ifeq ($(call twrp_scalar,$(TW_INCLUDE_7ZA)), true)
     include $(CLEAR_VARS)
     LOCAL_MODULE := 7za
     LOCAL_MODULE_TAGS := optional
@@ -434,7 +433,7 @@ ifeq ($(TW_INCLUDE_7ZA), true)
     include $(BUILD_PREBUILT)
 endif
 
-ifneq (,$(filter $(TW_INCLUDE_REPACKTOOLS) $(TW_INCLUDE_RESETPROP) $(TW_INCLUDE_LIBRESETPROP), true))
+ifneq (,$(filter true,$(call twrp_scalar,$(TW_INCLUDE_REPACKTOOLS)) $(call twrp_scalar,$(TW_INCLUDE_RESETPROP)) $(call twrp_scalar,$(TW_INCLUDE_LIBRESETPROP))))
     ifeq ($(wildcard external/magisk-prebuilt/prebuilt/Android.bp),)
         $(warning Magisk prebuilt tools not found!)
         $(warning Please place https://github.com/TeamWin/external_magisk-prebuilt)
@@ -443,7 +442,7 @@ ifneq (,$(filter $(TW_INCLUDE_REPACKTOOLS) $(TW_INCLUDE_RESETPROP) $(TW_INCLUDE_
     endif
 endif
 
-ifneq ($(TW_EXCLUDE_BASH), true)
+ifneq ($(call twrp_scalar,$(TW_EXCLUDE_BASH)), true)
 	include $(CLEAR_VARS)
 	LOCAL_MODULE := bash_twrp
 	LOCAL_MODULE_TAGS := optional

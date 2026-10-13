@@ -409,19 +409,32 @@ bootstrap_go_package {
     name: "soong-twrp_recovery_defaults",
     pkgPath: "bootable/recovery",
     deps: [
+        "blueprint-proptools",
         "soong",
         "soong-android",
         "soong-cc"
     ],
     srcs: [
         "twrp_recovery_defaults.go",
-        "soong/makevars.go"
+        "twrp_flags.go",
+        "soong/makevars.go",
+        "soong/variables.go",
+    ],
+    testSrcs: [
+        "twrp_defaults_test.go",
+        "twrp_flags_test.go",
+        "soong/variables_test.go",
     ],
     pluginFor: ["soong_build"]
 }
 
+twrp_cflags_defaults {
+    name: "twrp_cflags_defaults",
+}
+
 twrp_recovery_defaults {
-    name: "twrp_recovery_defaults"
+    name: "twrp_recovery_defaults",
+    defaults: ["twrp_cflags_defaults"],
 }
 
 cc_binary {
@@ -501,6 +514,7 @@ cc_binary {
         "update_metadata-protos",
         "libtwrpgui",
         "libtwrpperf",
+        "libtar_static",
         "libmounts",
         "libotautil",
         "libsparse",
@@ -543,7 +557,6 @@ cc_binary {
         "libc",
         "libcutils",
         "libstdc++",
-        "libtar",
         "libblkid",
         "libtwrpminui",
         "libbootloader_message",

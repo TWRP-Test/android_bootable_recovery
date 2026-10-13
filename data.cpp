@@ -536,7 +536,7 @@ void DataManager::SetDefaultValues() {
   consts_["tw_no_cpu_temp"] = true;
 #else
 #ifdef TW_CUSTOM_CPU_TEMP_PATH
-  const std::string cpu_temp_file = EXPAND(TW_CUSTOM_CPU_TEMP_PATH);
+  const std::string cpu_temp_file = TW_CUSTOM_CPU_TEMP_PATH;
 #else
   const std::string cpu_temp_file = "/sys/class/thermal/thermal_zone0/temp";
 #endif
@@ -549,8 +549,8 @@ void DataManager::SetDefaultValues() {
 #endif
 
 #ifdef TW_CUSTOM_POWER_BUTTON
-  printf("TW_POWER_BUTTON := %s\n", EXPAND(TW_CUSTOM_POWER_BUTTON));
-  consts_[TW_POWER_BUTTON] = EXPAND(TW_CUSTOM_POWER_BUTTON);
+  printf("TW_POWER_BUTTON := %d\n", TW_CUSTOM_POWER_BUTTON);
+  consts_[TW_POWER_BUTTON] = TW_CUSTOM_POWER_BUTTON;
 #else
   consts_[TW_POWER_BUTTON] = false;
 #endif
@@ -747,8 +747,8 @@ void DataManager::SetDefaultValues() {
 
   persist_["tw_mount_system_ro"] = 2;
   persist_["tw_never_show_system_ro_page"] = false;
-  persist_["tw_language"] = EXPAND(TW_DEFAULT_LANGUAGE);
-  LOGINFO("LANG: %s\n", EXPAND(TW_DEFAULT_LANGUAGE));
+  persist_["tw_language"] = TW_DEFAULT_LANGUAGE;
+  LOGINFO("LANG: %s\n", TW_DEFAULT_LANGUAGE);
 
   data_["tw_has_adopted_storage"] = false;
 
@@ -828,7 +828,7 @@ void DataManager::HandleBrightnessConfig() {
   persist_["tw_brightness_pct"] = 20;
 
 #ifdef TW_SECONDARY_BRIGHTNESS_PATH
-  std::string second_brightness_path = EXPAND(TW_SECONDARY_BRIGHTNESS_PATH);
+  std::string second_brightness_path = TW_SECONDARY_BRIGHTNESS_PATH;
   if (!second_brightness_path.empty() && TWFunc::IsPathExists(second_brightness_path)) {
     LOGINFO("Will use a second brightness file at '%s'\n", second_brightness_path.c_str());
     consts_["tw_secondary_brightness_file"] = second_brightness_path;
@@ -878,7 +878,7 @@ int DataManager::GetMagicValue(const std::string& key, std::string& value) {
     static uint64_t convert_temp = 0;
     if (const auto now = std::chrono::steady_clock::now(); now > next_refresh) {
 #ifdef TW_CUSTOM_CPU_TEMP_PATH
-      const std::string cpu_temp_file = EXPAND(TW_CUSTOM_CPU_TEMP_PATH);
+      const std::string cpu_temp_file = TW_CUSTOM_CPU_TEMP_PATH;
 #else
       const std::string cpu_temp_file = "/sys/class/thermal/thermal_zone0/temp";
 #endif

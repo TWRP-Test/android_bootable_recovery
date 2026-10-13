@@ -301,7 +301,7 @@ static constexpr int kBatteryHiddenSentinelHigh = 101;
 
 static BatteryInfo ReadLegacyBattery() {
 #ifdef TW_CUSTOM_BATTERY_PATH
-  const auto battery_path = fs::path(EXPAND(TW_CUSTOM_BATTERY_PATH));
+  const auto battery_path = fs::path(TW_CUSTOM_BATTERY_PATH);
 #else
   const auto battery_path = fs::path("/sys/class/power_supply/battery");
 #endif
