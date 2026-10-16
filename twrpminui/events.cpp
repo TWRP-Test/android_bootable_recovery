@@ -32,6 +32,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <fstream>
+#include <mutex>
+#include "force_feedback.h"
 #ifdef USE_QTI_AIDL_HAPTICS_FIX_OFF
 #include <thread>
 #endif
@@ -211,115 +213,11 @@ int write_to_file(const std::string& fn, const std::string& line) {
 	return -1;
 }
 
-static int ff_haptics_fd = -1;
-static int ff_haptics_effect_id = -1;
-static int ff_haptics_effect_type = -1;
-
-static bool has_ff_effect(int fd, int effect_type) {
-    constexpr size_t bits_per_word = sizeof(unsigned long) * 8;
-    unsigned long ff_bits[(FF_CNT + bits_per_word - 1) / bits_per_word] = {};
-
-    if (ioctl(fd, EVIOCGBIT(EV_FF, sizeof(ff_bits)), ff_bits) < 0)
-        return false;
-
-    return ff_bits[effect_type / bits_per_word] &
-           (1UL << (effect_type % bits_per_word));
-}
-
-static int open_ff_haptics() {
-    if (ff_haptics_fd >= 0)
-        return ff_haptics_fd;
-
-    DIR* dir = opendir("/dev/input");
-    if (dir == nullptr)
-        return -1;
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (strncmp(entry->d_name, "event", 5) != 0)
-            continue;
-
-        char path[PATH_MAX];
-        snprintf(path, sizeof(path), "/dev/input/%s", entry->d_name);
-        int fd = open(path, O_RDWR | O_CLOEXEC);
-        if (fd < 0)
-            continue;
-
-        char name[64] = {};
-        ioctl(fd, EVIOCGNAME(sizeof(name)), name);
-        if (strstr(name, "haptic") == nullptr && strstr(name, "vibrat") == nullptr) {
-            close(fd);
-            continue;
-        }
-
-        if (has_ff_effect(fd, FF_CONSTANT)) {
-            ff_haptics_effect_type = FF_CONSTANT;
-        } else if (has_ff_effect(fd, FF_RUMBLE)) {
-            ff_haptics_effect_type = FF_RUMBLE;
-        } else {
-            close(fd);
-            continue;
-        }
-
-        LOGI("Using force-feedback haptics at %s (%s), effect type %d\n",
-             path, name, ff_haptics_effect_type);
-        ff_haptics_fd = fd;
-        break;
-    }
-
-    closedir(dir);
-    return ff_haptics_fd;
-}
-
-static int vibrate_with_ff(int timeout_ms) {
-    int fd = open_ff_haptics();
-    if (fd < 0)
-        return -1;
-
-    if (ff_haptics_effect_id >= 0) {
-        if (ioctl(fd, EVIOCRMFF, ff_haptics_effect_id) < 0) {
-            LOGE("Unable to remove force-feedback effect %d: %s\n",
-                 ff_haptics_effect_id, strerror(errno));
-            return -1;
-        }
-        ff_haptics_effect_id = -1;
-    }
-
-    struct ff_effect effect = {};
-    effect.type = ff_haptics_effect_type;
-    effect.id = -1;
-    if (effect.type == FF_CONSTANT) {
-        effect.u.constant.level = 0x7fff;
-    } else {
-        effect.u.rumble.strong_magnitude = 0x7fff;
-        effect.u.rumble.weak_magnitude = 0x7fff;
-    }
-    effect.replay.length = timeout_ms;
-
-    if (ioctl(fd, EVIOCSFF, &effect) < 0) {
-        LOGE("Unable to upload force-feedback effect type %d: %s\n",
-             effect.type, strerror(errno));
-        return -1;
-    }
-
-    ff_haptics_effect_id = effect.id;
-    struct input_event play = {};
-    play.type = EV_FF;
-    play.code = effect.id;
-    play.value = 1;
-    if (write(fd, &play, sizeof(play)) != static_cast<ssize_t>(sizeof(play))) {
-        LOGE("Unable to play force-feedback effect %d: %s\n",
-             effect.id, strerror(errno));
-        return -1;
-    }
-
-    return 0;
-}
-
 #ifndef TW_NO_HAPTICS
 #ifndef TW_HAPTICS_TSPDRV
 int vibrate(int timeout_ms)
 {
+    if (timeout_ms <= 0) return -1;
     if (timeout_ms > 10000) timeout_ms = 1000;
     char tout[6];
     sprintf(tout, "%i", timeout_ms);
@@ -332,6 +230,8 @@ int vibrate(int timeout_ms)
 #elif defined(USE_QTI_AIDL_HAPTICS)
     /* getService() blocks for seconds while the HAL is not up yet, and this
      * runs on the thread drawing the UI. */
+    static std::mutex vibrator_mutex;
+    std::lock_guard<std::mutex> guard(vibrator_mutex);
     static std::shared_ptr<IVibrator> cached_vib;
     if (cached_vib == nullptr)
         cached_vib = IVibrator::fromBinder(ndk::SpAIBinder(AServiceManager_checkService(kVibratorInstance.c_str())));
@@ -339,19 +239,28 @@ int vibrate(int timeout_ms)
     if (vib != nullptr) {
 #ifdef USE_QTI_AIDL_HAPTICS_FIX_OFF
         std::thread([vib, timeout_ms] {
-            if (vib->on((uint32_t)timeout_ms, nullptr).isOk()) {
+            const auto status = vib->on((uint32_t)timeout_ms, nullptr);
+            if (status.isOk()) {
                 vib_on_count++;
                 usleep(timeout_ms * 1000);
                 vib_on_count--;
                 if (!vib_on_count) vib->off();
+            } else if (status.getStatus() == STATUS_OK) {
+                // Only an explicit HAL rejection is safe to retry through FF.
+                twrpminui::play_force_feedback(timeout_ms);
             }
         }).detach();
+        return 0;
 #else
         /* Look again next press if the HAL went away. */
-        if (!vib->on((uint32_t)timeout_ms, nullptr).isOk())
-            cached_vib = nullptr;
+        const auto status = vib->on((uint32_t)timeout_ms, nullptr);
+        if (status.isOk()) return 0;
+        cached_vib = nullptr;
+        // A transport failure can follow a delivered request: avoid playing twice.
+        if (status.getStatus() != STATUS_OK) return -1;
 #endif
     }
+    return twrpminui::play_force_feedback(timeout_ms);
 #elif defined(USE_SAMSUNG_HAPTICS)
     /* Newer Samsung devices have duration file only
      0 in VIBRATOR_TIMEOUT_FILE means no vibration
@@ -360,13 +269,14 @@ int vibrate(int timeout_ms)
         write_to_file(VIBRATOR_TIMEOUT_FILE, tout);
     }
 #else
-    if (vibrate_with_ff(timeout_ms) == 0) {
-        return 0;
-    } else if (std::ifstream(LEDS_HAPTICS_ACTIVATE_FILE).good()) {
+    if (std::ifstream(LEDS_HAPTICS_ACTIVATE_FILE).good()) {
         write_to_file(LEDS_HAPTICS_DURATION_FILE, tout);
         write_to_file(LEDS_HAPTICS_ACTIVATE_FILE, "1");
-    } else
+    } else if (access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0) {
         write_to_file(VIBRATOR_TIMEOUT_FILE, tout);
+    } else {
+        return twrpminui::play_force_feedback(timeout_ms);
+    }
 #endif
     return 0;
 }
@@ -381,13 +291,13 @@ int haptics_available()
     return access("/dev/tspdrv", W_OK) == 0;
 #elif defined(USE_QTI_AIDL_HAPTICS)
     ndk::SpAIBinder binder(AServiceManager_checkService(kVibratorInstance.c_str()));
-    return binder.get() != nullptr;
+    return binder.get() != nullptr || twrpminui::force_feedback_available();
 #elif defined(USE_QTI_HAPTICS)
     return android::hardware::vibrator::V1_2::IVibrator::tryGetService() != nullptr;
 #elif defined(USE_SAMSUNG_HAPTICS)
     return access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
 #else
-    return open_ff_haptics() >= 0 ||
+    return twrpminui::force_feedback_available() ||
            access(LEDS_HAPTICS_ACTIVATE_FILE, W_OK) == 0 ||
            access(VIBRATOR_TIMEOUT_FILE, W_OK) == 0;
 #endif

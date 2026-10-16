@@ -38,7 +38,8 @@ cc_library_shared {
         "resources.cpp",
         "truetype.cpp",
         "graphics_utils.cpp",
-        "events.cpp"
+        "events.cpp",
+        "force_feedback.cpp"
     ],
     shared_libs: [
         "libft2",
