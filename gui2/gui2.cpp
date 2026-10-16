@@ -1002,9 +1002,12 @@ static void refresh_recording_ui(void) {
     else
       lv_obj_set_hidden(status_view.recording_indicator, true);
   }
-  if (quick_record_label != nullptr)
+  if (quick_record_label != nullptr) {
     lv_label_set_text(quick_record_label,
                       recording ? strings().stop_recording : strings().start_recording);
+    lv_obj_set_style_text_color(quick_record_label,
+                               recording ? ui.on_accent : ui.secondary_text, LV_PART_MAIN);
+  }
   if (quick_record_button != nullptr) {
     lv_obj_set_style_bg_color(quick_record_button, recording ? ui.danger : ui.background,
                               LV_PART_MAIN);
