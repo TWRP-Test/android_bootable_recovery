@@ -112,7 +112,6 @@ void twrp_decrypt_backend::run(std::string password) {
         LOGINFO("User ID not found\n");
         op_status = 1;
       }
-      ::sleep(1);
     } else {  // for FDE
       op_status = PartitionManager.Decrypt_Device(Password);
     }

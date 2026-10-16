@@ -694,9 +694,10 @@ static void navigate_back(void) {
                 &gui2_pages::action_definitions()[static_cast<int>(action_id::ADVANCED)],
                 page_transition::POP);
   } else if (page_router.current() == page_kind::DECRYPT) {
+    if (page_state.decrypt_prompt_ms != 0 || page_state.decrypt_during_startup) return;
     if (decrypt != nullptr && decrypt->is_encrypted() && decrypt->start_refresh()) {
       page_state.decrypt_refreshing = true;
-      page_state.progress_settled_ms = 0;
+      page_state.decrypt_prompt_ms = 0;
       navigate_to(page_kind::DECRYPT_PROGRESS, nullptr, page_transition::PUSH);
     } else {
       navigate_to(page_kind::HOME, nullptr, page_transition::POP);
@@ -3725,11 +3726,14 @@ static void format_data_slide_confirmed(void*) {
 }
 
 static void decrypt_attempt(const std::string& password) {
-  if (decrypt == nullptr || password.empty()) return;
+  if (decrypt == nullptr || password.empty() || !decrypt->start(password)) return;
   page_state.decrypt_refreshing = false;
-  page_state.progress_settled_ms = 0;
-  if (!decrypt->start(password)) return;
-  navigate_to(page_kind::DECRYPT_PROGRESS, nullptr, page_transition::PUSH);
+  if (page_state.decrypt_status != nullptr) {
+    lv_label_set_text(page_state.decrypt_status, strings().decrypting);
+    lv_obj_set_style_text_color(page_state.decrypt_status, ui.primary_text, LV_PART_MAIN);
+  }
+  // Keep the prompt in place until the attempt finishes.
+  page_state.decrypt_prompt_ms = std::max<uint64_t>(1, monotonic_ms());
 }
 
 static void poll_decrypt_console(void) {
@@ -3769,18 +3773,9 @@ static void refresh_decrypt_progress(void) {
   gui2_pages::update_progress(&page_state.decrypt_progress, labels, progress);
 
   if (state == gui2_backend::decrypt_state::RUNNING) {
-    page_state.progress_settled_ms = 0;
+    page_state.decrypt_prompt_ms = 0;
     return;
   }
-
-  // Let the bar finish filling and the colour land before the page changes;
-  // jumping away the same frame reads as a flicker.
-  const uint64_t now_ms = monotonic_ms();
-  if (page_state.progress_settled_ms == 0) {
-    page_state.progress_settled_ms = now_ms;
-    return;
-  }
-  if (now_ms - page_state.progress_settled_ms < 900) return;
 
   const bool succeeded = page_state.decrypt_refreshing || state == gui2_backend::decrypt_state::DONE;
   if (succeeded && startup != nullptr &&
@@ -3794,14 +3789,14 @@ static void refresh_decrypt_progress(void) {
 
   const bool refreshing = page_state.decrypt_refreshing;
   decrypt->acknowledge();
-  page_state.progress_settled_ms = 0;
+  page_state.decrypt_prompt_ms = 0;
   page_state.decrypt_refreshing = false;
   if (refreshing || state == gui2_backend::decrypt_state::DONE) {
     page_state.decrypt_failed = false;
     navigate_to(page_kind::HOME, nullptr, page_transition::FADE);
   } else {
     page_state.decrypt_failed = true;
-    navigate_to(page_kind::DECRYPT, nullptr, page_transition::POP);
+    navigate_to(page_kind::DECRYPT, nullptr, page_transition::REPLACE);
   }
 }
 
@@ -3849,7 +3844,8 @@ static void keyboard_feedback_cb(void*) {
 }
 
 static void decrypt_language_event_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event) ||
+      page_state.decrypt_prompt_ms != 0 || page_state.decrypt_during_startup) return;
   page_state.language_from_decrypt = true;
   navigate_to(page_kind::LANGUAGE);
 }
@@ -3863,14 +3859,8 @@ static bool data_locked(void) {
           settings->get_int("tw_is_decrypted", 0) == 0);
 }
 
-// No lock screen: try the default password straight away.
 static void enter_decrypt_flow(page_transition transition) {
   if (decrypt == nullptr) return;
-  if (decrypt->kind() == gui2_backend::lock_kind::DEFAULT &&
-      decrypt->start(kDefaultCryptoPassword)) {
-    navigate_to(page_kind::DECRYPT_PROGRESS, nullptr, transition);
-    return;
-  }
   navigate_to(page_kind::DECRYPT, nullptr, transition);
 }
 
@@ -5167,6 +5157,9 @@ static void show_decrypt_page(page_transition transition) {
   page_state.decrypt_input = view.input;
   page_state.decrypt_keyboard = view.keyboard;
   page_state.decrypt_status = view.status;
+  if (decrypt != nullptr && decrypt->kind() == gui2_backend::lock_kind::DEFAULT &&
+      !page_state.decrypt_failed)
+    decrypt_attempt(kDefaultCryptoPassword);
 }
 
 static void show_format_data_page(page_transition transition) {
@@ -5851,17 +5844,19 @@ static void poll_startup(uint64_t now_ms) {
   gui2_shell::update_splash(&splash_view, strings().startup_finishing, 1.0f);
 
   const bool from_pause = shell_ready;
+  const bool from_decrypt = page_state.decrypt_during_startup;
   if (!create_pages()) switch_to_legacy = true;
   if (page_state.decrypt_during_startup) {
     page_state.decrypt_during_startup = false;
     page_state.decrypt_refreshing = false;
-    page_state.progress_settled_ms = 0;
+    page_state.decrypt_prompt_ms = 0;
     if (decrypt != nullptr) decrypt->acknowledge();
   }
   if (fastboot_mode)
     navigate_to(page_kind::FASTBOOTD, nullptr, page_transition::REPLACE);
   else if (from_pause)
-    navigate_to(page_kind::HOME, nullptr, page_transition::REPLACE);
+    navigate_to(page_kind::HOME, nullptr,
+                from_decrypt ? page_transition::FADE : page_transition::REPLACE);
   // Startup can end with Data still locked; try the default password then.
   if (!fastboot_mode && data_locked()) {
     decrypt->select_user();
@@ -6119,6 +6114,14 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     page_state.wipe_last_poll_ms = now_ms;
     poll_wipe_console();
     refresh_wipe_progress();
+  }
+  if (page_state.decrypt_prompt_ms != 0 &&
+      page_router.current() == page_kind::DECRYPT) {
+    const auto state = decrypt == nullptr ? gui2_backend::decrypt_state::IDLE : decrypt->state();
+    if (state != gui2_backend::decrypt_state::RUNNING) {
+      page_state.decrypt_prompt_ms = 0;
+      refresh_decrypt_progress();
+    }
   }
   if (page_state.decrypt_progress.body != nullptr &&
       now_ms - page_state.decrypt_last_poll_ms >= 100) {

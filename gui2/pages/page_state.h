@@ -176,7 +176,7 @@ struct page_state {
   progress_page_view decrypt_progress;
   size_t decrypt_console_consumed = 0;
   uint64_t decrypt_last_poll_ms = 0;
-  uint64_t progress_settled_ms = 0;
+  uint64_t decrypt_prompt_ms = 0;
   bool decrypt_refreshing = false;
   // The attempt ran during startup's decrypt pause; the page stays until
   // startup finishes.

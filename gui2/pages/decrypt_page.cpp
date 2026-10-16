@@ -77,7 +77,7 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
       options.pattern->create(holder, metrics, 0, 0, grid, options.pattern_callback,
                               options.pattern_user_data, options.pattern_dot_callback);
     }
-  } else {
+  } else if (options.kind != gui2_backend::lock_kind::DEFAULT || options.failed) {
     const int input_height = gui2_core::single_line_card_height() * 11 / 10;
     const int input_pad = std::max(0, (input_height - metrics.text_font->line_height) / 2);
     view.input = lv_textarea_create(view.body);
