@@ -3342,7 +3342,10 @@ static void terminal_keyboard_moved(bool visible) {
   page_state.terminal_keyboard_visible = visible;
   gui2_pages::layout_terminal_output(&page_state.terminal_view, ui,
                                     console_tabs_offset(), visible);
-  if (terminal != nullptr)
+  // Preview the font continuously, but notify the PTY only after the pinch.
+  // Overlapping shell redraws can still use an older width and wrap onto
+  // another line if the terminal width changes again before they arrive.
+  if (terminal != nullptr && !page_state.terminal_pinch_active)
     terminal->set_size(page_state.terminal_view.columns, page_state.terminal_view.rows);
   page_state.terminal_update_counter = -1;
 }
@@ -3381,7 +3384,9 @@ static void terminal_touch_cb(lv_event_t* event) {
         terminal_keyboard_moved(page_state.terminal_keyboard_visible);
       }
     } else if (state == LV_INDEV_GESTURE_STATE_ENDED || state == LV_INDEV_GESTURE_STATE_CANCELED) {
+      const bool was_active = page_state.terminal_pinch_active;
       page_state.terminal_pinch_active = false;
+      if (was_active) terminal_keyboard_moved(page_state.terminal_keyboard_visible);
     }
   } else if (code == LV_EVENT_SCROLL_BEGIN) {
     page_state.terminal_gesture_ms = lv_tick_ms();
