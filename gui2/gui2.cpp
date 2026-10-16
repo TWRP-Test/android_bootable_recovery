@@ -3022,8 +3022,8 @@ static void refresh_install_progress(void) {
   const auto status = install->status();
 
   gui2_pages::operation_status progress;
-  // Package progress is not a reliable measure of the whole installation.
-  progress.total = page_state.install_image && status.progress > 0 ? 100 : 0;
+  // Report the current package's progress when the installer provides it.
+  progress.total = status.progress > 0 ? 100 : 0;
   progress.done = status.progress;
   progress.items = status.items;
   progress.current = status.current;

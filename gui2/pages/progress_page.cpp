@@ -9,10 +9,6 @@ namespace gui2_pages {
 
 namespace {
 
-void set_width_cb(void* target, int32_t value) {
-  lv_obj_set_width(static_cast<lv_obj_t*>(target), value);
-}
-
 // Two bands stretch forward independently; neither reverses direction.
 void sweep_cb(void* object, int32_t phase) {
   auto* band = static_cast<lv_obj_t*>(object);
@@ -25,7 +21,6 @@ void sweep_cb(void* object, int32_t phase) {
 
 void start_running_animation(progress_page_view* view) {
   if (view->sweeping || view->bar == nullptr || view->bar_fill == nullptr) return;
-  lv_anim_delete(view->bar_fill, set_width_cb);
   for (int i = 0; i < (view->bar_tail == nullptr ? 1 : 2); ++i) {
     auto* band = i == 0 ? view->bar_fill : view->bar_tail;
     lv_obj_set_hidden(band, false);
@@ -52,22 +47,6 @@ void stop_running_animation(progress_page_view* view) {
     lv_obj_set_hidden(band, band == view->bar_tail);
   }
   view->sweeping = false;
-}
-
-void animate_width(lv_obj_t* fill, int target) {
-  if (fill == nullptr) return;
-  const int current = lv_obj_get_width(fill);
-  if (current == target) return;
-
-  lv_anim_delete(fill, set_width_cb);
-  lv_anim_t animation;
-  lv_anim_init(&animation);
-  lv_anim_set_var(&animation, fill);
-  lv_anim_set_exec_cb(&animation, set_width_cb);
-  lv_anim_set_values(&animation, current, target);
-  lv_anim_set_duration(&animation, 320);
-  lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-  lv_anim_start(&animation);
 }
 
 }  // namespace
@@ -448,7 +427,7 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
     lv_obj_set_style_border_color(view->bar, gui2_core::ui.accent, LV_PART_MAIN);
   }
 
-  if (status.state == operation_state::RUNNING && (view->task_layout || status.total <= 0)) {
+  if (status.state == operation_state::RUNNING && status.total <= 0) {
     start_running_animation(view);
     lv_obj_set_hidden(view->bar_fill, false);
     return;
@@ -473,7 +452,7 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
 
   const int total = std::max(1, status.total);
   const int done = std::clamp(status.done, 0, total);
-  animate_width(view->bar_fill, std::max(1, width * done / total));
+  lv_obj_set_width(view->bar_fill, std::max(1, width * done / total));
 }
 
 }  // namespace gui2_pages
