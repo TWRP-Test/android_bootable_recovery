@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <array>
+#include <condition_variable>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -1573,7 +1574,10 @@ void TWPartition::Ensure_Subdirectory_Unmounted(const char *Mount_Point) {
     }
 }
 
+static void Stop_Async_Data_Size();
+
 bool TWPartition::UnMount(bool Display_Error, int flags) {
+    if (Mount_Point == "/data") Stop_Async_Data_Size();
     if (Is_Mounted()) {
         int never_unmount_system;
 
@@ -2664,6 +2668,9 @@ bool TWPartition::Data_Is_Locked() {
 struct Async_Size_State {
     std::mutex lock;
     bool running = false;
+    bool worker_active = false;
+    std::atomic<bool> cancel{false};
+    std::condition_variable finished;
     TWPartition *pending_partition = nullptr;
     unsigned long long pending_size = 0;
 };
@@ -2674,6 +2681,15 @@ static Async_Size_State &Get_Async_Size_State() {
     return *state;
 }
 
+static void Stop_Async_Data_Size() {
+    Async_Size_State &state = Get_Async_Size_State();
+    std::unique_lock<std::mutex> lock(state.lock);
+    state.cancel.store(true);
+    state.finished.wait(lock, [&] { return !state.worker_active; });
+    state.pending_partition = nullptr;
+    state.running = false;
+}
+
 void TWPartition::Update_Data_Size_Async() {
     Async_Size_State &state = Get_Async_Size_State();
     {
@@ -2681,6 +2697,8 @@ void TWPartition::Update_Data_Size_Async() {
         if (!Backup_Size_Provisional || state.running)
             return;
         state.running = true;
+        state.worker_active = true;
+        state.cancel.store(false);
     }
 
     // The worker must use a snapshot; Backup_Tar() mutates the real list.
@@ -2693,8 +2711,9 @@ void TWPartition::Update_Data_Size_Async() {
         std::thread([partition, exclusions, path, dev]() mutable {
             unsigned long long size = 0;
             // Prefer filesystem counters, then fall back to the directory walk.
-            uint64_t es = exclusions.Get_Exclusions_Folder_Size();
-            if (es > 0 && !dev.empty()) {
+            auto* cancel = &Get_Async_Size_State().cancel;
+            uint64_t es = exclusions.Get_Exclusions_Folder_Size(cancel);
+            if (!cancel->load() && es > 0 && !dev.empty()) {
                 char cmdBuf[256];
                 const char _cmd[] = "dump.f2fs -d1 %s | grep %s | awk -F ': ' '{print $2}' | awk -F ']' '{print $1}'";
                 int64_t _Used = 0;
@@ -2720,20 +2739,26 @@ void TWPartition::Update_Data_Size_Async() {
                 LOGINFO("Data size: f2fs fast path %s (exclusions %llu bytes).\n",
                         size > 0 ? "hit" : "miss", (unsigned long long)es);
             }
-            if (size == 0) {
+            if (!cancel->load() && size == 0) {
                 // dump.f2fs unavailable: use the old walk.
                 LOGINFO("Data size: falling back to folder walk.\n");
-                size = exclusions.Get_Folder_Size(path, false);
+                size = exclusions.Get_Folder_Size(path, false, cancel);
             }
             Async_Size_State &state = Get_Async_Size_State();
             std::lock_guard<std::mutex> lock(state.lock);
-            state.pending_partition = partition;
-            state.pending_size = size;
+            if (!state.cancel.load()) {
+                state.pending_partition = partition;
+                state.pending_size = size;
+            }
+            state.worker_active = false;
+            state.finished.notify_all();
         }).detach();
     } else {
         LOGINFO("'%s' is not mounted, keeping the statfs backup size.\n", path.c_str());
         std::lock_guard<std::mutex> lock(state.lock);
         state.running = false;
+        state.worker_active = false;
+        state.finished.notify_all();
     }
 }
 
