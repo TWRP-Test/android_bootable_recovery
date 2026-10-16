@@ -245,7 +245,6 @@ void twrp_install_backend::run_image() {
     op_status = (int)!(pre_op_status && PartitionManager.Flash_Image(path, filename));
     PartitionManager.Override_Active_Slot(current_slot);
 
-    DataManager::SetValue("tw_flash_both_slots", 0);
     flag = false;
   }
 #endif

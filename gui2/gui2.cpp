@@ -2850,7 +2850,7 @@ static void install_target_event_cb(lv_event_t* event) {
 }
 
 // The four checkboxes of the legacy flash_confirm page, plus the flash image
-// page's "both slots". A null key marks the one that is not persisted.
+// page's "both slots". All choices use the persistent settings store.
 static void rebuild_install_options(void) {
   install_option_count = 0;
   const auto& text = strings();
@@ -2869,7 +2869,7 @@ static void rebuild_install_options(void) {
     for (const auto& target : install_targets)
       if (target.mount_point == page_state.install_target_mount && target.slot_partition &&
           flag("tw_has_boot_slots", 0) != 0)
-        add(text.install_both_slots, nullptr, page_state.install_both_slots);
+        add(text.install_both_slots, "tw_flash_both_slots", page_state.install_both_slots);
     return;
   }
 
@@ -2891,11 +2891,9 @@ static void install_option_event_cb(lv_event_t* event) {
 
   gui2_pages::install_option& item = install_option_items[*index];
   const bool wanted = lv_obj_has_state(toggle, LV_STATE_CHECKED);
-  if (item.key == nullptr) {
-    page_state.install_both_slots = wanted;
-    if (settings != nullptr) settings->set("tw_flash_both_slots", wanted ? "1" : "0");
-  } else if (settings == nullptr ||
-             !settings->set_persistent(item.key, wanted ? "1" : "0") || !settings->flush()) {
+  if (settings == nullptr ||
+      !settings->set_persistent(item.key, wanted ? "1" : "0") || !settings->flush()) {
+    if (settings != nullptr) settings->set_persistent(item.key, item.value ? "1" : "0");
     // The row keeps its old state unless the value actually reached the disk.
     if (wanted)
       lv_obj_remove_state(toggle, LV_STATE_CHECKED);
@@ -2904,6 +2902,7 @@ static void install_option_event_cb(lv_event_t* event) {
     return;
   }
   item.value = wanted;
+  if (page_state.install_image) page_state.install_both_slots = wanted;
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
@@ -3054,8 +3053,7 @@ static void refresh_install_progress(void) {
 
 static void install_countdown_cancel_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  // The legacy cancel button: set tw_install_reboot=0.
-  if (settings != nullptr) settings->set_persistent("tw_install_reboot", "0");
+  // Cancel this countdown without changing the saved installation preference.
   page_state.install_countdown_done = true;
   if (page_state.install_progress.running_action != nullptr)
     lv_obj_set_hidden(page_state.install_progress.running_action, true);
