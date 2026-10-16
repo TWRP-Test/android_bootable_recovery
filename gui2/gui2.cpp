@@ -1189,10 +1189,8 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   page_state.tool_input_keyboard.dismiss();
   page_state.tool_input = nullptr;
   page_state.decrypt_status = nullptr;
-  if (page_state.format_data_keyboard != nullptr) {
-    lv_obj_delete(page_state.format_data_keyboard);
-    page_state.format_data_keyboard = nullptr;
-  }
+  // dismiss() above already deleted this root.
+  page_state.format_data_keyboard = nullptr;
   page_state.wipe_confirm.detach();
   page_state.kernel_log_card = nullptr;
   page_state.logcat_card = nullptr;
