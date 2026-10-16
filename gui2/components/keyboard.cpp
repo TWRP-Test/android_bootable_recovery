@@ -180,6 +180,7 @@ std::vector<keyboard::key> keyboard::function_row() const {
 
   std::vector<key> row;
   if (input_callback_ != nullptr) {
+    row.push_back({key_kind::ESCAPE, "Esc", "", 1.3f, false, false, true, 0});
     row.push_back({key_kind::CURSOR_LEFT, LV_SYMBOL_LEFT, "", 1.0f, true, false, true, 0});
     row.push_back({key_kind::CURSOR_DOWN, LV_SYMBOL_DOWN, "", 1.0f, true, false, true, 0});
     row.push_back({key_kind::CURSOR_UP, LV_SYMBOL_UP, "", 1.0f, true, false, true, 0});

@@ -85,13 +85,13 @@ struct page_state {
   gui2_components::tab_bar console_tabs;
   terminal_page_view terminal_view;
   gui2_components::keyboard terminal_keyboard_widget;
-  bool terminal_fullscreen = false;
-  bool terminal_ctrl_pending = false;
-  lv_obj_t* terminal_exit_button = nullptr;
+  bool terminal_keyboard_visible = true;
+  bool terminal_pinch_active = false;
+  int terminal_pinch_start_font = 34;
+  uint64_t terminal_gesture_ms = 0;
   uint64_t terminal_last_poll_ms = 0;
   // How much of the engine's buffer is on screen, and the counter that says
   // whether it changed at all.
-  size_t terminal_rendered = 0;
   int terminal_update_counter = -1;
   // The file manager is one page at many depths; this is the depth.
   std::string file_manager_path;

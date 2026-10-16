@@ -185,7 +185,6 @@ static bool page_is_progress(page_kind page) {
     case page_kind::STARTUP_SCRIPT:
     case page_kind::CLI_COMMAND:
     case page_kind::USB_STORAGE:
-    case page_kind::TERMINAL_FULLSCREEN:
     case page_kind::SIDELOAD_PROGRESS:
     case page_kind::TOOL_PROGRESS:
       return true;
@@ -665,8 +664,6 @@ static void navigate_back(void) {
     navigate_to(page_kind::FILE_MANAGER, nullptr, page_transition::POP);
   } else if (page_router.current() == page_kind::WIFI_PASSWORD) {
     navigate_to(page_kind::WIFI, nullptr, page_transition::POP);
-  } else if (page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
-    // nano handles save confirmation; only process completion leaves this page.
   } else if (page_router.current() == page_kind::FASTBOOTD ||
              page_router.current() == page_kind::CLI_COMMAND ||
              page_router.current() == page_kind::USB_STORAGE ||
@@ -3271,55 +3268,14 @@ static void render_terminal_buffer(void) {
   std::vector<std::string> lines;
   for (size_t i = 0; i < terminal->line_count(); ++i) lines.push_back(terminal->line(i));
   gui2_pages::render_terminal_screen(&page_state.terminal_view, lines,
-                                    terminal->cursor_x(), terminal->cursor_y());
+                                    terminal->cursor_x(), terminal->cursor_y(),
+                                    terminal->alternate_screen());
 }
-
-static bool terminal_nano_active = false;
-static bool terminal_nano_started = false;
-static uint64_t terminal_nano_launch_ms = 0;
 
 static void poll_terminal(void) {
   if (terminal == nullptr) return;
   terminal->pump();
-  const bool job = terminal->foreground_job();
-  if (terminal_nano_active && job) terminal_nano_started = true;
-  if (terminal_nano_active && !job &&
-      (terminal_nano_started || lv_tick_ms() - terminal_nano_launch_ms > 2000) &&
-      page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
-    terminal_nano_active = false;
-    navigate_to(page_kind::CONSOLE, nullptr, page_transition::REPLACE);
-    return;
-  }
   render_terminal_buffer();
-}
-
-static bool is_nano_command(const std::string& command) {
-  size_t start = command.find_first_not_of(" \t\r\n");
-  if (start == std::string::npos) return false;
-  size_t end = command.find_first_of(" \t\r\n", start);
-  const std::string executable = command.substr(start, end == std::string::npos ? end : end - start);
-  return executable == "nano" ||
-         (executable.size() > 5 && executable.compare(executable.size() - 5, 5, "/nano") == 0);
-}
-
-static void terminal_run_cb(void*) {
-  if (terminal == nullptr || page_state.terminal_view.input == nullptr) return;
-  const char* text = lv_textarea_get_text(page_state.terminal_view.input);
-  const std::string command = text == nullptr ? std::string() : text;
-  lv_textarea_set_text(page_state.terminal_view.input, "");
-  if (command.empty()) return;
-  // No echo here: the shell writes the prompt and the command into the buffer
-  // itself, and the buffer is what the page shows.
-  const bool nano = is_nano_command(command);
-  terminal->send_line(command);
-  if (nano) {
-    terminal_nano_active = true;
-    terminal_nano_started = false;
-    terminal_nano_launch_ms = lv_tick_ms();
-    navigate_to(page_kind::TERMINAL_FULLSCREEN, nullptr, page_transition::PUSH);
-  } else {
-    poll_terminal();
-  }
 }
 
 static void terminal_input_cb(void*, int codepoint) {
@@ -3332,7 +3288,7 @@ static void terminal_action_cb(void*, gui2_components::keyboard_action action) {
   if (terminal == nullptr) return;
   switch (action) {
     case gui2_components::keyboard_action::CTRL:
-      page_state.terminal_ctrl_pending = !page_state.terminal_ctrl_pending;
+      // The keyboard owns its one-shot modifier state.
       break;
     case gui2_components::keyboard_action::ESCAPE:
       terminal->send_byte(27);
@@ -3359,14 +3315,6 @@ static void terminal_action_cb(void*, gui2_components::keyboard_action action) {
   poll_terminal();
 }
 
-static void terminal_interrupt_cb(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
-  if (terminal == nullptr) return;
-  terminal->send_byte('\x03');
-  poll_terminal();
-  if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
-}
-
 static void show_console_tab(size_t index) {
   page_state.console_tab = index > 1 ? 1 : index;
   navigate_to(page_kind::CONSOLE, nullptr, page_transition::REPLACE);
@@ -3378,9 +3326,9 @@ static int console_tabs_offset(void) {
 
 static void terminal_keyboard_moved(bool visible) {
   if (page_state.terminal_view.output.body == nullptr) return;
-  const bool fullscreen = page_state.terminal_view.fullscreen;
+  page_state.terminal_keyboard_visible = visible;
   gui2_pages::layout_terminal_output(&page_state.terminal_view, ui,
-                                    fullscreen ? 0 : console_tabs_offset(), visible);
+                                    console_tabs_offset(), visible);
   if (terminal != nullptr)
     terminal->set_size(page_state.terminal_view.columns, page_state.terminal_view.rows);
   page_state.terminal_update_counter = -1;
@@ -3394,37 +3342,21 @@ static void terminal_keyboard_hidden_cb(void*) {
   terminal_keyboard_moved(false);
 }
 
-static void show_terminal_fullscreen_page(page_transition transition) {
-  create_page_scaffold(page_kind::TERMINAL_FULLSCREEN, false, "", "", 0, transition);
-  // The editor uses the viewport below the status bar, without the large heading.
-  for (uint32_t i = 0; i < lv_obj_get_child_count(page_layer); ++i) {
-    lv_obj_t* child = lv_obj_get_child(page_layer, i);
-    if (child != main_content) lv_obj_set_hidden(child, true);
+static void terminal_scroll_cb(lv_event_t*) {
+  auto& view = page_state.terminal_view;
+  if (view.rendering || view.alternate_screen) return;
+  view.follow_output = lv_obj_get_scroll_bottom(view.output.body) <= gui2_core::ui_px(4);
+}
+
+static void terminal_touch_cb(lv_event_t* event) {
+  const auto code = lv_event_get_code(event);
+  if (code == LV_EVENT_SCROLL_BEGIN) {
+    page_state.terminal_gesture_ms = lv_tick_ms();
+  } else if (code == LV_EVENT_SHORT_CLICKED &&
+             (page_state.terminal_gesture_ms == 0 ||
+              lv_tick_ms() - page_state.terminal_gesture_ms > 350)) {
+    page_state.terminal_keyboard_widget.show();
   }
-  lv_obj_set_pos(main_content, 0, 0);
-  lv_obj_set_size(main_content, ui.width, ui.height - ui.status_height);
-  lv_obj_set_style_pad_all(main_content, 0, LV_PART_MAIN);
-  gui2_core::disable_scrolling(main_content);
-  gui2_pages::terminal_page_options options;
-  options.content = main_content;
-  options.overlay_layer = lv_layer_top();
-  options.metrics = &ui;
-  options.strings = &strings();
-  options.console_font = graphics.fonts.terminal();
-  options.fullscreen = true;
-  options.keyboard = &page_state.terminal_keyboard_widget;
-  options.input_callback = terminal_input_cb;
-  options.action_callback = terminal_action_cb;
-  options.shown_callback = terminal_keyboard_shown_cb;
-  options.hidden_callback = terminal_keyboard_hidden_cb;
-  options.key_callback = keyboard_feedback_cb;
-  options.press_guard_callback = press_cancel_guard_cb;
-  page_state.terminal_view = gui2_pages::build_terminal_page(options);
-  page_state.terminal_rendered = 0;
-  page_state.terminal_update_counter = -1;
-  if (terminal != nullptr)
-    terminal->set_size(page_state.terminal_view.columns, page_state.terminal_view.rows);
-  poll_terminal();
 }
 
 static void show_console_page(page_transition transition) {
@@ -3436,6 +3368,15 @@ static void show_console_page(page_transition transition) {
       page_kind::CONSOLE, false,
       terminal_tab ? strings().console_tab_terminal : strings().console_title,
       "", 0, transition);
+  if (terminal_tab && ui.width > ui.height) {
+    const int heading_height = ui.brand_font->line_height + gui2_core::ui_px(16);
+    auto* heading = lv_obj_get_parent(page_summary);
+    lv_obj_set_y(heading, 0);
+    lv_obj_set_height(heading, heading_height);
+    const int top = heading_height + ui.cards_top_gap;
+    lv_obj_set_y(main_content, top);
+    lv_obj_set_height(main_content, ui.height - ui.status_height - top);
+  }
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
 
@@ -3482,16 +3423,20 @@ static void show_console_page(page_transition transition) {
   options.console_font = graphics.fonts.terminal();
   options.top_offset = tabs_offset;
   options.keyboard = &page_state.terminal_keyboard_widget;
-  options.run_callback = terminal_run_cb;
+  options.input_callback = terminal_input_cb;
+  options.action_callback = terminal_action_cb;
   options.key_callback = keyboard_feedback_cb;
-  options.interrupt_callback = terminal_interrupt_cb;
-  options.press_guard_callback = press_cancel_guard_cb;
   options.shown_callback = terminal_keyboard_shown_cb;
   options.hidden_callback = terminal_keyboard_hidden_cb;
   page_state.terminal_view = gui2_pages::build_terminal_page(options);
   page_state.terminal_last_poll_ms = 0;
-  // The view is new, so nothing of the buffer is on it yet.
-  page_state.terminal_rendered = 0;
+  page_state.terminal_keyboard_visible = true;
+  page_state.terminal_pinch_active = false;
+  page_state.terminal_gesture_ms = 0;
+  gui2_core::disable_scrolling(main_content);
+  auto& view = page_state.terminal_view;
+  lv_obj_add_event_cb(view.output.body, terminal_touch_cb, LV_EVENT_ALL, nullptr);
+  lv_obj_add_event_cb(view.output.body, terminal_scroll_cb, LV_EVENT_SCROLL, nullptr);
   page_state.terminal_update_counter = -1;
   if (terminal != nullptr) {
     if (!terminal->start()) {
@@ -5575,9 +5520,6 @@ static void build_page(const gui2_pages::page_request& request) {
     case page_kind::CONSOLE:
       show_console_page(request.transition);
       return;
-    case page_kind::TERMINAL_FULLSCREEN:
-      show_terminal_fullscreen_page(request.transition);
-      return;
     case page_kind::EXPORT_LOG:
       show_export_log_page(request.transition);
       return;
@@ -6265,16 +6207,15 @@ static void gui2_loop_key_action(void*, gui2_key_action key_action) {
 }
 
 static bool terminal_has_focus(void) {
-  return terminal != nullptr &&
-         ((page_router.current() == page_kind::CONSOLE && page_state.console_tab == 1) ||
-          page_router.current() == page_kind::TERMINAL_FULLSCREEN);
+  return terminal != nullptr && page_router.current() == page_kind::CONSOLE &&
+         page_state.console_tab == 1;
 }
 
 // HardwareKeyboard -> PageManager::NotifyCharInput: the terminal, or the field
 // the on-screen keyboard is typing into.
 static void gui2_loop_char(void*, int ch) {
   if (!shell_ready || input_locked()) return;
-  if (page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
+  if (terminal_has_focus()) {
     terminal->send_char(ch);
     return;
   }
@@ -6283,7 +6224,7 @@ static void gui2_loop_char(void*, int ch) {
 
 static void gui2_loop_key(void*, int key_code) {
   if (!shell_ready || input_locked()) return;
-  if (page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
+  if (terminal_has_focus()) {
     terminal->send_key(key_code);
     return;
   }

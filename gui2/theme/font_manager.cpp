@@ -34,16 +34,29 @@ lv_font_t* font_manager::console(int index) const {
   return console_[index] != nullptr ? console_[index] : status_;
 }
 
+int font_manager::resize_terminal(int size) {
+  size = std::clamp(size, 20, 64);
+#if LV_USE_TINY_TTF && LV_TINY_TTF_FILE_SUPPORT
+  if (terminal_ != nullptr && terminal_size_ != size) {
+    lv_tiny_ttf_set_size(terminal_, scaled_size(scale_, size));
+    terminal_size_ = size;
+  }
+#endif
+  return terminal_size_;
+}
+
 bool font_manager::initialize(float scale) {
 #if LV_USE_TINY_TTF && LV_TINY_TTF_FILE_SUPPORT
   text_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 50));
   status_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 42));
   brand_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 104));
   keyboard_ = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, 68));
+  scale_ = scale;
+  terminal_size_ = 34;
 #ifdef GUI2_HOST_PREVIEW
-  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath.c_str(), scaled_size(scale, 34));
+  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath.c_str(), scaled_size(scale, terminal_size_));
 #else
-  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath, scaled_size(scale, 34));
+  terminal_ = lv_tiny_ttf_create_file(kTerminalFontPath, scaled_size(scale, terminal_size_));
 #endif
   for (int i = 0; i < kConsoleSizeCount; ++i)
     console_[i] = lv_tiny_ttf_create_file(kUiFontPath, scaled_size(scale, kConsoleBaseSizes[i]));
@@ -64,6 +77,7 @@ void font_manager::shutdown() {
   if (brand_ != nullptr) lv_tiny_ttf_destroy(brand_);
   if (keyboard_ != nullptr) lv_tiny_ttf_destroy(keyboard_);
   if (terminal_ != nullptr) lv_tiny_ttf_destroy(terminal_);
+  terminal_ = nullptr;
   for (lv_font_t*& font : console_) {
     if (font != nullptr) lv_tiny_ttf_destroy(font);
     font = nullptr;
@@ -73,7 +87,6 @@ void font_manager::shutdown() {
   status_ = nullptr;
   brand_ = nullptr;
   keyboard_ = nullptr;
-  terminal_ = nullptr;
 }
 
 }  // namespace gui2_theme

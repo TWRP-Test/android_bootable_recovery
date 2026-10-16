@@ -28,6 +28,9 @@ class font_manager {
   }
   lv_font_t* console(int index) const;
   lv_font_t* terminal() const { return terminal_; }
+  // Terminal owns a separate mutable font; callers refresh its labels after resizing.
+  int resize_terminal(int size);
+  int terminal_size() const { return terminal_size_; }
   static int console_count() {
     return kConsoleSizeCount;
   }
@@ -40,6 +43,8 @@ class font_manager {
   lv_font_t* brand_ = nullptr;
   lv_font_t* keyboard_ = nullptr;
   lv_font_t* terminal_ = nullptr;
+  float scale_ = 1.0f;
+  int terminal_size_ = 34;
   lv_font_t* console_[kConsoleSizeCount] = {};
 };
 
