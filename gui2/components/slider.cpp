@@ -14,6 +14,7 @@ struct slider_instance {
   int32_t minimum;
   int32_t maximum;
   int32_t value;
+  int32_t visual_fraction;
   lv_color_t foreground;
   lv_color_t thumb;
   bool dragging;
@@ -44,18 +45,17 @@ static const slider_instance* instance(const lv_obj_t* object) {
   return reinterpret_cast<const slider_instance*>(object);
 }
 
-static int value_from_point(const slider_instance* slider, lv_point_t point) {
+static int fraction_from_point(const slider_instance* slider, lv_point_t point) {
   lv_area_t area;
   lv_obj_get_coords(&slider->object, &area);
   const int width = lv_area_get_width(&area);
   const int height = lv_area_get_height(&area);
   const int travel = std::max(0, width - height);
-  if (travel == 0) return slider->minimum;
+  if (travel == 0) return 0;
 
   const int local_x = std::clamp(point.x - area.x1, 0, width - 1);
   const int position = std::clamp(local_x - height / 2, 0, travel);
-  const int range = std::max(1, slider->maximum - slider->minimum);
-  return slider->minimum + (position * range + travel / 2) / travel;
+  return static_cast<int>((static_cast<int64_t>(position) * 65536 + travel / 2) / travel);
 }
 
 static void set_value_internal(slider_instance* slider, int value, bool send_event) {
@@ -63,6 +63,11 @@ static void set_value_internal(slider_instance* slider, int value, bool send_eve
   if (slider->value == value) return;
 
   slider->value = value;
+  if (!slider->dragging) {
+    const int range = std::max(1, slider->maximum - slider->minimum);
+    slider->visual_fraction = static_cast<int>(
+        (static_cast<int64_t>(value - slider->minimum) * 65536 + range / 2) / range);
+  }
   lv_obj_invalidate(&slider->object);
   if (send_event) lv_obj_send_event(&slider->object, LV_EVENT_VALUE_CHANGED, nullptr);
 }
@@ -73,8 +78,8 @@ static int knob_center_x(const slider_instance* slider) {
   const int width = lv_area_get_width(&area);
   const int height = lv_area_get_height(&area);
   const int travel = std::max(0, width - height);
-  const int range = std::max(1, slider->maximum - slider->minimum);
-  const int position = (travel * (slider->value - slider->minimum) + range / 2) / range;
+  const int position = static_cast<int>(
+      (static_cast<int64_t>(travel) * slider->visual_fraction + 32768) / 65536);
   return area.x1 + height / 2 + position;
 }
 
@@ -108,7 +113,15 @@ static void update_from_pointer(slider_instance* slider) {
   if (!pointer_position(slider, &point)) return;
 
   point.x -= slider->grab_offset;
-  set_value_internal(slider, value_from_point(slider, point), true);
+  const int fraction = fraction_from_point(slider, point);
+  if (fraction != slider->visual_fraction) {
+    slider->visual_fraction = fraction;
+    lv_obj_invalidate(&slider->object);
+  }
+  const int range = slider->maximum - slider->minimum;
+  const int value = slider->minimum + static_cast<int>(
+      (static_cast<int64_t>(fraction) * range + 32768) / 65536);
+  set_value_internal(slider, value, true);
 }
 
 static void draw_rect(lv_layer_t* layer, lv_obj_t* object, lv_part_t part, lv_area_t area,
@@ -130,9 +143,9 @@ static void draw_slider(slider_instance* slider, lv_event_t* event) {
   lv_obj_get_coords(&slider->object, &area);
   const int width = lv_area_get_width(&area);
   const int height = lv_area_get_height(&area);
-  const int range = std::max(1, slider->maximum - slider->minimum);
   const int travel = std::max(0, width - height);
-  const int position = (travel * (slider->value - slider->minimum) + range / 2) / range;
+  const int position = static_cast<int>(
+      (static_cast<int64_t>(travel) * slider->visual_fraction + 32768) / 65536);
   const int center = height / 2 + position;
   const int fill_width = std::clamp(center + height / 2, 1, width);
   const bool active =
@@ -159,6 +172,7 @@ static void slider_constructor(const lv_obj_class_t* class_p, lv_obj_t* object) 
   slider->minimum = 0;
   slider->maximum = 100;
   slider->value = 0;
+  slider->visual_fraction = 0;
   slider->foreground = gui2_core::ui.accent;
   slider->thumb = gui2_core::ui.on_accent;
   slider->dragging = false;
@@ -224,6 +238,9 @@ lv_obj_t* create_slider(lv_obj_t* parent, int x, int y, int width, int height, i
   slider->minimum = minimum;
   slider->maximum = std::max(minimum, maximum);
   slider->value = std::clamp(value, minimum, slider->maximum);
+  const int range = std::max(1, slider->maximum - minimum);
+  slider->visual_fraction = static_cast<int>(
+      (static_cast<int64_t>(slider->value - minimum) * 65536 + range / 2) / range);
   slider->foreground = foreground;
   slider->thumb = thumb;
   lv_obj_set_size(object, width, height);
