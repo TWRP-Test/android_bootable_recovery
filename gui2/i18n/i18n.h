@@ -142,6 +142,12 @@ struct language_pack {
   const char* mount_summary;
   const char* mount_system_writable;
   const char* mount_system_note;
+  const char* mount_running;
+  const char* mount_done;
+  const char* mount_failed;
+  const char* unmount_running;
+  const char* unmount_done;
+  const char* unmount_failed;
   const char* refreshing_sizes;
   const char* refresh_sizes_done;
   const char* backup_encrypt;

@@ -2,6 +2,7 @@
 #define GUI2_PAGES_MOUNT_PAGE_H
 
 #include <cstddef>
+#include <vector>
 
 #include "backend/mount_backend.h"
 #include "core/ui_metrics.h"
@@ -18,6 +19,9 @@ struct mount_page_options {
   size_t target_count = 0;
   const int* target_indices = nullptr;
   lv_event_cb_t mount_callback = nullptr;
+  const char* feedback_path = nullptr;
+  const char* feedback_text = nullptr;
+  bool feedback_failed = false;
   // Current storage, shown the way the legacy header shows it.
   const char* storage_name = nullptr;
   const char* storage_free = nullptr;
@@ -40,7 +44,16 @@ struct mount_page_options {
   lv_event_cb_t system_callback = nullptr;
 };
 
-void build_mount_page(const mount_page_options& options);
+struct mount_row_view {
+  lv_obj_t* toggle = nullptr;
+  lv_obj_t* feedback = nullptr;
+};
+
+struct mount_page_view {
+  std::vector<mount_row_view> rows;
+};
+
+mount_page_view build_mount_page(const mount_page_options& options);
 
 }  // namespace gui2_pages
 

@@ -92,11 +92,19 @@ std::vector<mount_target> twrp_mount_backend::targets() {
 // GUIPartitionList::NotifySelect for the "mount" list.
 bool twrp_mount_backend::set_mounted(const std::string& mount_point, bool mounted) {
   if (mounted) {
-    if (PartitionManager.Mount_By_Path(mount_point, true)) {
-      PartitionManager.Add_MTP_Storage(mount_point);
-      return true;
+    if (!PartitionManager.Mount_By_Path(mount_point, true)) return false;
+    if (mount_point == "/data") {
+      TWPartition* data = PartitionManager.Find_Partition_By_Path(mount_point);
+      if (data == nullptr) return false;
+      // Restore DE keys only for an explicit Data mount; CE uses the decrypt page.
+      if (!data->Restore_DE_Keys()) {
+        data->UnMount(true);
+        return false;
+      }
+      if (data->Is_FBE && TWPartition::Data_Is_Locked()) return true;
     }
-    return false;
+    PartitionManager.Add_MTP_Storage(mount_point);
+    return true;
   }
   return PartitionManager.UnMount_By_Path(mount_point, true) != 0;
 }

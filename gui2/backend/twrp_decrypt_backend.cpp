@@ -121,6 +121,7 @@ void twrp_decrypt_backend::run(std::string password) {
     else {
       DataManager::SetValue(TW_IS_ENCRYPTED, 0);
       DataManager::SetBackupFolder();
+      PartitionManager.Add_MTP_Storage("/data");
 
       int has_datamedia;
 

@@ -120,6 +120,7 @@ static gui2_backend::sideload_backend*& sideload = runtime.sideload;
 static gui2_backend::tools_backend*& tools = runtime.tools;
 static gui2_backend::background_backend*& background = runtime.background;
 static gui2_shell::status_bar_controller status_controller;
+static gui2_pages::mount_page_view mount_view;
 
 using gui2_core::card_inner_padding;
 using gui2_core::navigation_safe_area;
@@ -286,6 +287,8 @@ static void refresh_decrypt_progress(void);
 static void show_backup_page(page_transition transition);
 static void show_backup_progress_page(page_transition transition);
 static void show_mount_page(page_transition transition);
+static std::string current_storage_snapshot();
+static std::string storage_snapshot;
 static void show_select_storage_page(page_transition transition);
 static void show_restore_list_page(page_transition transition);
 static void show_restore_page(page_transition transition);
@@ -1149,6 +1152,7 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
                                  page_transition transition = page_transition::NONE) {
   flush_hardware_settings();
   close_quick_menu();
+  mount_view = {};
   for (int i = 0; i < 3; ++i) {
     language_option_cards[i] = nullptr;
     language_check_labels[i] = nullptr;
@@ -4056,6 +4060,64 @@ static void backup_cancel_cb(lv_event_t* event) {
 }
 
 static bool system_ro_never_show = false;
+static std::string mount_feedback;
+static bool mount_feedback_failed = false;
+static uint32_t mount_feedback_finished_ms = 0;
+static bool mount_pending = false;
+static std::string pending_mount_path;
+static std::string pending_mount_name;
+static bool pending_mount_wanted = false;
+
+static void refresh_mount_rows() {
+  if (page_router.current() != page_kind::MOUNT) return;
+  const int scroll = lv_obj_get_scroll_y(main_content);
+  for (size_t i = 0; i < mount_view.rows.size() && i < mount_targets.size(); ++i) {
+    const auto& row = mount_view.rows[i];
+    if (row.toggle == nullptr || row.feedback == nullptr) continue;
+    lv_obj_set_state(row.toggle, LV_STATE_CHECKED, mount_targets[i].mounted);
+    lv_obj_set_state(row.toggle, LV_STATE_DISABLED, mount_pending);
+    const bool visible = !mount_feedback.empty() &&
+                         mount_targets[i].mount_point == pending_mount_path;
+    lv_label_set_text(row.feedback, visible ? mount_feedback.c_str() : "");
+    lv_obj_set_style_text_color(row.feedback, mount_feedback_failed ? ui.danger :
+                                   (!mount_pending && mount_targets[i].mounted ? ui.success : ui.secondary_text),
+                               LV_PART_MAIN);
+    lv_obj_set_hidden(row.feedback, !visible);
+    lv_obj_t* text = lv_obj_get_parent(row.feedback);
+    lv_obj_t* card = lv_obj_get_parent(text);
+    lv_obj_update_layout(text);
+    const int height = std::max(lv_obj_get_height(text) + gui2_core::card_inner_padding(),
+                                lv_obj_get_height(row.toggle) + gui2_core::card_inner_padding());
+    lv_obj_set_height(card, height);
+    lv_obj_update_layout(card);
+    lv_obj_set_y(text, (lv_obj_get_height(card) - lv_obj_get_height(text)) / 2);
+    lv_obj_set_y(row.toggle, (lv_obj_get_height(card) - lv_obj_get_height(row.toggle)) / 2);
+  }
+  lv_obj_update_layout(main_content);
+  lv_obj_scroll_to_y(main_content, scroll, LV_ANIM_OFF);
+}
+
+static void complete_mount_request(lv_timer_t* timer) {
+  lv_timer_delete(timer);
+  const bool ok = mount != nullptr && mount->set_mounted(pending_mount_path, pending_mount_wanted);
+  mount_feedback = std::string(pending_mount_wanted
+                                  ? (ok ? strings().mount_done : strings().mount_failed)
+                                  : (ok ? strings().unmount_done : strings().unmount_failed)) +
+                   ": " + pending_mount_name;
+  mount_feedback_failed = !ok;
+  mount_feedback_finished_ms = lv_tick_get();
+  mount_pending = false;
+  // Even a failed unmount may have changed child mounts; use the backend's
+  // actual state instead of keeping the pre-operation checkbox snapshot.
+  if (mount != nullptr) mount_targets = mount->targets();
+  refresh_mount_rows();
+  storage_snapshot = current_storage_snapshot();
+  if (ok && pending_mount_wanted && pending_mount_path == "/data" && data_locked()) {
+    decrypt->select_user();
+    page_state.decrypt_failed = false;
+    enter_decrypt_flow(page_transition::PUSH);
+  }
+}
 
 static void mount_event_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
@@ -4082,17 +4144,21 @@ static void mount_event_cb(lv_event_t* event) {
     return;
   }
 
-  if (*index < 0 || static_cast<size_t>(*index) >= mount_targets.size()) return;
-  // The row only earns its new state once the partition actually moved.
-  if (!mount->set_mounted(mount_targets[*index].mount_point, wanted)) {
-    if (wanted)
-      lv_obj_remove_state(toggle, LV_STATE_CHECKED);
-    else
-      lv_obj_add_state(toggle, LV_STATE_CHECKED);
-  } else {
-    mount_targets[*index].mounted = wanted;
-  }
+  if (*index < 0 || static_cast<size_t>(*index) >= mount_targets.size() || mount_pending) return;
+  pending_mount_path = mount_targets[*index].mount_point;
+  pending_mount_name = mount_targets[*index].name;
+  pending_mount_wanted = wanted;
+  mount_pending = true;
+  mount_feedback_failed = false;
+  mount_feedback = std::string(wanted ? strings().mount_running : strings().unmount_running) +
+                   ": " + pending_mount_name;
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
+  refresh_mount_rows();
+  // Paint the notice before running the synchronous partition manager. Keep
+  // partition operations on the GUI thread, alongside hotplug processing.
+  lv_refr_now(nullptr);
+  lv_timer_t* timer = lv_timer_create(complete_mount_request, 50, nullptr);
+  lv_timer_set_repeat_count(timer, 1);
 }
 
 static void show_backup_page(page_transition transition) {
@@ -4956,7 +5022,6 @@ static std::string mount_storage_name;
 static std::string mount_storage_free;
 static std::string storage_error;
 static uint64_t storage_last_poll_ms = 0;
-static std::string storage_snapshot;
 
 static std::string current_storage_snapshot() {
   if (mount == nullptr) return {};
@@ -5118,6 +5183,12 @@ static void show_mount_page(page_transition transition) {
   options.target_count = page_state.mount_target_count;
   options.target_indices = row_indices(std::size(page_state.wipe_selected));
   options.mount_callback = mount_event_cb;
+  if (!mount_pending && !mount_feedback.empty() &&
+      lv_tick_elaps(mount_feedback_finished_ms) >= 3000)
+    mount_feedback.clear();
+  options.feedback_path = pending_mount_path.c_str();
+  options.feedback_text = mount_feedback.c_str();
+  options.feedback_failed = mount_feedback_failed;
   options.has_system = mount != nullptr && mount->system_toggle_visible();
   options.system_writable = mount != nullptr && mount->system_writable();
   options.system_target = &kMountSystemTarget;
@@ -5125,6 +5196,8 @@ static void show_mount_page(page_transition transition) {
 
   mount_storage_name = mount == nullptr ? std::string() : mount->storage_name();
   mount_storage_free = mount == nullptr ? std::string() : mount->storage_free();
+  if (!mount_storage_free.empty())
+    mount_storage_free = std::string(strings().part_free) + ": " + mount_storage_free;
   options.storage_name = mount_storage_name.c_str();
   options.storage_free = mount_storage_free.c_str();
   options.storage_callback = mount_card_event_cb;
@@ -5139,7 +5212,8 @@ static void show_mount_page(page_transition transition) {
   options.usb_storage_enabled = mount != nullptr && mount->usb_storage_enabled();
   options.usb_storage_target = &kMountUsbStorageTarget;
   options.toggle_callback = mount_toggle_event_cb;
-  gui2_pages::build_mount_page(options);
+  mount_view = gui2_pages::build_mount_page(options);
+  refresh_mount_rows();
   show_storage_error();
   storage_snapshot = current_storage_snapshot();
 }
@@ -6075,7 +6149,12 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
   // only while it waits on one.
   if (background != nullptr) background->poll();
   const auto storage_page = page_router.current();
-  if ((storage_page == page_kind::MOUNT || storage_page == page_kind::SELECT_STORAGE) &&
+  if (!mount_pending && !mount_feedback.empty() &&
+      lv_tick_elaps(mount_feedback_finished_ms) >= 3000) {
+    mount_feedback.clear();
+    refresh_mount_rows();
+  }
+  if (!mount_pending && (storage_page == page_kind::MOUNT || storage_page == page_kind::SELECT_STORAGE) &&
       now_ms - storage_last_poll_ms >= 500) {
     storage_last_poll_ms = now_ms;
     const auto snapshot = current_storage_snapshot();
