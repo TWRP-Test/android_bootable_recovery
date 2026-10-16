@@ -2171,6 +2171,8 @@ static void refresh_sideload_progress(void) {
   labels.failed = status.state == gui2_backend::sideload_state::CANCELLED
                       ? strings().sideload_cancelled
                       : strings().sideload_failed;
+  progress.items = {progress.state == gui2_pages::operation_state::RUNNING ? labels.running :
+                    progress.state == gui2_pages::operation_state::DONE ? labels.done : labels.failed};
   gui2_pages::update_progress(&page_state.sideload_progress, labels, progress);
 }
 
@@ -2187,13 +2189,17 @@ static void show_sideload_progress_page(page_transition transition) {
   options.strings = &strings();
   options.console_font = runtime_console_fonts[page_state.console_font_index];
   options.initial_text = strings().sideload_waiting;
+  options.task_layout = true;
+  options.log_title = strings().console_title;
   options.subtitle = page_summary;
+  lv_obj_set_hidden(page_summary, true);
   options.page_layer = page_layer;
   options.left_action = { strings().action_back, progress_back_cb };
   options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
   options.running_action = { strings().cancel, sideload_cancel_cb };
   options.press_guard_callback = press_cancel_guard_cb;
   page_state.sideload_progress = gui2_pages::build_progress_page(options);
+  lv_obj_set_hidden(page_state.sideload_progress.elapsed, true);
   page_state.sideload_console_consumed = 0;
   page_state.sideload_last_poll_ms = 0;
   refresh_sideload_progress();
@@ -2218,7 +2224,7 @@ static void poll_fastbootd_console(void) {
 
 static void show_fastbootd_page(page_transition transition) {
   create_page_scaffold(page_kind::FASTBOOTD, true, strings().fastbootd_title,
-                       strings().fastbootd_summary, 0, transition);
+                       "", 0, transition);
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
 

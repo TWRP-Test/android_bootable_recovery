@@ -4,6 +4,7 @@
 
 #include "components/section_label.h"
 #include "core/ui_helpers.h"
+#include "pages/progress_page.h"
 
 namespace gui2_pages {
 
@@ -30,27 +31,23 @@ fastbootd_page_view build_fastbootd_page(const fastbootd_page_options& options) 
     options.usb_tabs->create(body, metrics, labels, 2, options.usb_fastboot ? 0 : 1,
                              options.usb_callback, nullptr);
   }
-  gui2_components::create_section_label(body, metrics, strings.console_tab_output);
-
-  // The console takes whatever height is left above the navigation.
   lv_obj_update_layout(body);
-  const int scroll_top = metrics.heading_top + metrics.heading_height + metrics.cards_top_gap;
-  const int available = metrics.height - metrics.status_height - scroll_top -
-                        gui2_core::navigation_safe_area() - lv_obj_get_height(body) -
-                        metrics.card_gap;
-
-  console_page_options console;
-  console.content = body;
-  console.metrics = &metrics;
-  console.empty_text = "";
-  console.font = options.console_font;
-  console.self_scrolling = true;
-  view.console = build_console_page(console);
-  if (view.console.body != nullptr) {
-    const int height = std::max(gui2_core::ui_px(300), available);
-    lv_obj_set_height(view.console.body, height);
-    view.console.minimum_height = height;
-  }
+  const int top = lv_obj_get_height(body) + metrics.card_gap;
+  progress_page_options progress;
+  progress.content = options.content;
+  progress.metrics = &metrics;
+  progress.strings = &strings;
+  progress.console_font = options.console_font;
+  progress.task_layout = true;
+  progress.log_title = strings.console_tab_output;
+  auto task = build_progress_page(progress);
+  lv_obj_set_y(task.body, top);
+  task.available_height -= top;
+  task.bottom_reserved = gui2_core::navigation_safe_area();
+  operation_status status;
+  status.items = {strings.fastbootd_summary};
+  update_progress(&task, {}, status);
+  view.console = task.console;
   return view;
 }
 
