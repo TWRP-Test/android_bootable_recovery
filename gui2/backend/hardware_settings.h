@@ -16,6 +16,9 @@ class hardware_settings {
   virtual bool has_brightness() const = 0;
   virtual int brightness_percent() const = 0;
   virtual bool set_brightness_percent(int percent) = 0;
+  // Polled by the UI thread; queued writes can fail after the slider callback.
+  virtual bool take_brightness_error() { return false; }
+  virtual void stop_brightness() {}
 
   virtual bool has_haptics() const = 0;
   virtual int haptic_duration_ms(haptic_channel channel) const = 0;

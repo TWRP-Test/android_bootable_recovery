@@ -46,6 +46,7 @@
 #include "gui2/backend/twrp_wifi_backend.h"
 #endif
 #include "gui2/backend/twrp_hardware_settings.h"
+#include "gui2/backend/backlight_controller.h"
 #include "gui2/backend/twrp_log_export_backend.h"
 #include "gui2/backend/twrp_reboot_backend.h"
 #include "gui2/backend/twrp_screen_backend.h"
@@ -683,8 +684,11 @@ int main(int argc, char* argv[]) {
 	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
 
 	gui2_backend::twrp_settings_store settings_store;
-	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store);
-	gui2_backend::twrp_screen_backend screen_backend(&settings_store);
+	gui2_backend::backlight_controller backlight([](int value) {
+		return TWFunc::SetBrightness(std::to_string(value)) == 0;
+	});
+	gui2_backend::twrp_hardware_settings hardware_settings(&settings_store, &backlight);
+	gui2_backend::twrp_screen_backend screen_backend(&settings_store, &backlight);
 	gui2_backend::twrp_reboot_backend reboot_backend;
 	gui2_backend::twrp_console_backend console_backend;
 	gui2_backend::twrp_log_export_backend log_export_backend(&settings_store);
@@ -728,6 +732,7 @@ int main(int argc, char* argv[]) {
 	// Started ahead of the GUI, as upstream does.
 	startBatteryMonitor();
 	const int gui2_result = gui2_start(&gui2_context_value);
+	backlight.stop();
 	if (gui2_result == GUI2_EXIT_STARTUP_FAILED)
 		return -1;
 

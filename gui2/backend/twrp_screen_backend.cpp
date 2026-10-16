@@ -11,6 +11,7 @@
 #include <ctime>
 #include <string>
 
+#include "backlight_controller.h"
 #include "data.hpp"
 #include "gui/gui.hpp"
 #include "gui/twmsg.h"
@@ -67,8 +68,9 @@ std::string timestamped_name(const char* prefix, const char* extension, int suff
 
 }  // namespace
 
-twrp_screen_backend::twrp_screen_backend(settings_store* settings) : settings_(settings) {
-  orig_brightness = getBrightness();
+twrp_screen_backend::twrp_screen_backend(settings_store* settings,
+                                         backlight_controller* backlight)
+    : settings_(settings), backlight_(backlight) {
   setTimer();
 }
 
@@ -169,14 +171,13 @@ void twrp_screen_backend::checkForTimeout() {
   clock_gettime(CLOCK_MONOTONIC, &curTime);
   diff = TWFunc::TimespecDiff(btimer, curTime);
   if (sleepTimer > 2 && diff.tv_sec > (sleepTimer - 2) && state == kOn) {
-    orig_brightness = getBrightness();
     state = kDim;
-    TWFunc::SetBrightness("5");
+    if (backlight_ != nullptr) backlight_->override_output(5);
   }
   if (sleepTimer && diff.tv_sec > sleepTimer && state < kOff) {
     state = kOff;
     stop_recording();
-    TWFunc::SetBrightness("0");
+    if (backlight_ != nullptr) backlight_->override_output(0);
     TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
     if (before_screen_off_callback_ != nullptr)
       before_screen_off_callback_(before_screen_off_user_data_);
@@ -190,14 +191,8 @@ void twrp_screen_backend::checkForTimeout() {
 #endif
 }
 
-std::string twrp_screen_backend::getBrightness() const {
-  std::string result;
-
-  if (DataManager::GetIntValue("tw_has_brightnesss_file")) {
-    DataManager::GetValue("tw_brightness", result);
-    if (result.empty()) result = "255";
-  }
-  return result;
+int twrp_screen_backend::getBrightness() const {
+  return DataManager::GetIntValue("tw_brightness");
 }
 
 void twrp_screen_backend::resetTimerAndUnblank() {
@@ -213,7 +208,7 @@ void twrp_screen_backend::resetTimerAndUnblank() {
     case kOff:
       [[fallthrough]];
     case kDim:
-      if (!orig_brightness.empty()) TWFunc::SetBrightness(orig_brightness);
+      if (backlight_ != nullptr) backlight_->restore_user(getBrightness());
       state = kOn;
       [[fallthrough]];
     case kOn:
@@ -225,10 +220,9 @@ void twrp_screen_backend::resetTimerAndUnblank() {
 void twrp_screen_backend::blank() {
 #ifndef TW_NO_SCREEN_TIMEOUT
   if (state == kOn) {
-    orig_brightness = getBrightness();
     state = kOff;
     stop_recording();
-    TWFunc::SetBrightness("0");
+    if (backlight_ != nullptr) backlight_->override_output(0);
     TWFunc::CheckAndRunScript("/system/bin/postscreenblank.sh", "blank");
   }
 #ifndef TW_NO_SCREEN_BLANK

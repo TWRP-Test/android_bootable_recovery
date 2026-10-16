@@ -323,6 +323,7 @@ static lv_obj_t*& dst_card = page_state.dst_card;
 static lv_obj_t*& current_timezone_label = page_state.current_timezone_label;
 static lv_obj_t*& hardware_error_label = page_state.hardware_error_label;
 static bool& hardware_settings_dirty = page_state.hardware_settings_dirty;
+static bool hardware_settings_pending_save = false;
 using hardware_slider_binding = gui2_pages::hardware_slider_binding;
 static hardware_slider_binding& brightness_binding = page_state.brightness_binding;
 static hardware_slider_binding& screen_timeout_binding = page_state.screen_timeout_binding;
@@ -961,6 +962,7 @@ static void quick_brightness_event_cb(lv_event_t* event) {
       return;
     }
     quick_brightness_dirty = true;
+    hardware_settings_pending_save = true;
     if (binding->value_label != nullptr) lv_label_set_text_fmt(binding->value_label, "%d%%", value);
     gui2_components::refresh_slider(&binding->visual);
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
@@ -971,6 +973,7 @@ static void quick_brightness_event_cb(lv_event_t* event) {
       return;
     }
     quick_brightness_dirty = false;
+    hardware_settings_pending_save = false;
   }
 }
 
@@ -1127,9 +1130,21 @@ static void create_quick_menu(void) {
   close_quick_menu();
 }
 
+static void flush_hardware_settings() {
+  if (!hardware_settings_pending_save || settings == nullptr) return;
+  if (settings->flush()) {
+    hardware_settings_dirty = false;
+    quick_brightness_dirty = false;
+    hardware_settings_pending_save = false;
+  } else {
+    set_quick_feedback(strings().hardware_error);
+  }
+}
+
 static void create_page_scaffold(page_kind page, bool is_home, const char* title,
                                  const char* summary, int bottom_reserved = 0,
                                  page_transition transition = page_transition::NONE) {
+  flush_hardware_settings();
   close_quick_menu();
   for (int i = 0; i < 3; ++i) {
     language_option_cards[i] = nullptr;
@@ -1444,6 +1459,7 @@ static void hardware_slider_event_cb(lv_event_t* event) {
       return;
     }
     hardware_settings_dirty = true;
+    hardware_settings_pending_save = true;
     update_hardware_slider_value(*binding, value);
     gui2_components::refresh_slider(&binding->visual);
     clear_hardware_error();
@@ -1455,6 +1471,7 @@ static void hardware_slider_event_cb(lv_event_t* event) {
       return;
     }
     hardware_settings_dirty = false;
+    hardware_settings_pending_save = false;
   }
 }
 
@@ -5952,6 +5969,12 @@ static void show_system_read_only_page(page_transition transition) {
 }
 
 static void shutdown_gui2(bool keep_display = false) {
+  flush_hardware_settings();
+  if (hardware != nullptr) {
+    hardware->stop_brightness();
+    if (hardware->take_brightness_error())
+      std::fprintf(stderr, "GUI2: Unable to write brightness before shutdown\n");
+  }
   if (screen != nullptr && screen->is_recording()) screen->stop_recording();
   status_controller.stop();
   page_state.reboot.confirmation_slider.detach();
@@ -5999,6 +6022,10 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
     splash_dismiss_pending = false;
   }
   if (!shell_ready) return;
+  if (hardware != nullptr && hardware->take_brightness_error()) {
+    show_hardware_error(strings().hardware_error);
+    set_quick_feedback(strings().hardware_error);
+  }
   const bool has_mouse = ev_has_mouse() != 0;
   if (has_mouse && mouse_cursor == nullptr)
     mouse_cursor = gui2_shell::create_mouse_cursor(pointer_indev, true, ui);

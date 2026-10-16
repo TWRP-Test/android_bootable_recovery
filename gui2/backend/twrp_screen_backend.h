@@ -12,9 +12,11 @@
 
 namespace gui2_backend {
 
+class backlight_controller;
+
 class twrp_screen_backend final : public screen_backend {
  public:
-  explicit twrp_screen_backend(settings_store* settings);
+  twrp_screen_backend(settings_store* settings, backlight_controller* backlight);
   ~twrp_screen_backend() override;
 
   bool has_screenshot() const override;
@@ -49,14 +51,14 @@ class twrp_screen_backend final : public screen_backend {
   // and its forced render to the loop, which redraws once the screen is back.
   void setTimer();
   void checkForTimeout();
-  std::string getBrightness() const;
+  int getBrightness() const;
   void resetTimerAndUnblank();
   void blank();
 
   settings_store* settings_;
+  backlight_controller* backlight_;
   webm_vp8_recorder recorder_;
   int state = kOn;
-  std::string orig_brightness;
   timespec btimer = {};
   uint64_t last_tick_ms_ = 0;
   void (*before_screen_off_callback_)(void*) = nullptr;

@@ -6,10 +6,13 @@
 namespace gui2_backend {
 
 class settings_store;
+class backlight_controller;
 
 class twrp_hardware_settings final : public hardware_settings {
  public:
-  explicit twrp_hardware_settings(settings_store* settings);
+  twrp_hardware_settings(settings_store* settings, backlight_controller* backlight);
+  bool take_brightness_error() override;
+  void stop_brightness() override;
 
   bool has_brightness() const override;
   int brightness_percent() const override;
@@ -22,6 +25,7 @@ class twrp_hardware_settings final : public hardware_settings {
 
  private:
   settings_store* settings_;
+  backlight_controller* backlight_;
 };
 
 }  // namespace gui2_backend
