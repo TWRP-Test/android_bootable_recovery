@@ -1,18 +1,20 @@
 package twrp
 
-import (
-	"android/soong/android"
-	"strings"
-)
+import "android/soong/android"
 
-func getMakeVars(ctx android.BaseContext, mVar string) string {
-	makeVars := ctx.Config().VendorConfig("twrpVarsPlugin")
-	var makeVar = ""
-	if makeVars.IsSet(mVar) {
-		makeVar = strings.TrimSpace(makeVars.String(mVar))
-		if len(makeVar) >= 2 && makeVar[0] == '"' && makeVar[len(makeVar)-1] == '"' {
-			makeVar = makeVar[1 : len(makeVar)-1]
-		}
-	}
-	return makeVar
+// Preserve quotes and escapes until the value reaches its consumer.
+func getMakeVars(ctx android.BaseContext, name string) string {
+	return ctx.Config().VendorConfig("twrpVarsPlugin").String(name)
+}
+
+func getMakeValue(ctx android.BaseContext, name string) string {
+	return makeVarValue(getMakeVars(ctx, name))
+}
+
+func getMakeScalar(ctx android.BaseContext, name string) string {
+	return makeVarScalar(getMakeVars(ctx, name))
+}
+
+func getMakeBool(ctx android.BaseContext, name string) bool {
+	return makeBoolValue(getMakeVars(ctx, name))
 }

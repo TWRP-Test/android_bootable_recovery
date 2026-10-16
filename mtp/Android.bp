@@ -16,6 +16,7 @@
 
 cc_defaults {
     name: "libtwrpmtp_defaults",
+    defaults: ["twrp_cflags_defaults"],
     srcs: [
         "MtpDataPacket.cpp",
         "MtpDebug.cpp",

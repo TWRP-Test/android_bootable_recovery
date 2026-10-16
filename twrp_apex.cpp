@@ -75,7 +75,7 @@ bool TwrpApex::LoadApexImages() {
     apex_files.emplace_back(kApexDir / name);
   }
 #ifdef TW_ADDITIONAL_APEX_FILES
-  for (const auto& name : android::base::Tokenize(EXPAND(TW_ADDITIONAL_APEX_FILES), " ")) {
+  for (const auto& name : android::base::Tokenize(TW_ADDITIONAL_APEX_FILES, " ")) {
     apex_files.emplace_back(kApexDir / name);
   }
 #endif

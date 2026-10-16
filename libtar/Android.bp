@@ -47,6 +47,7 @@ bootstrap_go_package {
     srcs: [
         "libtar_defaults.go",
         "../soong/makevars.go",
+        "../soong/variables.go",
     ],
     pluginFor: ["soong_build"],
 }
@@ -55,24 +56,12 @@ libtar_defaults {
     name: "libtar_defaults_flags",
 }
 
-cc_library_shared {
-    name: "libtar",
-    defaults: ["libtar_defaults"],
-    recovery_available: true,
-
-    shared_libs: [
-        "libc",
-        "libz",
-        "libselinux",
-    ],
-}
-
 cc_library_static {
     name: "libtar_static",
     defaults: ["libtar_defaults"],
     recovery_available: true,
 
-    static_libs: [
+    shared_libs: [
         "libc",
         "libz",
         "libselinux",

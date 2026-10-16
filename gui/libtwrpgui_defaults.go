@@ -77,11 +77,11 @@ func copyThemeResources(ctx android.BaseContext, dirs []string, files []string) 
 		}
 	}
 
-	_props := [3]string{"TW_CUSTOM_BATTERY_POS", "TW_CUSTOM_CPU_POS", "TW_CUSTOM_CLOCK_POS" }
+	_props := [3]string{"TW_CUSTOM_BATTERY_POS", "TW_CUSTOM_CPU_POS", "TW_CUSTOM_CLOCK_POS"}
 	props := [3]string{"0", "0", "0"}
 	for i, item := range _props {
-		if getMakeVars(ctx, item) != "" {
-			props[i] = strings.Trim(getMakeVars(ctx, item), "\"")
+		if getMakeValue(ctx, item) != "" {
+			props[i] = getMakeValue(ctx, item)
 		}
 	}
 
@@ -151,9 +151,9 @@ func copyThemeResources(ctx android.BaseContext, dirs []string, files []string) 
 			}
 
 			alignProp := "%status_topalign_header_y%"
-			if strings.Trim(getMakeVars(ctx, "TW_STATUS_ICONS_ALIGN"), "\"") == "center" || strings.Trim(getMakeVars(ctx, "TW_STATUS_ICONS_ALIGN"), "\"") == "2" {
+			if getMakeValue(ctx, "TW_STATUS_ICONS_ALIGN") == "center" || getMakeValue(ctx, "TW_STATUS_ICONS_ALIGN") == "2" {
 				alignProp = "%status_centeralign_header_y%"
-			} else if strings.Trim(getMakeVars(ctx, "TW_STATUS_ICONS_ALIGN"), "\"") == "bottom" || strings.Trim(getMakeVars(ctx, "TW_STATUS_ICONS_ALIGN"), "\"") == "3" {
+			} else if getMakeValue(ctx, "TW_STATUS_ICONS_ALIGN") == "bottom" || getMakeValue(ctx, "TW_STATUS_ICONS_ALIGN") == "3" {
 				alignProp = "%status_bottomalign_header_y%"
 			}
 			newFile = strings.Replace(newFile, "{battery_pos}", props[0], -1)
@@ -164,7 +164,7 @@ func copyThemeResources(ctx android.BaseContext, dirs []string, files []string) 
 		}
 		// Custom position for status bar items - end
 
-		err = ioutil.WriteFile(twRes + i, []byte(newFile), 0)
+		err = ioutil.WriteFile(twRes+i, []byte(newFile), 0)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -184,19 +184,19 @@ func copyCustomTheme(ctx android.BaseContext, customTheme string) {
 func determineTheme(ctx android.BaseContext) string {
 	guiWidth := 0
 	guiHeight := 0
-	if getMakeVars(ctx, "TW_CUSTOM_THEME") == "" {
-		if getMakeVars(ctx, "TW_THEME") == "" {
-			if getMakeVars(ctx, "DEVICE_RESOLUTION") == "" {
-				width, err := strconv.Atoi(getMakeVars(ctx, "TARGET_SCREEN_WIDTH"))
+	if getMakeValue(ctx, "TW_CUSTOM_THEME") == "" {
+		if getMakeValue(ctx, "TW_THEME") == "" {
+			if getMakeValue(ctx, "DEVICE_RESOLUTION") == "" {
+				width, err := strconv.Atoi(getMakeScalar(ctx, "TARGET_SCREEN_WIDTH"))
 				if err == nil {
 					guiWidth = width
 				}
-				height, err := strconv.Atoi(getMakeVars(ctx, "TARGET_SCREEN_HEIGHT"))
+				height, err := strconv.Atoi(getMakeScalar(ctx, "TARGET_SCREEN_HEIGHT"))
 				if err == nil {
 					guiHeight = height
 				}
 			} else {
-				deviceRes := getMakeVars(ctx, "DEVICE_RESOLUTION")
+				deviceRes := getMakeValue(ctx, "DEVICE_RESOLUTION")
 				width, err := strconv.Atoi(strings.Split(deviceRes, "x")[0])
 				if err == nil {
 					guiWidth = width
@@ -228,7 +228,7 @@ func determineTheme(ctx android.BaseContext) string {
 		}
 	}
 
-	return getMakeVars(ctx, "TW_THEME")
+	return getMakeValue(ctx, "TW_THEME")
 }
 
 func copyTheme(ctx android.BaseContext) bool {
@@ -238,7 +238,7 @@ func copyTheme(ctx android.BaseContext) bool {
 	localPath := ctx.ModuleDir()
 	directories = append(directories, "gui/theme/common/fonts/")
 	directories = append(directories, "gui/theme/common/languages/")
-	if getMakeVars(ctx, "TW_EXTRA_LANGUAGES") == "true" {
+	if getMakeBool(ctx, "TW_EXTRA_LANGUAGES") {
 		directories = append(directories, "gui/theme/extra-languages/fonts/")
 		directories = append(directories, "gui/theme/extra-languages/languages/")
 	}
@@ -246,7 +246,7 @@ func copyTheme(ctx android.BaseContext) bool {
 	directories = append(directories, "gui/theme/"+theme)
 	themeXML := fmt.Sprintf("gui/theme/common/%s.xml", strings.Split(theme, "_")[0])
 	files = append(files, themeXML)
-	if getMakeVars(ctx, "TW_CUSTOM_THEME") == "" {
+	if getMakeValue(ctx, "TW_CUSTOM_THEME") == "" {
 		defaultTheme := fmt.Sprintf("%s/theme/%s/ui.xml", localPath, theme)
 		if android.ExistentPathForSource(ctx, defaultTheme).Valid() {
 			fullDefaultThemePath := fmt.Sprintf("gui/theme/%s/ui.xml", theme)
@@ -256,10 +256,10 @@ func copyTheme(ctx android.BaseContext) bool {
 			return false
 		}
 	} else {
-		customThemeLoc = getMakeVars(ctx, "TW_CUSTOM_THEME")
+		customThemeLoc = getMakeValue(ctx, "TW_CUSTOM_THEME")
 		if android.ExistentPathForSource(ctx, customThemeLoc).Valid() {
 		} else {
-			printCustomThemeWarning(customThemeLoc, getMakeVars(ctx, "TW_CUSTOM_THEME"))
+			printCustomThemeWarning(customThemeLoc, getMakeValue(ctx, "TW_CUSTOM_THEME"))
 			return false
 		}
 	}
@@ -271,51 +271,42 @@ func copyTheme(ctx android.BaseContext) bool {
 }
 
 func globalFlags(ctx android.BaseContext) []string {
-    var cflags []string
+	var cflags []string
 
-
-    if getMakeVars(ctx, "AB_OTA_UPDATER") == "true" {
-        cflags = append(cflags, "-DAB_OTA_UPDATER=1")
-    }
-    if getMakeVars(ctx, "TW_INCLUDE_WIFI") == "true" {
-        cflags = append(cflags, "-DTW_INCLUDE_WIFI")
-    }
-    return cflags
+	if getMakeBool(ctx, "AB_OTA_UPDATER") {
+		cflags = append(cflags, "-DAB_OTA_UPDATER=1")
+	}
+	if getMakeBool(ctx, "TW_INCLUDE_WIFI") {
+		cflags = append(cflags, "-DTW_INCLUDE_WIFI")
+	}
+	return cflags
 }
 
 func globalSrcs(ctx android.BaseContext) []string {
-    var srcs []string
+	var srcs []string
 
-    if getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD") != "" {
-        srcs = append(srcs, getMakeVars(ctx, "TWRP_CUSTOM_KEYBOARD"))
-    } else {
-        srcs = append(srcs, "hardwarekeyboard.cpp")
-    }
-    if getMakeVars(ctx, "TW_INCLUDE_WIFI") == "true" {
-        srcs = append(srcs, "borderedlogbox.cpp")
-        srcs = append(srcs, "wlanlist.cpp")
-    }
-    return srcs
+	if getMakeValue(ctx, "TWRP_CUSTOM_KEYBOARD") != "" {
+		srcs = append(srcs, getMakeValue(ctx, "TWRP_CUSTOM_KEYBOARD"))
+	} else {
+		srcs = append(srcs, "hardwarekeyboard.cpp")
+	}
+	if getMakeBool(ctx, "TW_INCLUDE_WIFI") {
+		srcs = append(srcs, "borderedlogbox.cpp")
+		srcs = append(srcs, "wlanlist.cpp")
+	}
+	return srcs
 }
 
 func libTwrpGuiDefaults(ctx android.LoadHookContext) {
 	type props struct {
-		Target struct {
-			Android struct {
-				Cflags  []string
-				Enabled *bool
-			}
-		}
-		Cflags       []string
-		Srcs         []string
-		Include_dirs []string
+		Cflags []string
+		Srcs   []string
 	}
+	ctx.AppendProperties(&props{
+		Cflags: globalFlags(ctx),
+		Srcs:   globalSrcs(ctx),
+	})
 
-	p := &props{}
-	p.Cflags = globalFlags(ctx)
-	s := globalSrcs(ctx)
-	p.Srcs = s
-	ctx.AppendProperties(p)
 	if copyTheme(ctx) == false {
 		os.Exit(-1)
 	}

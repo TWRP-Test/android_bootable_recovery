@@ -9,7 +9,8 @@ bootstrap_go_package {
     srcs: [
         "libtwrpgui_defaults.go",
         "../soong/copy.go",
-        "../soong/makevars.go"
+        "../soong/makevars.go",
+        "../soong/variables.go"
     ],
     pluginFor: ["soong_build"]
 }
@@ -20,7 +21,7 @@ libtwrpgui_defaults {
 
 cc_library_static {
     name: "libtwrpgui",
-    defaults: ["libtwrpgui_defaults", "twrp_defaults"],
+    defaults: ["libtwrpgui_defaults", "twrp_defaults", "twrp_cflags_defaults"],
     cflags: [
         "-fno-strict-aliasing", 
         "-Wno-implicit-fallthrough",

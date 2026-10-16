@@ -4,13 +4,12 @@ import (
 	"android/soong/android"
 	"android/soong/cc"
 	"path/filepath"
-	"strings"
 )
 
 func globalFlags(ctx android.BaseContext) []string {
 	var cflags []string
 
-	if getMakeVars(ctx, "TW_DRM_TWO_STAGE_MODESET") == "true" {
+	if getMakeBool(ctx, "TW_DRM_TWO_STAGE_MODESET") {
 		cflags = append(cflags, "-DTW_DRM_TWO_STAGE_MODESET")
 	}
 
@@ -20,9 +19,10 @@ func globalFlags(ctx android.BaseContext) []string {
 		cflags = append(cflags, "-DHAS_DRM")
 	}
 
-	var pixelFormat = strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT"), "\"", "", -1)
+	var forcedPixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT")
+	var pixelFormat = forcedPixelFormat
 	if pixelFormat == "" {
-		pixelFormat = strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_PIXEL_FORMAT"), "\"", "", -1)
+		pixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_PIXEL_FORMAT")
 	}
 
 	switch pixelFormat {
@@ -47,13 +47,13 @@ func globalFlags(ctx android.BaseContext) []string {
 		break
 
 	case "RGB_565":
-		if strings.Replace(getMakeVars(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT"), "\"", "", -1) != "" {
+		if forcedPixelFormat != "" {
 			cflags = append(cflags, "-DRECOVERY_FORCE_RGB_565")
 		}
 		break
 	}
 
-	var tw_rotation = getMakeVars(ctx, "TW_ROTATION")
+	var tw_rotation = getMakeScalar(ctx, "TW_ROTATION")
 	switch tw_rotation {
 	case "0":
 		fallthrough
@@ -64,7 +64,7 @@ func globalFlags(ctx android.BaseContext) []string {
 	case "270":
 		cflags = append(cflags, "-DTW_ROTATION="+tw_rotation)
 	default:
-		if getMakeVars(ctx, "BOARD_HAS_FLIPPED_SCREEN") == "true" {
+		if getMakeBool(ctx, "BOARD_HAS_FLIPPED_SCREEN") {
 			cflags = append(cflags, "-DTW_ROTATION=180")
 		} else {
 			cflags = append(cflags, "-DTW_ROTATION=0")
@@ -76,7 +76,7 @@ func globalFlags(ctx android.BaseContext) []string {
 func globalSrcs(ctx android.BaseContext) []string {
 	var srcs []string
 
-	if getMakeVars(ctx, "TW_TARGET_USES_QCOM_BSP") == "true" {
+	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") {
 		srcs = append(srcs, "graphics_overlay.cpp")
 	}
 
@@ -86,34 +86,31 @@ func globalSrcs(ctx android.BaseContext) []string {
 		srcs = append(srcs, "graphics_drm.cpp")
 	}
 
-	if getMakeVars(ctx, "TW_HAPTICS_TSPDRV") == "true" {
+	if getMakeBool(ctx, "TW_HAPTICS_TSPDRV") {
 		srcs = append(srcs, "tspdrv.cpp")
 	}
 	return srcs
 }
 
 func globalIncludes(ctx android.BaseContext) []string {
-	var includes []string
-
-	if getMakeVars(ctx, "TW_TARGET_USES_QCOM_BSP") == "true" {
-		if getMakeVars(ctx, "TARGET_PREBUILT_KERNEL") != "" {
-			includes = append(includes, getMakeVars(ctx, "TARGET_OUT_INTERMEDIATES")+"/KERNEL_OBJ/usr/include")
-		} else {
-			if getMakeVars(ctx, "TARGET_CUSTOM_KERNEL_HEADERS") != "" {
-				includes = append(includes, "bootable/recovery/twrpminui")
-			} else {
-				includes = append(includes, getMakeVars(ctx, "TARGET_CUSTOM_KERNEL_HEADERS"))
-			}
+	includes := []string{"bootable/recovery/twrpminui"}
+	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") {
+		if headers := getMakeValue(ctx, "TARGET_CUSTOM_KERNEL_HEADERS"); headers != "" {
+			includes = append(includes, headers)
 		}
-	} else {
-		includes = append(includes, "bootable/recovery/twrpminui")
 	}
-
-	if getMakeVars(ctx, "TW_INCLUDE_JPEG") != "" {
+	if getMakeBool(ctx, "TW_INCLUDE_JPEG") {
 		includes = append(includes, "external/jpeg")
 	}
-
 	return includes
+}
+
+func globalHeaderLibs(ctx android.BaseContext) []string {
+	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") &&
+		getMakeValue(ctx, "TARGET_CUSTOM_KERNEL_HEADERS") == "" {
+		return []string{"generated_kernel_headers"}
+	}
+	return nil
 }
 
 func globalStaticLibs(ctx android.BaseContext) []string {
@@ -136,61 +133,39 @@ func globalStaticLibs(ctx android.BaseContext) []string {
 func globalSharedLibs(ctx android.BaseContext) []string {
 	var sharedLibs []string
 
-	if getMakeVars(ctx, "TW_SUPPORT_INPUT_1_2_HAPTICS") == "true" {
+	if getMakeBool(ctx, "TW_SUPPORT_INPUT_1_2_HAPTICS") {
 		sharedLibs = append(sharedLibs, "android.hardware.vibrator@1.2")
 		sharedLibs = append(sharedLibs, "libhidlbase")
 	}
 
-	if getMakeVars(ctx, "TW_SUPPORT_INPUT_AIDL_HAPTICS") == "true" {
+	if getMakeBool(ctx, "TW_SUPPORT_INPUT_AIDL_HAPTICS") {
 		sharedLibs = append(sharedLibs, "android.hardware.vibrator-V2-ndk")
 		sharedLibs = append(sharedLibs, "android.hardware.vibrator-V2-cpp")
 	}
 
-	if getMakeVars(ctx, "TW_INCLUDE_JPEG") != "" {
+	if getMakeBool(ctx, "TW_INCLUDE_JPEG") {
 		sharedLibs = append(sharedLibs, "libjpeg")
 	}
 	return sharedLibs
 }
 
-func globalRequiredModules(ctx android.BaseContext) []string {
-	var requiredModules []string
-
-	if getMakeVars(ctx, "TARGET_PREBUILT_KERNEL") != "" {
-		var kernelDir = getMakeVars(ctx, "TARGET_OUT_INTERMEDIATES") + ")/KERNEL_OBJ/usr"
-		requiredModules = append(requiredModules, kernelDir)
-	}
-	return requiredModules
-}
-
 func libTwrpMinuiDefaults(ctx android.LoadHookContext) {
 	type props struct {
-		Target struct {
-			Android struct {
-				Cflags  []string
-				Enabled *bool
-			}
-		}
 		Cflags       []string
 		Srcs         []string
 		Include_dirs []string
 		Static_libs  []string
 		Shared_libs  []string
-		Required     []string
+		Header_libs  []string
 	}
-
-	p := &props{}
-	p.Cflags = globalFlags(ctx)
-	s := globalSrcs(ctx)
-	p.Srcs = s
-	i := globalIncludes(ctx)
-	p.Include_dirs = i
-	staticLibs := globalStaticLibs(ctx)
-	p.Static_libs = staticLibs
-	sharedLibs := globalSharedLibs(ctx)
-	p.Shared_libs = sharedLibs
-	requiredModules := globalRequiredModules(ctx)
-	p.Required = requiredModules
-	ctx.AppendProperties(p)
+	ctx.AppendProperties(&props{
+		Cflags:       globalFlags(ctx),
+		Srcs:         globalSrcs(ctx),
+		Include_dirs: globalIncludes(ctx),
+		Static_libs:  globalStaticLibs(ctx),
+		Shared_libs:  globalSharedLibs(ctx),
+		Header_libs:  globalHeaderLibs(ctx),
+	})
 }
 
 func init() {

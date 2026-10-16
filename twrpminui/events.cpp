@@ -396,7 +396,7 @@ static int vk_init(struct ev *e)
     }
 
 #ifdef WHITELIST_INPUT
-    if (strcmp(e->deviceName, EXPAND(WHITELIST_INPUT)) != 0)
+    if (strcmp(e->deviceName, WHITELIST_INPUT) != 0)
     {
         e->ignored = 1;
     }
@@ -409,7 +409,7 @@ static int vk_init(struct ev *e)
         e->ignored = 1;
     }
 #else
-    char* bl = strdup(EXPAND(TW_INPUT_BLACKLIST));
+    char* bl = strdup(TW_INPUT_BLACKLIST);
     char* blacklist = strtok(bl, "\n");
 
     while (blacklist != NULL) {

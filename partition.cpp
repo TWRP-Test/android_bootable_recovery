@@ -603,9 +603,9 @@ bool TWPartition::Classify_By_Mount_Point(bool Display_Error) {
             set_display_names("Vendor DLKM");
         }
 #ifdef TW_EXTERNAL_STORAGE_PATH
-        if (Mount_Point == EXPAND(TW_EXTERNAL_STORAGE_PATH)) {
+        if (Mount_Point == TW_EXTERNAL_STORAGE_PATH) {
             Is_Storage = true;
-            Storage_Path = EXPAND(TW_EXTERNAL_STORAGE_PATH);
+            Storage_Path = TW_EXTERNAL_STORAGE_PATH;
             Removable = true;
             Wipe_Available_in_GUI = true;
 #else
@@ -616,10 +616,10 @@ bool TWPartition::Classify_By_Mount_Point(bool Display_Error) {
 #endif
         }
 #ifdef TW_INTERNAL_STORAGE_PATH
-        if (Mount_Point == EXPAND(TW_INTERNAL_STORAGE_PATH)) {
+        if (Mount_Point == TW_INTERNAL_STORAGE_PATH) {
             Is_Storage = true;
             Is_Settings_Storage = true;
-            Storage_Path = EXPAND(TW_INTERNAL_STORAGE_PATH);
+            Storage_Path = TW_INTERNAL_STORAGE_PATH;
             Wipe_Available_in_GUI = true;
         }
 #else
@@ -1218,7 +1218,12 @@ void TWPartition::Setup_Data_Media() {
     Symlink_Path = Storage_Path;
     if (Mount_Point == "/data") {
         Is_Settings_Storage = true;
-        if (std::string_view(EXPAND(TW_EXTERNAL_STORAGE_PATH)) == "/sdcard") {
+#ifdef TW_EXTERNAL_STORAGE_PATH
+        const bool external_storage_is_sdcard = std::string_view(TW_EXTERNAL_STORAGE_PATH) == "/sdcard";
+#else
+        constexpr bool external_storage_is_sdcard = false;
+#endif
+        if (external_storage_is_sdcard) {
             Make_Dir("/emmc", false);
             Symlink_Mount_Point = "/emmc";
         } else {
@@ -3025,7 +3030,7 @@ void TWPartition::Recreate_Media_Folder() {
             mkdir(Internal_path.c_str(), 0770);
         }
 #ifdef TW_INTERNAL_STORAGE_PATH
-        mkdir(EXPAND(TW_INTERNAL_STORAGE_PATH), 0770);
+        mkdir(TW_INTERNAL_STORAGE_PATH, 0770);
 #endif
 
         // Afterwards, we will try to set the

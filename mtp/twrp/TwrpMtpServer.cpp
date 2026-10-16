@@ -52,12 +52,8 @@ TwrpMtpServer* TwrpMtpServer::Create() {
     int control_fd = -1;
 
 #ifdef USB_MTP_DEVICE
-#define STRINGIFY(x) #x
-#define EXPAND(x) STRINGIFY(x)
-    constexpr const char* kMtpDevice = EXPAND(USB_MTP_DEVICE);
+    constexpr const char* kMtpDevice = USB_MTP_DEVICE;
     MTPI("Using '%s' for MTP device.\n", kMtpDevice);
-#undef EXPAND
-#undef STRINGIFY
 #else
     constexpr auto kMtpDevice = "/dev/mtp_usb";
 #endif
