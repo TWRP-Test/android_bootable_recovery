@@ -1499,6 +1499,7 @@ bool TWPartition::Mount(bool Display_Error) {
         LOGINFO("cmd: '%s'\n", cmd.c_str());
 
         if (TWFunc::ExecCmd(cmd) == 0) {
+            if (Removable) Update_Size(Display_Error);
             return true;
         } else {
             LOGINFO("ntfs-3g failed to mount, trying regular mount method.\n");
@@ -2893,21 +2894,6 @@ bool TWPartition::Update_Size(bool Display_Error, bool Defer_Folder_Size) {
     return true;
 }
 
-// Whatever the volume calls itself, empty when it has no label.
-static std::string Get_Volume_Label(const std::string &Block_Device) {
-    const char *label;
-    std::string name;
-
-    blkid_probe pr = blkid_new_probe_from_filename(Block_Device.c_str());
-    if (!pr)
-        return name;
-    // Free the probe on every exit path from here.
-    auto pr_guard = android::base::make_scope_guard([&] { blkid_free_probe(pr); });
-    if (blkid_do_fullprobe(pr) == 0 && blkid_probe_lookup_value(pr, "LABEL", &label, nullptr) == 0)
-        name = label;
-    return name;
-}
-
 bool TWPartition::Find_Wildcard_Block_Devices(const std::string &Device) {
     // we will need to create separate mount points for each partition found and we use this index to name each one
     int mount_point_index = 0;
@@ -2930,15 +2916,23 @@ bool TWPartition::Find_Wildcard_Block_Devices(const std::string &Device) {
 
         // GetPath() keeps the trailing slash, so do not add another one.
         std::string item = Path + de->d_name;
-        if (PartitionManager.Find_Partition_By_Block_Device(item))
+        if (PartitionManager.Find_Partition_By_Block_Device(item)) {
+            ++mount_point_index;
             continue;
+        }
+        std::string child_mount;
+        do {
+            child_mount = std::format("{}-{}", Mount_Point, ++mount_point_index);
+        } while (PartitionManager.Find_Partition_By_Path(child_mount));
         TWPartition *part = new TWPartition;
-        std::string buffer = std::format("{} {}-{} auto defaults defaults", item, Mount_Point, ++mount_point_index);
-        part->Process_Fstab_Line(buffer.c_str(), false, nullptr);
-        // Prefer the label, number whatever name is already taken.
-        std::string display = Get_Volume_Label(item);
-        if (display.empty())
-            display = Storage_Name;
+        std::string buffer = std::format("{} {} auto defaults defaults", item, child_mount);
+        if (!part->Process_Fstab_Line(buffer.c_str(), false, nullptr)) {
+            delete part;
+            continue;
+        }
+        // Discovery must not probe or mount the filesystem: a damaged or
+        // slow volume must not hold the GUI thread before the row appears.
+        std::string display = Storage_Name;
         if (PartitionManager.Storage_Name_In_Use(display))
             display += " " + std::to_string(mount_point_index);
         part->Storage_Name = display;
@@ -2953,7 +2947,7 @@ bool TWPartition::Find_Wildcard_Block_Devices(const std::string &Device) {
         part->Can_Be_Wiped = Can_Be_Wiped;
         part->Wipe_Available_in_GUI = Wipe_Available_in_GUI;
         part->Find_Actual_Block_Device();
-        part->Update_Size(false);
+        part->Find_Partition_Size();
         Has_SubPartition = true;
         PartitionManager.Output_Partition(part);
         PartitionManager.Add_Partition(part);

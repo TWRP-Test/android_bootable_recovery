@@ -3102,6 +3102,28 @@ void TWPartitionManager::Handle_Uevent(const Uevent_Block_Data &uevent_data) {
             }
             if (device == uevent_data.sysfs_path.substr(0, device.size())) {
                 // Found a match
+                if (uevent_data.type == "partition") {
+                    // The disk's add event can arrive before its partitions.
+                    // Rescan using the disk path, not the new partition as a
+                    // wildcard prefix (sda1* would miss sda2).
+                    if (uevent_data.action == "add" || uevent_data.action == "change")
+                        partition->Find_Actual_Block_Device();
+                    else if (uevent_data.action == "remove") {
+                        const std::string block = "/dev/block/" + uevent_data.block_device;
+                        for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+                            TWPartition *child = *it;
+                            if (child->Is_SubPartition && child->SubPartition_Of == partition->Mount_Point &&
+                                child->Primary_Block_Device == block) {
+                                child->UnMount(false);
+                                rmdir(child->Mount_Point.c_str());
+                                Partitions.erase(it);
+                                delete child;
+                                break;
+                            }
+                        }
+                    }
+                    return;
+                }
                 if (uevent_data.action == "add") {
                     partition->Primary_Block_Device = std::format("/dev/block/{}", uevent_data.block_device);
                     partition->Alternate_Block_Device = partition->Primary_Block_Device;
@@ -3194,16 +3216,22 @@ Uevent_Block_Data TWPartitionManager::get_event_block_values(char *buf, int len)
 }
 
 void TWPartitionManager::read_uevent() {
-    char buf[1024];
-
-    int len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT);
-    if (len == -1) {
-        LOGINFO("recv error on uevent\n");
-        return;
-    }
-    Uevent_Block_Data uevent_data = get_event_block_values(buf, len);
-    if (uevent_data.subsystem == "block" && uevent_data.type == "disk") {
-        PartitionManager.Handle_Uevent(uevent_data);
+    // USB discovery emits many unrelated events. Drain a bounded batch so a
+    // partition is not delayed by one event per rendered frame.
+    for (int count = 0; count < 64; ++count) {
+        char buf[4096];
+        int len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT | MSG_TRUNC);
+        if (len < 0) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+                LOGINFO("recv error on uevent: %s\n", strerror(errno));
+            return;
+        }
+        if (len == 0 || len >= static_cast<int>(sizeof(buf)))
+            continue;
+        Uevent_Block_Data uevent_data = get_event_block_values(buf, len);
+        if (uevent_data.subsystem == "block" &&
+            (uevent_data.type == "disk" || uevent_data.type == "partition"))
+            PartitionManager.Handle_Uevent(uevent_data);
     }
 }
 
