@@ -34,8 +34,8 @@ BatteryInfo GetBatteryInfo() {
   using std::string_literals::operator""s;
 
   auto service_name = IHealth::descriptor + "/default"s;
-  // The UI polls the battery every second and this cannot change while
-  // recovery runs, so asking servicemanager each time only spams the log.
+  // VINTF declarations are fixed for this recovery process. Cache only the
+  // declaration lookup; reconnect and read charge status/capacity each time.
   static const bool aidl_health_declared =
       AServiceManager_isDeclared(service_name.c_str());
   std::shared_ptr<IHealth> health;
