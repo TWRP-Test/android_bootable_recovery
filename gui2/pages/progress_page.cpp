@@ -9,43 +9,33 @@ namespace gui2_pages {
 
 namespace {
 
-// Two bands stretch forward independently; neither reverses direction.
+// A single blue comet travels forward, with a longer fading tail.
 void sweep_cb(void* object, int32_t phase) {
-  auto* band = static_cast<lv_obj_t*>(object);
-  const int width = lv_obj_get_content_width(lv_obj_get_parent(band));
-  const int start = -width / 3 + width * phase * phase / 500000;
-  const int end = -width / 10 + width * phase / 550;
-  lv_obj_set_x(band, start);
-  lv_obj_set_width(band, std::max(1, std::min(width + width / 3, end) - start));
+  auto* comet = static_cast<lv_obj_t*>(object);
+  const int width = lv_obj_get_content_width(lv_obj_get_parent(comet));
+  const int tail = std::max(1, width * 34 / 100);
+  lv_obj_set_width(comet, tail);
+  lv_obj_set_x(comet, -tail + (width + tail) * phase / 1000);
 }
 
 void start_running_animation(progress_page_view* view) {
-  if (view->sweeping || view->bar == nullptr || view->bar_fill == nullptr) return;
-  for (int i = 0; i < (view->bar_tail == nullptr ? 1 : 2); ++i) {
-    auto* band = i == 0 ? view->bar_fill : view->bar_tail;
-    lv_obj_set_hidden(band, false);
-    lv_anim_t animation;
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, band);
-    lv_anim_set_exec_cb(&animation, sweep_cb);
-    lv_anim_set_values(&animation, 0, 1000);
-    lv_anim_set_duration(&animation, 1400);
-    lv_anim_set_delay(&animation, i * 700);
-    lv_anim_set_repeat_delay(&animation, 700);
-    lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_start(&animation);
-  }
+  if (view->sweeping || view->bar_tail == nullptr) return;
+  lv_obj_set_hidden(view->bar_tail, false);
+  lv_anim_t animation;
+  lv_anim_init(&animation);
+  lv_anim_set_var(&animation, view->bar_tail);
+  lv_anim_set_exec_cb(&animation, sweep_cb);
+  lv_anim_set_values(&animation, 0, 1000);
+  lv_anim_set_duration(&animation, 1800);
+  lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_start(&animation);
   view->sweeping = true;
 }
 
 void stop_running_animation(progress_page_view* view) {
   if (!view->sweeping) return;
-  for (auto* band : {view->bar_fill, view->bar_tail}) {
-    if (band == nullptr) continue;
-    lv_anim_delete(band, sweep_cb);
-    lv_obj_set_x(band, 0);
-    lv_obj_set_hidden(band, band == view->bar_tail);
-  }
+  lv_anim_delete(view->bar_tail, sweep_cb);
+  lv_obj_set_hidden(view->bar_tail, true);
   view->sweeping = false;
 }
 
@@ -268,15 +258,36 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   gui2_core::set_surface_style(view.bar_fill, metrics.accent);
   lv_obj_set_style_radius(view.bar_fill, bar_height / 2, LV_PART_MAIN);
   lv_obj_set_style_pad_all(view.bar_fill, 0, LV_PART_MAIN);
+  lv_obj_set_style_clip_corner(view.bar_fill, true, LV_PART_MAIN);
   gui2_core::disable_scrolling(view.bar_fill);
+
+  view.bar_tail = lv_obj_create(view.bar);
+  lv_obj_set_size(view.bar_tail, 1, bar_height - border * 2);
+  const auto comet_color = gui2_core::tinted(metrics.accent, 28);
+  gui2_core::set_surface_style(view.bar_tail, comet_color);
+  lv_obj_set_style_radius(view.bar_tail, bar_height / 2, 0);
+  lv_obj_set_style_pad_all(view.bar_tail, 0, 0);
+  lv_obj_set_style_bg_main_opa(view.bar_tail, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_grad_color(view.bar_tail, comet_color, 0);
+  lv_obj_set_style_bg_grad_opa(view.bar_tail, LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_grad_dir(view.bar_tail, LV_GRAD_DIR_HOR, 0);
+  lv_obj_set_style_bg_grad_stop(view.bar_tail, 160, 0);
+  lv_obj_set_style_clip_corner(view.bar_tail, true, 0);
+  gui2_core::disable_scrolling(view.bar_tail);
+  lv_obj_set_clickable(view.bar_tail, false);
+  lv_obj_set_hidden(view.bar_tail, true);
+
+  auto* head = lv_obj_create(view.bar_tail);
+  lv_obj_set_size(head, LV_PCT(12), LV_PCT(100));
+  lv_obj_align(head, LV_ALIGN_RIGHT_MID, 0, 0);
+  gui2_core::set_surface_style(head, comet_color);
+  lv_obj_set_style_radius(head, 0, 0);
+  lv_obj_set_style_bg_grad_color(head, gui2_core::tinted(metrics.accent, 160), 0);
+  lv_obj_set_style_bg_grad_dir(head, LV_GRAD_DIR_HOR, 0);
+  gui2_core::disable_scrolling(head);
+  lv_obj_set_clickable(head, false);
+
   if (options.task_layout) {
-    view.bar_tail = lv_obj_create(view.bar);
-    lv_obj_set_size(view.bar_tail, 1, bar_height);
-    gui2_core::set_surface_style(view.bar_tail, metrics.accent);
-    lv_obj_set_style_radius(view.bar_tail, bar_height / 2, 0);
-    lv_obj_set_style_pad_all(view.bar_tail, 0, 0);
-    gui2_core::disable_scrolling(view.bar_tail);
-    lv_obj_set_hidden(view.bar_tail, true);
     lv_obj_set_style_pad_row(view.body, gui2_core::ui_px(24), 0);
     lv_obj_update_layout(options.content);
     view.available_height = lv_obj_get_content_height(options.content) - metrics.outer_margin;
@@ -428,19 +439,20 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
   }
 
   if (status.state == operation_state::RUNNING && status.total <= 0) {
+    if (lv_obj_get_parent(view->bar_tail) != view->bar)
+      lv_obj_set_parent(view->bar_tail, view->bar);
+    lv_obj_set_hidden(view->bar_fill, true);
     start_running_animation(view);
-    lv_obj_set_hidden(view->bar_fill, false);
     return;
   }
-  lv_obj_set_hidden(view->bar_fill, false);
 
-  stop_running_animation(view);
   const int width = view->track_width;
   if (width <= 0) return;
   // A finished bar is one solid rounded rect and nothing else. Leaving the
   // fill on top of it puts a second rounded edge inside the first, and the two
   // antialiased arcs show up as a hairline along both caps.
   if (status.state != operation_state::RUNNING) {
+    stop_running_animation(view);
     const lv_color_t color =
         status.state == operation_state::FAILED ? gui2_core::ui.danger : gui2_core::ui.success;
     lv_obj_set_hidden(view->bar, true);
@@ -452,7 +464,18 @@ void update_progress(progress_page_view* view, const operation_labels& labels,
 
   const int total = std::max(1, status.total);
   const int done = std::clamp(status.done, 0, total);
-  lv_obj_set_width(view->bar_fill, std::max(1, width * done / total));
+  lv_obj_set_width(view->bar_fill, std::max(1, static_cast<int>(
+      static_cast<int64_t>(width) * done / total)));
+  lv_obj_set_hidden(view->bar_fill, done == 0);
+  if (done == 0) {
+    stop_running_animation(view);
+    return;
+  }
+  // Clip the comet to the reported progress; it must never imply more work
+  // has completed than the installer actually reported.
+  if (lv_obj_get_parent(view->bar_tail) != view->bar_fill)
+    lv_obj_set_parent(view->bar_tail, view->bar_fill);
+  start_running_animation(view);
 }
 
 }  // namespace gui2_pages
