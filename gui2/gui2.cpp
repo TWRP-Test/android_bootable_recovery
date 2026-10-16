@@ -3808,10 +3808,10 @@ static void decrypt_language_event_cb(lv_event_t* event) {
 // TWRP's default password, as Decrypt_Data uses it at startup.
 static constexpr const char* kDefaultCryptoPassword = "!";
 
-// The legacy "Decrypt Data" button's condition.
 static bool data_locked(void) {
   return decrypt != nullptr && decrypt->is_encrypted() &&
-         (settings == nullptr || settings->get_int("tw_is_decrypted", 0) == 0);
+         (settings == nullptr || settings->get_int("tw_is_fbe", 0) != 0 ||
+          settings->get_int("tw_is_decrypted", 0) == 0);
 }
 
 // No lock screen: try the default password straight away.

@@ -798,9 +798,8 @@ bool TWPartition::Decrypt_FBE_DE() {
         ExcludeAll(Mount_Point + "/per_boot"); // removed each boot by init
         ExcludeAll(Mount_Point + "/gsi"); // cow devices
 
-        // Not retried: every attempt installs keys and touches the key directories
-        // again, so a retry only widens the damage when the first one went wrong.
         if (android::keystore::Decrypt_DE()) {
+            DE_Keys_Ready = true;
             PartitionManager.Set_Crypto_State();
             Is_Encrypted = true;
             Is_Decrypted = false;
@@ -1446,6 +1445,19 @@ bool TWPartition::Is_File_System_Writable() {
     return (access(test_path.c_str(), W_OK) == 0);
 }
 
+bool TWPartition::Restore_DE_Keys() {
+#ifdef TW_INCLUDE_FBE
+    if (Is_FBE && Mount_Point == "/data" && !DE_Keys_Ready) {
+        if (!android::keystore::Decrypt_DE()) {
+            LOGERR("Unable to restore DE keys on /data\n");
+            return false;
+        }
+        DE_Keys_Ready = true;
+    }
+#endif
+    return true;
+}
+
 bool TWPartition::Mount(bool Display_Error) {
     int exfat_mounted = 0;
     unsigned int flags = Mount_Flags;
@@ -1535,11 +1547,11 @@ bool TWPartition::Bind_Mount(bool Display_Error) {
     return true;
 }
 
-void TWPartition::Ensure_Subdirectory_Unmounted(const char *Mount_Point) {
+bool TWPartition::Ensure_Subdirectory_Unmounted(const char *Mount_Point) {
     std::unique_ptr<FILE, decltype(&endmntent)> mnts(setmntent("/proc/mounts", "r"), endmntent);
     if (!mnts) {
-        LOGINFO("Could not read /proc/mounts\n");
-        return;
+        LOGERR("Could not read /proc/mounts before unmount\n");
+        return false;
     }
 
     // Find sudirectory mount point
@@ -1569,9 +1581,22 @@ void TWPartition::Ensure_Subdirectory_Unmounted(const char *Mount_Point) {
     for (const auto &mount_point: umount_points) {
         LOGINFO("Unmounting sub-directory mount '%s'\n", mount_point.c_str());
         if (umount(mount_point.c_str()) != 0) {
-            LOGINFO("Failed to unmount '%s': '%s'\n", mount_point.c_str(), strerror(errno));
+            // A parent overmount can hide an older child still listed in /proc/mounts.
+            if (errno == EINVAL || errno == ENOENT) continue;
+            LOGERR("Failed to unmount '%s': '%s'\n", mount_point.c_str(), strerror(errno));
+            return false;
         }
     }
+    return true;
+}
+
+static bool Is_Path_Mounted(const std::string& path) {
+    std::unique_ptr<FILE, decltype(&endmntent)> mounts(setmntent("/proc/mounts", "r"), endmntent);
+    if (!mounts) return false;
+    while (mntent* entry = getmntent(mounts.get())) {
+        if (path == entry->mnt_dir) return true;
+    }
+    return false;
 }
 
 static void Stop_Async_Data_Size();
@@ -1585,7 +1610,16 @@ bool TWPartition::UnMount(bool Display_Error, int flags) {
         if (never_unmount_system == 1 && Mount_Point == PartitionManager.Get_Android_Root_Path())
             return true; // Never unmount system if you're not supposed to unmount it
 
-        Ensure_Subdirectory_Unmounted(Mount_Point.c_str());
+        const bool had_user_bind = Mount_Point == "/data" && Is_Path_Mounted("/data/user/0");
+        const auto restore_user_bind = [&] {
+            if (had_user_bind && !Is_Path_Mounted("/data/user/0") &&
+                mount("/data/data", "/data/user/0", nullptr, MS_BIND, nullptr) != 0)
+                LOGERR("Unable to restore /data/user/0: %s\n", strerror(errno));
+        };
+        if (!Ensure_Subdirectory_Unmounted(Mount_Point.c_str())) {
+            restore_user_bind();
+            return false;
+        }
 
         if (Is_Storage && MTP_Storage_ID > 0)
             PartitionManager.Remove_MTP_Storage(MTP_Storage_ID);
@@ -1599,10 +1633,19 @@ bool TWPartition::UnMount(bool Display_Error, int flags) {
                 gui_msg(Msg(msg::kError, "fail_unmount=Failed to unmount '{1}' ({2})")(Mount_Point)(strerror(errno)));
             else
                 LOGINFO("Unable to unmount '%s'\n", Mount_Point.c_str());
+            // The parent is still mounted: restore storage access removed
+            // above rather than leaving /sdcard and MTP detached on failure.
+            restore_user_bind();
+            if (!Symlink_Mount_Point.empty() && !Is_Path_Mounted(Symlink_Mount_Point) &&
+                !Bind_Mount(false))
+                LOGERR("Unable to restore bind mount '%s'\n", Symlink_Mount_Point.c_str());
+            if (Is_Storage && MTP_Storage_ID > 0)
+                PartitionManager.Add_MTP_Storage(MTP_Storage_ID);
             return false;
         } else {
+            DE_Keys_Ready = false;
             // fscrypt keys live in the mounted filesystem's keyring.
-            if (Is_FBE && Mount_Point == "/data" && DataManager::GetIntValue(TW_IS_DECRYPTED))
+            if (Is_FBE && Mount_Point == "/data")
                 PartitionManager.Mark_Data_Locked();
             return true;
         }
@@ -2942,7 +2985,7 @@ void TWPartition::Find_Actual_Block_Device() {
             }
         }
         return;
-    } else if (Is_Decrypted && !Decrypted_Block_Device.empty()) {
+    } else if ((Is_Decrypted || Is_FBE) && !Decrypted_Block_Device.empty()) {
         Actual_Block_Device = Decrypted_Block_Device;
         if (TWFunc::IsPathExists(Decrypted_Block_Device)) {
             Is_Present = true;

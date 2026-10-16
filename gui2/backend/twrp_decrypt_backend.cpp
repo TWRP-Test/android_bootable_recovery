@@ -20,6 +20,7 @@ twrp_decrypt_backend::~twrp_decrypt_backend() {
 }
 
 bool twrp_decrypt_backend::is_encrypted() {
+  if (DataManager::GetIntValue(TW_IS_FBE)) return TWPartition::Data_Is_Locked();
   return DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0;
 }
 

@@ -1994,8 +1994,10 @@ void TWPartitionManager::Mark_Data_Locked() {
         // a policy for, so the next decrypt would install nothing.
         fscrypt_lock_ce_storage(atoi(user.userId.c_str()));
         user.isDecrypted = false;
-        android::base::SetProperty(std::format("twrp.user.{}.decrypt", user.userId), "1");
+        android::base::SetProperty(std::format("twrp.user.{}.decrypt", user.userId), "0");
     }
+    if (TWPartition* dat = Find_Partition_By_Path("/data"))
+        dat->Is_Decrypted = false;
     Check_Users_Decryption_Status();
     DataManager::SetValue(TW_IS_DECRYPTED, 0);
     DataManager::SetValue(TW_IS_ENCRYPTED, 1);
@@ -2024,8 +2026,10 @@ void TWPartitionManager::Check_Users_Decryption_Status() {
         LOGINFO("All found users are decrypted.\n");
         DataManager::SetValue("tw_all_users_decrypted", "1");
         android::base::SetProperty("twrp.all.users.decrypted", "true");
-    } else
+    } else {
         DataManager::SetValue("tw_all_users_decrypted", "0");
+        android::base::SetProperty("twrp.all.users.decrypted", "false");
+    }
 #endif
 }
 
