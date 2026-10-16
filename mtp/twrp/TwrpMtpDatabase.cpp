@@ -525,7 +525,7 @@ MtpResponseCode TwrpMtpDatabase::getDevicePropertyValue(const MtpDeviceProperty 
         case MTP_TYPE_STR: {
             MTPD("MTP_TYPE_STR\n");
             const std::string prop_value =
-                android::base::GetProperty("ro.color597.product_name", "unknown manufacturer");
+                android::base::GetProperty("ro.product.model", "unknown model");
             packet.putString(prop_value.c_str());
             break;
         }
@@ -737,9 +737,13 @@ MtpProperty* TwrpMtpDatabase::getDevicePropertyDesc(MtpDeviceProperty property) 
             result = new MtpProperty(property, MTP_TYPE_STR,
                                      property != MTP_DEVICE_PROPERTY_IMAGE_SIZE);
 
-            // get current value
-            // TODO: add actual values
-            result->setCurrentValue(static_cast<uint16_t*>(nullptr));
+            if (property == MTP_DEVICE_PROPERTY_DEVICE_FRIENDLY_NAME) {
+                const std::string model =
+                    android::base::GetProperty("ro.product.model", "unknown model");
+                result->setCurrentValue(model.c_str());
+            } else {
+                result->setCurrentValue(static_cast<uint16_t*>(nullptr));
+            }
             result->setDefaultValue(nullptr);
             break;
     }

@@ -39,9 +39,9 @@ namespace android {
 TwrpMtpServer* TwrpMtpServer::Create() {
     // Gather device info from system properties.
     const std::string manufacturer =
-            base::GetProperty("ro.build.product", "unknown manufacturer");
+            base::GetProperty("ro.product.manufacturer", "unknown manufacturer");
     const std::string model =
-            base::GetProperty("ro.color597.product_name", "unknown model");
+            base::GetProperty("ro.product.model", "unknown model");
     const std::string serial_number =
             base::GetProperty("ro.serialno", "unknown serial number");
 
