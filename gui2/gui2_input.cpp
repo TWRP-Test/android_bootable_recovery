@@ -26,6 +26,7 @@ static bool queued_toggle_screen;
 static bool queued_back;
 static bool queued_home;
 static bool screen_off_input;
+static bool hardware_keyboard_input;
 static bool touch_state_pending;
 static lv_indev_state_t pending_touch_state = LV_INDEV_STATE_RELEASED;
 static int primary_touch_id = -1;
@@ -372,6 +373,7 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
     if (result != 0) continue;
 
     if (event.type == EV_KEY && event.code != BTN_LEFT && event.code != BTN_TOUCH) {
+      if (event.value == 1 && ev_input_is_keyboard()) hardware_keyboard_input = true;
       process_key_event(event);
       if (TranslateKeyCode(event.code) != power_key) input_activity = true;
       break;
@@ -462,6 +464,12 @@ void gui2_input_set_screen_off(bool screen_off) {
   screen_off_input = screen_off;
 }
 
+bool gui2_input_take_hardware_keyboard_input(void) {
+  const bool pressed = hardware_keyboard_input;
+  hardware_keyboard_input = false;
+  return pressed;
+}
+
 bool gui2_input_take_key_action(gui2_key_action* action) {
   if (action == nullptr) return false;
   expire_power_key();
@@ -508,6 +516,7 @@ lv_indev_t* gui2_input_init(void) {
   queued_back = false;
   queued_home = false;
   screen_off_input = false;
+  hardware_keyboard_input = false;
   pressed_keys.clear();
   typed_chars.clear();
   typed_keys.clear();

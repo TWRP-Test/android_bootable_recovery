@@ -5766,7 +5766,6 @@ static void poll_startup(uint64_t now_ms) {
   if (!startup_input_rescanned && status.step > gui2_backend::startup_step::PARTITIONS) {
     ev_exit();
     ev_init();
-    gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
     startup_input_rescanned = true;
   }
 
@@ -5994,7 +5993,6 @@ static bool gui2_loop_should_exit(void*) {
 }
 
 static void gui2_loop_tick(void*, uint64_t now_ms) {
-  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   poll_startup(now_ms);
   if (splash_dismiss_pending && gui2_shell::splash_intro_finished()) {
     gui2_shell::dismiss_splash(&splash_view);
@@ -6121,7 +6119,6 @@ static bool terminal_has_focus(void) {
 // the on-screen keyboard is typing into.
 static void gui2_loop_char(void*, int ch) {
   if (!shell_ready || input_locked()) return;
-  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   if (page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
     terminal->send_char(ch);
     return;
@@ -6131,7 +6128,6 @@ static void gui2_loop_char(void*, int ch) {
 
 static void gui2_loop_key(void*, int key_code) {
   if (!shell_ready || input_locked()) return;
-  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
   if (page_router.current() == page_kind::TERMINAL_FULLSCREEN) {
     terminal->send_key(key_code);
     return;
@@ -6212,7 +6208,6 @@ int gui2_start(const gui2_context* context) {
   pointer_indev = graphics.pointer_indev;
   gui2_core::configure_click_guard(pointer_indev, hardware);
   gui2_input_set_power_key(settings->get_int("tw_power_button", 0));
-  gui2_components::keyboard::update_hardware_keyboard(ev_has_keyboard() != 0);
 
   if (startup != nullptr) {
     gui2_shell::gui_shell_base_options metrics_options;

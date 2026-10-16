@@ -170,6 +170,7 @@ static struct stat input_identity[MAX_DEVICES];
 static unsigned next_input = 0;
 static int has_mouse = 0;
 static int has_keyboard = 0;
+static bool last_input_keyboard = false;
 // Sensor orientation relative to the active framebuffer, not USB pointers.
 static int touch_rotation = 0;
 extern unsigned int gr_rotation;
@@ -350,11 +351,17 @@ static int vk_init(struct ev *e)
     memset(capabilities, 0, sizeof(capabilities));
     if (ioctl(e->fd->fd, EVIOCGBIT(0, EV_MAX), capabilities[0]) < 0)
         return -1;
+    e->keyboard = false;
     if (test_bit(EV_KEY, capabilities[0])) {
         if (ioctl(e->fd->fd, EVIOCGBIT(EV_KEY, KEY_MAX), capabilities[EV_KEY]) < 0)
             return -1;
-        // Text-key capabilities exclude power buttons and pointer-only devices.
-        e->keyboard = test_bit(KEY_A, capabilities[EV_KEY]) &&
+        // THP/uinput devices can advertise text keys too. Only a physical
+        // USB/Bluetooth keyboard should automatically hide the soft keyboard.
+        struct input_id id = {};
+        const bool external = ioctl(e->fd->fd, EVIOCGID, &id) == 0 &&
+                              (id.bustype == BUS_USB || id.bustype == BUS_BLUETOOTH);
+        e->keyboard = external && !test_bit(BTN_TOUCH, capabilities[EV_KEY]) &&
+                      test_bit(KEY_A, capabilities[EV_KEY]) &&
                       test_bit(KEY_Z, capabilities[EV_KEY]) &&
                       test_bit(KEY_SPACE, capabilities[EV_KEY]) &&
                       test_bit(KEY_ENTER, capabilities[EV_KEY]);
@@ -368,6 +375,7 @@ static int vk_init(struct ev *e)
         const bool has_touch_protocol = test_bit(BTN_TOUCH, capabilities[EV_KEY]) ||
                                         (test_bit(ABS_MT_POSITION_X, capabilities[EV_ABS]) &&
                                          test_bit(ABS_MT_POSITION_Y, capabilities[EV_ABS]));
+        if (has_touch_protocol) e->keyboard = false;
         e->absolute_mouse = has_absolute_xy && has_mouse_button && !has_touch_protocol;
         e->mt_type_b = test_bit(ABS_MT_SLOT, capabilities[EV_ABS]) &&
                        test_bit(ABS_MT_TRACKING_ID, capabilities[EV_ABS]);
@@ -520,6 +528,11 @@ int ev_has_mouse(void)
 int ev_has_keyboard(void)
 {
     return has_keyboard;
+}
+
+bool ev_input_is_keyboard(void)
+{
+    return last_input_keyboard;
 }
 
 static void update_input_presence(void)
@@ -1435,8 +1448,10 @@ int ev_get(struct input_event *ev, int timeout_ms)
         input_read = true;
         next_input = (n + 1) % ev_count;
         mt_process_event(&evs[n], ev);
-        if (!vk_modify(&evs[n], ev))
+        if (!vk_modify(&evs[n], ev)) {
+            last_input_keyboard = evs[n].keyboard;
             return 0;
+        }
     }
     // -1 asks callers to keep draining; errors alone make no progress.
     return input_read ? -1 : -2;

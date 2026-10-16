@@ -101,8 +101,8 @@ class keyboard {
 
   // The active editing target, including a temporarily hidden keyboard.
   static keyboard* current();
-  // Synchronizes evdev presence without discarding the active editing target.
-  static void update_hardware_keyboard(bool connected);
+  // Hides the software keyboard after an actual physical-keyboard press.
+  static void notify_hardware_keyboard_input();
   // HardwareKeyboard's characters (8 backspace, 13 enter) and the arrow keys.
   void type(int ch);
   void move_cursor(bool right);
@@ -181,8 +181,6 @@ class keyboard {
   static void slide_y_cb(void* target, int32_t value);
   static void hidden_anim_done(lv_anim_t* anim);
   int resting_y_ = 0;
-  bool hardware_connected_ = false;
-  bool restore_after_hardware_ = false;
   bool manually_hidden_ = false;
 
   std::vector<key> keys_;  // stable storage the buttons point into

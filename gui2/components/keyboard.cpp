@@ -12,7 +12,6 @@ namespace {
 // Set from settings before any keyboard exists.
 int lift_pixels = 0;
 keyboard* current_keyboard = nullptr;
-bool hardware_keyboard_connected = false;
 std::vector<keyboard*> active_keyboards;
 
 bool field_available(lv_obj_t* field) {
@@ -335,10 +334,9 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
 
   rows_ = root_;
   build_rows();
-  hardware_connected_ = false;
+  resting_y_ = 0;
   manually_hidden_ = options.start_hidden;
-  restore_after_hardware_ = hardware_keyboard_connected && !options.start_hidden;
-  if (options.start_hidden || hardware_keyboard_connected) lv_obj_set_hidden(root_, true);
+  if (options.start_hidden) lv_obj_set_hidden(root_, true);
   fields_.clear();
   bind(textarea_);
   unregister_keyboard(this);
@@ -371,7 +369,7 @@ void keyboard::focus_event_cb(lv_event_t* event) {
   self->textarea_ = textarea;
   current_keyboard = self;
   blink_field_is(textarea);
-  if (code == LV_EVENT_CLICKED || !hardware_keyboard_connected) self->show();
+  self->show();
 }
 
 void keyboard::bind(lv_obj_t* textarea) {
@@ -672,25 +670,8 @@ keyboard* keyboard::current() {
   return current_keyboard;
 }
 
-void keyboard::update_hardware_keyboard(bool connected) {
-  hardware_keyboard_connected = connected;
-  const auto keyboards = active_keyboards;
-  for (keyboard* value : keyboards) {
-    if (std::find(active_keyboards.begin(), active_keyboards.end(), value) == active_keyboards.end())
-      continue;
-    if (value->hardware_connected_ != connected) {
-      value->hardware_connected_ = connected;
-      if (connected) {
-        value->restore_after_hardware_ = value->restore_after_hardware_ ||
-                                          (value->visible() && !value->manually_hidden_);
-        if (value->restore_after_hardware_) value->hide_internal();
-      }
-    }
-    if (!connected && value->restore_after_hardware_ && value == current()) {
-      value->restore_after_hardware_ = false;
-      value->show();
-    }
-  }
+void keyboard::notify_hardware_keyboard_input() {
+  if (auto* value = current(); value != nullptr && value->visible()) value->hide_internal();
 }
 
 void keyboard::type(int ch) {
@@ -712,22 +693,16 @@ void keyboard::type(int ch) {
   } else {
     return;
   }
-  if (!hardware_keyboard_connected &&
-      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   handle(definition);
 }
 
 void keyboard::move_cursor(bool right) {
-  if (!hardware_keyboard_connected &&
-      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   key definition;
   definition.kind = right ? key_kind::CURSOR_RIGHT : key_kind::CURSOR_LEFT;
   handle(definition);
 }
 
 void keyboard::move_vertical(bool down) {
-  if (!hardware_keyboard_connected &&
-      (!visible() || lv_anim_get(root_, slide_y_cb) != nullptr)) show();
   key definition;
   definition.kind = down ? key_kind::CURSOR_DOWN : key_kind::CURSOR_UP;
   handle(definition);
@@ -822,13 +797,14 @@ void keyboard::show() {
 
 void keyboard::hide() {
   manually_hidden_ = true;
-  restore_after_hardware_ = false;
   hide_internal();
 }
 
 void keyboard::hide_internal() {
   if (root_ != nullptr && !lv_obj_is_hidden(root_)) {
-    if (lv_anim_get(root_, slide_y_cb) == nullptr) resting_y_ = lv_obj_get_y(root_);
+    const auto* running = lv_anim_get(root_, slide_y_cb);
+    if (running != nullptr && running->completed_cb == hidden_anim_done) return;
+    if (running == nullptr) resting_y_ = lv_obj_get_y(root_);
     lv_anim_delete(root_, slide_y_cb);
     lv_anim_t anim;
     lv_anim_init(&anim);

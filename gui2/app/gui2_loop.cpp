@@ -3,6 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "components/keyboard.h"
 #include "gui2_display.h"
 #include "gui2_input.h"
 #include "twrpperf/perf_manager.hpp"
@@ -54,6 +55,10 @@ void run_gui2_loop(gui2_backend::screen_backend* screen, lv_indev_t* pointer_ind
     while (gui2_input_take_key(&typed)) {
       if (callbacks.on_key != nullptr) callbacks.on_key(user_data, typed);
     }
+    // Let the key reach its target, then put the software keyboard away before
+    // this frame is presented. Merely connecting a keyboard changes nothing.
+    if (gui2_input_take_hardware_keyboard_input())
+      gui2_components::keyboard::notify_hardware_keyboard_input();
 
     if (gui2_input_take_activity()) {
       screen->on_input_activity();

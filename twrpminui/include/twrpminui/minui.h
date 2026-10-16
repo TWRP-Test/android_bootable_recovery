@@ -135,6 +135,8 @@ void ev_exit(void);
 int ev_get(struct input_event* ev, int timeout_ms);
 int ev_has_mouse(void);
 int ev_has_keyboard(void);
+// Whether the last event returned by ev_get came from a physical keyboard.
+bool ev_input_is_keyboard(void);
 
 // Return the next complete multitouch frame assembled by ev_get().
 int twrp_input_take_touch_events(TWRPTouchPoint* points, int max_points);
