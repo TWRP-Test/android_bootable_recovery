@@ -3752,6 +3752,7 @@ static void refresh_decrypt_progress(void) {
 
   gui2_pages::operation_status progress;
   progress.total = 0;  // the attempt cannot report how far along it is
+  if (page_state.decrypt_refreshing) progress.items = {strings().refreshing_sizes};
   switch (state) {
     case gui2_backend::decrypt_state::DONE:
       progress.state = gui2_pages::operation_state::DONE;
@@ -3814,7 +3815,12 @@ static void show_decrypt_progress_page(page_transition transition) {
   options.initial_text =
       page_state.decrypt_refreshing ? strings().refreshing_sizes : strings().decrypting;
   options.subtitle = page_summary;
+  options.task_layout = page_state.decrypt_refreshing;
+  if (page_state.decrypt_refreshing) lv_obj_set_hidden(page_summary, true);
+  options.log_title = strings().console_title;
   page_state.decrypt_progress = gui2_pages::build_progress_page(options);
+  if (page_state.decrypt_refreshing && page_state.decrypt_progress.elapsed != nullptr)
+    lv_obj_set_hidden(page_state.decrypt_progress.elapsed, true);
   page_state.decrypt_console_consumed = 0;
   page_state.decrypt_last_poll_ms = 0;
   poll_decrypt_console();
