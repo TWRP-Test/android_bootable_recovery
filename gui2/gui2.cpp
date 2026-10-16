@@ -266,6 +266,8 @@ static void show_fastbootd_page(page_transition transition);
 static void show_sideload_progress_page(page_transition transition);
 static void show_system_read_only_page(page_transition transition);
 static void progress_reboot_system_cb(lv_event_t* event);
+static void export_log_event_cb(lv_event_t* event);
+static void failed_install_back_cb(lv_event_t* event);
 static void progress_back_cb(lv_event_t* event);
 static void show_install_confirm_page(page_transition transition);
 static void show_install_progress_page(page_transition transition);
@@ -2999,8 +3001,13 @@ static void refresh_install_progress(void) {
   const auto status = install->status();
 
   gui2_pages::operation_status progress;
-  progress.total = status.progress > 0 ? 100 : 0;
+  // Package progress is not a reliable measure of the whole installation.
+  progress.total = page_state.install_image && status.progress > 0 ? 100 : 0;
   progress.done = status.progress;
+  progress.items = status.items;
+  progress.current = status.current;
+  progress.completed = status.done;
+  progress.elapsed_ms = status.elapsed_ms;
   switch (status.state) {
     case gui2_backend::install_state::DONE:
       progress.state = gui2_pages::operation_state::DONE;
@@ -3051,6 +3058,17 @@ static void refresh_install_progress(void) {
   gui2_pages::update_progress(&page_state.install_progress, labels, progress);
 }
 
+static void failed_install_back_cb(lv_event_t* event) {
+  if (install != nullptr && install->status().state == gui2_backend::install_state::FAILED) {
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
+    install->acknowledge();
+    navigate_to(page_state.install_from_file_manager ? page_kind::FILE_MANAGER : page_kind::INSTALL,
+                nullptr, page_transition::POP);
+    return;
+  }
+  progress_back_cb(event);
+}
+
 static void install_countdown_cancel_cb(lv_event_t* event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !accept_click(event)) return;
   // Cancel this countdown without changing the saved installation preference.
@@ -3068,8 +3086,9 @@ static void flash_done_reboot_cb(lv_event_t* event) {
 }
 
 static void show_install_progress_page(page_transition transition) {
-  create_page_scaffold(page_kind::INSTALL_PROGRESS, false, strings().installing,
-                       page_state.install_selection.c_str(),
+  create_page_scaffold(page_kind::INSTALL_PROGRESS, false,
+                       page_state.install_image ? strings().install_image_tab : strings().progress_install_title,
+                       strings().installing,
                        gui2_pages::progress_actions_height(ui), transition);
   page_state.console_font_index =
       settings == nullptr ? 1 : std::clamp(settings->get_int("tw_gui2_console_font", 1), 0, 2);
@@ -3080,10 +3099,13 @@ static void show_install_progress_page(page_transition transition) {
   options.strings = &strings();
   options.console_font = runtime_console_fonts[page_state.console_font_index];
   options.initial_text = strings().installing;
+  options.task_layout = true;
+  options.log_title = strings().progress_install_log;
   options.subtitle = page_summary;
   options.page_layer = page_layer;
   const bool ab_device = settings != nullptr && settings->get_int("tw_ab_device", 0) != 0;
-  options.left_action = { strings().action_back, progress_back_cb };
+  options.left_action = { strings().action_back, failed_install_back_cb };
+  options.failed_right_action = { strings().export_log, export_log_event_cb };
   if (page_state.install_image) {
     options.right_action = { strings().action_reboot_system, progress_reboot_system_cb };
   } else {
@@ -3512,6 +3534,8 @@ static void show_wipe_progress_page(page_transition transition) {
   options.strings = &strings();
   options.console_font = runtime_console_fonts[page_state.console_font_index];
   options.initial_text = strings().wiping;
+  options.task_layout = true;
+  options.log_title = strings().progress_wipe_log;
   options.subtitle = page_summary;
   add_progress_actions(&options);
   page_state.wipe_progress = gui2_pages::build_progress_page(options);
@@ -3526,8 +3550,20 @@ static void refresh_wipe_progress(void) {
   const auto status = wipe->status();
 
   gui2_pages::operation_status progress;
-  progress.done = status.done;
-  progress.total = status.total;
+  // Item counts describe the queue; individual operations have unknown work.
+  progress.items = status.items;
+  progress.current = status.current;
+  progress.completed = status.done;
+  progress.elapsed_ms = status.elapsed_ms;
+  for (auto& item : progress.items) {
+    if (item == "data") item = strings().wipe_title;
+    else if (item == "DATAMEDIA") item = strings().format_data_title;
+    else if (item == "DALVIK") item = strings().dalvik_cache;
+    else {
+      for (const auto& target : wipe->targets())
+        if (target.mount_point == item) { item = target.name; break; }
+    }
+  }
   switch (status.state) {
     case gui2_backend::wipe_state::DONE:
       progress.state = gui2_pages::operation_state::DONE;

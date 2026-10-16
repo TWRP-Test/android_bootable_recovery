@@ -2,6 +2,7 @@
 #define GUI2_BACKEND_TWRP_WIPE_BACKEND_H
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -34,10 +35,12 @@ class twrp_wipe_backend final : public wipe_backend {
   bool start(std::vector<std::string> args);
   void run(std::vector<std::string> args);
   void join_finished_thread();
+  void report_item(const std::string& path, int index, bool completed);
 
   settings_store* settings_;
   std::mutex mutex_;
   wipe_status status_;
+  std::chrono::steady_clock::time_point started_;
   std::atomic<bool> running_{ false };
   std::thread worker_;
 };

@@ -20,6 +20,10 @@ struct operation_status {
   operation_state state = operation_state::RUNNING;
   int done = 0;
   int total = 0;
+  std::vector<std::string> items;
+  int current = 0;
+  int completed = 0;
+  uint64_t elapsed_ms = 0;
 };
 
 // The wording belongs to the caller: only it knows whether this is a wipe, a
@@ -46,12 +50,16 @@ struct progress_page_options {
   const gui2_i18n::language_pack* strings = nullptr;
   const lv_font_t* console_font = nullptr;
   const char* initial_text = nullptr;
+  // Install/wipe use a compact task card above the original console.
+  bool task_layout = false;
+  const char* log_title = nullptr;
   lv_obj_t* subtitle = nullptr;
   // Both actions have to be set for the row to exist; it lives in the page
   // layer so the console keeps its own scrolling.
   lv_obj_t* page_layer = nullptr;
   progress_action left_action;
   progress_action right_action;
+  progress_action failed_right_action;
   // One full-width button shown while the job runs, e.g. cancel.
   progress_action running_action;
   lv_event_cb_t press_guard_callback = nullptr;
@@ -63,6 +71,26 @@ struct progress_page_view {
   lv_obj_t* subtitle = nullptr;
   lv_obj_t* bar = nullptr;
   lv_obj_t* bar_fill = nullptr;
+  lv_obj_t* bar_tail = nullptr;
+  lv_obj_t* task = nullptr;
+  lv_obj_t* filename = nullptr;
+  lv_obj_t* folder = nullptr;
+  lv_obj_t* queue_toggle = nullptr;
+  lv_obj_t* queue_label = nullptr;
+  lv_obj_t* queue_body = nullptr;
+  lv_obj_t* elapsed = nullptr;
+  lv_obj_t* log_title = nullptr;
+  lv_obj_t* right_button = nullptr;
+  lv_obj_t* right_label = nullptr;
+  const gui2_i18n::language_pack* strings = nullptr;
+  std::string task_snapshot;
+  int available_height = 0;
+  int bottom_reserved = 0;
+  bool task_layout = false;
+  bool queue_open = false;
+  progress_action right_action;
+  progress_action failed_right_action;
+  bool failed_action = false;
   // Measured widths are zero until the first layout pass, so the usable
   // track width is computed up front instead.
   int track_width = 0;

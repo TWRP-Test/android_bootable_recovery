@@ -1,6 +1,7 @@
 #include "twrp_wipe_backend.h"
 
 #include <utility>
+#include <functional>
 
 #include "data.hpp"
 #include "gui/gui.hpp"
@@ -14,7 +15,7 @@ namespace gui2_backend {
 namespace {
 
 // GUIAction::wipe; 0 is success.
-int wipe(std::string arg) {
+int wipe(std::string arg, const std::function<void(const std::string&, int, bool)>& report) {
   operation_start("Format");
   DataManager::SetValue("tw_partition", arg);
   int ret_val = false;
@@ -50,6 +51,7 @@ int wipe(std::string arg) {
     bool skip = false;
     ret_val = true;
 
+    int item_index = 0;
     DataManager::GetValue("tw_wipe_list", Wipe_List);
     LOGINFO("wipe list '%s'\n", Wipe_List.c_str());
     if (!Wipe_List.empty()) {
@@ -57,6 +59,7 @@ int wipe(std::string arg) {
       while (end_pos != std::string::npos && start_pos < Wipe_List.size()) {
         wipe_path = Wipe_List.substr(start_pos, end_pos - start_pos);
         LOGINFO("wipe_path '%s'\n", wipe_path.c_str());
+        report(wipe_path, item_index, false);
         if (wipe_path == "/and-sec") {
           if (!PartitionManager.Wipe_Android_Secure()) {
             gui_msg("and_sec_wipe_err=Unable to wipe android secure");
@@ -92,6 +95,7 @@ int wipe(std::string arg) {
         } else {
           skip = false;
         }
+        report(wipe_path, item_index++, true);
         start_pos = end_pos + 1;
         end_pos = Wipe_List.find(";", start_pos);
       }
@@ -138,9 +142,18 @@ bool twrp_wipe_backend::start(std::vector<std::string> args) {
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    status_ = {};
     status_.state = wipe_state::RUNNING;
-    status_.done = 0;
-    status_.total = 0;
+    if (args.front() == "LIST") {
+      const std::string list = DataManager::GetStrValue("tw_wipe_list");
+      size_t start = 0;
+      for (size_t end; (end = list.find(';', start)) != std::string::npos; start = end + 1)
+        if (end > start) status_.items.push_back(list.substr(start, end - start));
+    } else {
+      status_.items = args;
+    }
+    status_.total = static_cast<int>(status_.items.size());
+    started_ = std::chrono::steady_clock::now();
   }
 
   running_.store(true);
@@ -164,21 +177,41 @@ bool twrp_wipe_backend::start_wipe(const std::vector<std::string>& mount_points)
   return start({ "LIST" });
 }
 
-// Each argument is one wipe action; the page shows how the last one ended.
+void twrp_wipe_backend::report_item(const std::string&, int index, bool completed) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  status_.current = index;
+  if (completed) status_.done = index + 1;
+}
+
+// Keep the existing LIST operation and its final size update intact.
 void twrp_wipe_backend::run(std::vector<std::string> args) {
   int ret_val = 0;
-  for (const std::string& arg : args) ret_val = wipe(arg);
+  for (size_t i = 0; i < args.size(); ++i) {
+    const auto& arg = args[i];
+    if (arg != "LIST") report_item(arg, static_cast<int>(i), false);
+    ret_val = wipe(arg, [this](const std::string& path, int index, bool completed) {
+      report_item(path, index, completed);
+    });
+    if (ret_val != 0) break;
+    if (arg != "LIST") report_item(arg, static_cast<int>(i), true);
+  }
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
     status_.state = ret_val == 0 ? wipe_state::DONE : wipe_state::FAILED;
+    status_.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_).count();
   }
   running_.store(false);
 }
 
 wipe_status twrp_wipe_backend::status() {
   std::lock_guard<std::mutex> lock(mutex_);
-  return status_;
+  auto result = status_;
+  if (running_.load())
+    result.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_).count();
+  return result;
 }
 
 }  // namespace gui2_backend

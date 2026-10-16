@@ -400,6 +400,15 @@ struct language_pack {
   const char* action_reboot_system;
   const char* timezone_names[24];
   action_text actions[7];
+  const char* progress_elapsed;
+  const char* progress_item_count;
+  const char* progress_done_count;
+  const char* progress_item_done;
+  const char* progress_item_waiting;
+  const char* progress_item_skipped;
+  const char* progress_install_log;
+  const char* progress_wipe_log;
+  const char* progress_install_title;
 };
 
 const language_pack& get_language_pack(language_id language);

@@ -422,6 +422,15 @@ extern const language_pack kEnglish = {
       { "Settings", "Recovery Settings",
         "Configure language, display and other recovery environment options." },
   },
+  "Elapsed %s",
+  "Item %d of %d",
+  "Completed %d of %d",
+  "Done",
+  "Waiting",
+  "Not run",
+  "Installation log",
+  "Wipe log",
+  "Install ZIP",
 };
 
 }  // namespace gui2_i18n

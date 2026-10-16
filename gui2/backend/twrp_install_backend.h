@@ -2,6 +2,7 @@
 #define GUI2_BACKEND_TWRP_INSTALL_BACKEND_H
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -32,6 +33,8 @@ class twrp_install_backend final : public install_backend {
   std::atomic<bool> running_{ false };
   std::mutex mutex_;
   install_state state_ = install_state::IDLE;
+  install_status status_;
+  std::chrono::steady_clock::time_point started_;
 };
 
 }  // namespace gui2_backend

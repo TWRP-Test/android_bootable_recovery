@@ -1,6 +1,7 @@
 #ifndef GUI2_BACKEND_WIPE_BACKEND_H
 #define GUI2_BACKEND_WIPE_BACKEND_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,9 @@ struct wipe_status {
   wipe_state state = wipe_state::IDLE;
   int done = 0;
   int total = 0;
+  std::vector<std::string> items;
+  int current = 0;
+  uint64_t elapsed_ms = 0;
 };
 
 // Long running partition operations. The start calls return once the work is

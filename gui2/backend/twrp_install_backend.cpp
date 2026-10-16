@@ -100,6 +100,9 @@ bool twrp_install_backend::start_zip(const std::vector<std::string>& paths) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_ = install_state::RUNNING;
+    status_ = {};
+    status_.items = paths;
+    started_ = std::chrono::steady_clock::now();
   }
   running_.store(true);
   worker_ = std::thread(&twrp_install_backend::run_zip, this, paths);
@@ -111,6 +114,10 @@ void twrp_install_backend::run_zip(std::vector<std::string> zip_queue) {
   int i, ret_val = 0, wipe_cache = 0;
   const int zip_queue_index = static_cast<int>(zip_queue.size());
   for (i = 0; i < zip_queue_index; i++) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      status_.current = i;
+    }
     std::string zip_path = zip_queue[i];
     size_t slashpos = zip_path.find_last_of('/');
     std::string zip_filename =
@@ -120,12 +127,14 @@ void twrp_install_backend::run_zip(std::vector<std::string> zip_queue) {
     if ((zip_path.substr(zip_path.size() - 4, 4)) == "ozip") {
       if ((ozip_decrypt(zip_path)) != 0) {
         LOGERR("Unable to find ozip_decrypt!");
+        ret_val = 1;
         break;
       }
       zip_filename = (zip_filename.substr(0, zip_filename.size() - 4)).append("zip");
       zip_path = (zip_path.substr(0, zip_path.size() - 4)).append("zip");
       if (!TWFunc::IsPathExists(zip_path)) {
         LOGERR("Unable to find decrypted zip");
+        ret_val = 1;
         break;
       }
     }
@@ -142,6 +151,10 @@ void twrp_install_backend::run_zip(std::vector<std::string> zip_queue) {
       ret_val = 1;
       break;
     }
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      status_.done = i + 1;
+    }
   }
 
   if (wipe_cache) {
@@ -156,6 +169,8 @@ void twrp_install_backend::run_zip(std::vector<std::string> zip_queue) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_ = ret_val == 0 ? install_state::DONE : install_state::FAILED;
+    status_.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_).count();
   }
   running_.store(false);
 }
@@ -208,6 +223,9 @@ bool twrp_install_backend::start_image(const std::string& path, const std::strin
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_ = install_state::RUNNING;
+    status_ = {};
+    status_.items = {path};
+    started_ = std::chrono::steady_clock::now();
   }
   // What the legacy file selector and flash image page leave behind.
   const size_t slash = path.find_last_of('/');
@@ -259,15 +277,20 @@ void twrp_install_backend::run_image() {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_ = op_status == 0 ? install_state::DONE : install_state::FAILED;
+    status_.done = op_status == 0 ? 1 : 0;
+    status_.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_).count();
   }
   running_.store(false);
 }
 
 install_status twrp_install_backend::status() {
-  install_status result;
   std::lock_guard<std::mutex> lock(mutex_);
+  install_status result = status_;
   result.state = state_;
   if (state_ == install_state::RUNNING) {
+    result.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_).count();
     const int progress = std::atoi(DataManager::GetStrValue("ui_progress").c_str());
     if (progress > 0) result.progress = std::min(progress, 100);
   }

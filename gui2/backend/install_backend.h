@@ -1,6 +1,7 @@
 #ifndef GUI2_BACKEND_INSTALL_BACKEND_H
 #define GUI2_BACKEND_INSTALL_BACKEND_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,10 @@ struct install_status {
   install_state state = install_state::IDLE;
   // 0-100 as the zip reports it; -1 when it reports nothing.
   int progress = -1;
+  std::vector<std::string> items;
+  int current = 0; // Zero-based; retained on failure.
+  int done = 0;
+  uint64_t elapsed_ms = 0;
 };
 
 // A partition an image can be written to, as the legacy flash image page
