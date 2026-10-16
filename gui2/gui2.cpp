@@ -1148,6 +1148,19 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
                                  const char* summary, int bottom_reserved = 0,
                                  page_transition transition = page_transition::NONE) {
   flush_hardware_settings();
+#if LV_USE_GESTURE_RECOGNITION
+  if (pointer_indev != nullptr) {
+    const bool terminal_page = page == page_kind::CONSOLE && page_state.console_tab == 1;
+    // Terminal has no rotation action. Its recognizer must not claim a pinch
+    // when real fingers turn slightly; LVGL otherwise starts it at zero.
+    lv_indev_set_rotation_rad_threshold(pointer_indev, terminal_page ? 6.3f :
+                                       LV_INDEV_DEF_GESTURE_ROTATION_THRESHOLD / 1000.0f);
+    lv_indev_set_pinch_up_threshold(pointer_indev, terminal_page ? 1.05f :
+                                   LV_INDEV_DEF_GESTURE_PINCH_UP_THRESHOLD / 100.0f);
+    lv_indev_set_pinch_down_threshold(pointer_indev, terminal_page ? 0.95f :
+                                     LV_INDEV_DEF_GESTURE_PINCH_DOWN_THRESHOLD / 100.0f);
+  }
+#endif
   close_quick_menu();
   mount_view = {};
   for (int i = 0; i < 3; ++i) {
@@ -3350,9 +3363,29 @@ static void terminal_scroll_cb(lv_event_t*) {
 
 static void terminal_touch_cb(lv_event_t* event) {
   const auto code = lv_event_get_code(event);
-  if (code == LV_EVENT_SCROLL_BEGIN) {
+  if (code == LV_EVENT_GESTURE && lv_event_get_gesture_type(event) == LV_INDEV_GESTURE_PINCH) {
+    const auto state = lv_event_get_gesture_state(event, LV_INDEV_GESTURE_PINCH);
     page_state.terminal_gesture_ms = lv_tick_ms();
-  } else if (code == LV_EVENT_SHORT_CLICKED &&
+    if (state == LV_INDEV_GESTURE_STATE_RECOGNIZED) {
+      if (!page_state.terminal_pinch_active) {
+        page_state.terminal_pinch_active = true;
+        page_state.terminal_pinch_start_font = graphics.fonts.terminal_size();
+      }
+      const float scale = lv_event_get_pinch_scale(event);
+      if (!std::isfinite(scale) || scale <= 0.0f) return;
+      const int size = static_cast<int>(std::lround(std::clamp(
+          page_state.terminal_pinch_start_font * scale, 20.0f, 64.0f)));
+      if (size != graphics.fonts.terminal_size()) {
+        graphics.fonts.resize_terminal(size);
+        gui2_pages::set_terminal_font(&page_state.terminal_view, graphics.fonts.terminal());
+        terminal_keyboard_moved(page_state.terminal_keyboard_visible);
+      }
+    } else if (state == LV_INDEV_GESTURE_STATE_ENDED || state == LV_INDEV_GESTURE_STATE_CANCELED) {
+      page_state.terminal_pinch_active = false;
+    }
+  } else if (code == LV_EVENT_SCROLL_BEGIN) {
+    page_state.terminal_gesture_ms = lv_tick_ms();
+  } else if (code == LV_EVENT_SHORT_CLICKED && !page_state.terminal_pinch_active &&
              (page_state.terminal_gesture_ms == 0 ||
               lv_tick_ms() - page_state.terminal_gesture_ms > 350)) {
     page_state.terminal_keyboard_widget.show();
