@@ -1,6 +1,7 @@
 #include "kernel_module_loader.hpp"
 
 #include <sys/mount.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -59,7 +60,7 @@ bool KernelModuleLoader::LoadVendorModules() {
   std::vector ramdisk_module_dirs = { kVendorBootModuleDir };
 
   if (std::string kernel_version = android::base::GetProperty("ro.kernel.version", "");
-    !kernel_version.empty()) {
+      !kernel_version.empty()) {
     ramdisk_module_dirs.push_back(kVendorBootModuleDir / kernel_version);
 #ifndef TW_LOAD_VENDOR_MODULES_EXCLUDE_GKI
     const auto gki = std::format("{}-gki", kernel_version);
@@ -93,14 +94,21 @@ bool KernelModuleLoader::LoadVendorModules() {
 
   TWPartition* ven = PartitionManager.FindPartitionByPath("/vendor");
   TWPartition* ven_dlkm = PartitionManager.FindPartitionByPath("/vendor_dlkm");
-  if (ven) {
-    LOGINFO("Checking mounted /vendor\n");
-    ven->Mount(true);
+  TWPartition* odm = PartitionManager.FindPartitionByPath("/odm");
+  TWPartition* system =
+      PartitionManager.FindPartitionByPath(PartitionManager.GetAndroidRootPath());
+  TWPartition* system_ext = PartitionManager.FindPartitionByPath("/system_ext");
+  // Optional device hooks may cache matching userspace resources before the
+  // drivers request them. Only mount their extra sources when a hook exists.
+  const bool cache_runtime = access("/system/bin/cache-device-runtime.sh", R_OK) == 0;
+  bool mounted_odm = false, mounted_system = false, mounted_system_ext = false;
+  if (cache_runtime) {
+    mounted_odm = odm && !odm->IsMounted() && odm->Mount(false);
+    mounted_system = system && !system->IsMounted() && system->Mount(false);
+    mounted_system_ext = system_ext && !system_ext->IsMounted() && system_ext->Mount(false);
   }
-  if (ven_dlkm) {
-    LOGINFO("Checking mounted /vendor_dlkm\n");
-    ven_dlkm->Mount(true);
-  }
+  const bool mounted_vendor = ven && !ven->IsMounted() && ven->Mount(true);
+  const bool mounted_vendor_dlkm = ven_dlkm && !ven_dlkm->IsMounted() && ven_dlkm->Mount(true);
 
   auto unmount_with_kill = [](TWPartition* partition, int fallback_flags) {
     if (!partition || partition->Unmount(false)) return;
@@ -114,16 +122,34 @@ bool KernelModuleLoader::LoadVendorModules() {
 
   /* Always release whatever we mounted, even on an early return below. */
   auto mount_guard = android::base::make_scope_guard([&] {
-    unmount_with_kill(ven_dlkm, MNT_DETACH);
-    unmount_with_kill(ven, 0);
+    if (mounted_vendor_dlkm) unmount_with_kill(ven_dlkm, MNT_DETACH);
+    if (mounted_vendor) unmount_with_kill(ven, 0);
+    if (mounted_odm) unmount_with_kill(odm, 0);
+    if (mounted_system_ext) unmount_with_kill(system_ext, 0);
+    if (mounted_system) unmount_with_kill(system, 0);
   });
+
+  if (cache_runtime && TWFunc::ExecCmd("/system/bin/sh /system/bin/cache-device-runtime.sh") != 0)
+    LOGINFO("Optional device runtime cache preparation failed\n");
 
   for (const auto& module_dir : vendor_module_dirs) TryAndLoadModules(module_dir, true);
 
   TryAndLoadModules(std::string(kVendorDlkmModuleDir), true);
 
+  // Restore RAM paths before publishing readiness. HAL/THP consumers must not
+  // retain files on partitions that recovery needs to release for flashing.
+  if (mounted_vendor_dlkm) unmount_with_kill(ven_dlkm, MNT_DETACH);
+  if (mounted_vendor) unmount_with_kill(ven, 0);
+  if (mounted_odm) unmount_with_kill(odm, 0);
+  if (mounted_system_ext) unmount_with_kill(system_ext, 0);
+  if (mounted_system) unmount_with_kill(system, 0);
+  mount_guard.Disable();
+  if (cache_runtime && TWFunc::ExecCmd("/system/bin/sh /system/bin/restore-device-runtime.sh") != 0)
+    LOGINFO("Optional device runtime cache restoration failed\n");
+
   android::base::SetProperty(TW_MODULES_MOUNTED_PROP, "true");
-  LOGINFO("Finished attempting to load requested kernel modules; "
+  LOGINFO(
+      "Finished attempting to load requested kernel modules; "
       "unavailable modules are optional for this device\n");
   return true;
 }
@@ -139,8 +165,8 @@ bool KernelModuleLoader::TryAndLoadModules(std::string module_dir, const bool ve
   if (!WriteModuleList(dest_module_dir)) return false;
   /* When /vendor is not mounted we cannot bind onto it; remap to the
    * ramdisk /lib/modules target instead. */
-  if (!vendor_is_mounted && std::string_view{ module_dir } ==
-      kVendorModuleDir) module_dir = kVendorBootModuleDir;
+  if (!vendor_is_mounted && std::string_view{ module_dir } == kVendorModuleDir)
+    module_dir = kVendorBootModuleDir;
   LOGINFO("mounting %s on %s\n", dest_module_dir.c_str(), module_dir.c_str());
   if (mount(dest_module_dir.c_str(), module_dir.c_str(), nullptr, MS_BIND, nullptr) == 0) {
     Modprobe modprobe({ module_dir }, "modules.load.twrp", false);
@@ -203,7 +229,7 @@ bool KernelModuleLoader::WriteModuleList(const std::string& module_dir) {
   std::vector<std::string> kernel_modules;
   for (const auto& entry : dir) {
     if (const auto name = entry.path().filename().string();
-      entry.is_regular_file() && entry.path().extension() == ".ko" && wanted.contains(name)) {
+        entry.is_regular_file() && entry.path().extension() == ".ko" && wanted.contains(name)) {
       kernel_modules.push_back(name);
     }
   }
