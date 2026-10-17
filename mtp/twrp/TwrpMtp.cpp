@@ -17,6 +17,8 @@
 #include "TwrpMtp.hpp"
 
 #include <cstdlib>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "../MtpDebug.h"
@@ -48,6 +50,20 @@ pid_t TwrpMtp::ForkServer(int mtp_pipe[2]) {
   if (pid == 0) {
     // Child process
     close(mtp_pipe[1]); // Child closes write side
+    // The recovery can be scanning /data on another thread during fork().
+    // Those inherited directory descriptors would keep it busy until MTP exits.
+    DIR* descriptors = opendir("/proc/self/fd");
+    if (descriptors == nullptr) std::_Exit(1);
+    const int directory_fd = dirfd(descriptors);
+    while (const dirent* entry = readdir(descriptors)) {
+      char* end = nullptr;
+      const long fd = std::strtol(entry->d_name, &end, 10);
+      struct stat info;
+      if (*end == '\0' && fd > STDERR_FILENO && fd != directory_fd && fd != mtp_pipe[0] &&
+          fstat(static_cast<int>(fd), &info) == 0 && S_ISDIR(info.st_mode))
+        close(static_cast<int>(fd));
+    }
+    closedir(descriptors);
     mtp_read_pipe_ = mtp_pipe[0];
     Start();
     MTPD("MTP child process exited.\n");
