@@ -405,7 +405,7 @@ private:
   bool FindPartitionSize();
 
   // Ensure that a subdirectory is unmounted before unmounting this partition
-  static void EnsureSubdirectoryUnmounted(const char* mount_point);
+  static bool EnsureSubdirectoryUnmounted(const char* mount_point);
 
   // Create an ext2/ext3/ext4 filesystem
   bool WipeExtfs(const std::string& file_system);
@@ -535,6 +535,9 @@ private:
   bool is_decrypted_;
   // File Based Encryption is present
   bool is_fbe_;
+  // Existing device/DE keys installed on this mount
+  bool de_keys_ready_ = false;
+  bool RestoreDeKeys();
   bool mount_to_decrypt_;
   // Mount this partition during decrypt (/vendor, /firmware, etc in case we need proprietary libs or firmware files)
   // Display name for the GUI

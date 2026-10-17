@@ -58,7 +58,8 @@ void TWExclude::add_absolute_dir(const string& dir) {
 	absolutedir.push_back(TWFunc::RemoveTrailingSlashes(dir));
 }
 
-uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
+uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error, const std::atomic<bool>* cancel) {
+	if (cancel && cancel->load()) return 0;
 	DIR* d;
 	struct dirent* de;
 	struct stat st;
@@ -72,7 +73,7 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
 		return 0;
 	}
 
-	while ((de = readdir(d)) != NULL) {
+	while ((!cancel || !cancel->load()) && (de = readdir(d)) != NULL) {
 		FullPath = Path + "/";
 		FullPath += de->d_name;
 		if (lstat(FullPath.c_str(), &st)) {
@@ -82,7 +83,7 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
 			continue;
 		}
 		if ((st.st_mode & S_IFDIR) && !check_skip_dirs(FullPath) && de->d_type != DT_SOCK) {
-			dusize += Get_Folder_Size(FullPath, Display_Error);
+			dusize += Get_Folder_Size(FullPath, Display_Error, cancel);
 		} else if (st.st_mode & S_IFREG || st.st_mode & S_IFLNK) {
 			dusize += (uint64_t)(st.st_size);
 		}
@@ -93,7 +94,8 @@ uint64_t TWExclude::Get_Folder_Size(const string& Path, bool Display_Error) {
 
 // Same recursive stat walk as Get_Folder_Size, but without skip-dir checks;
 // used to measure the exact size of each absolute exclusion directory.
-static uint64_t _Get_Folder_Size(const string& Path) {
+static uint64_t _Get_Folder_Size(const string& Path, const std::atomic<bool>* cancel) {
+	if (cancel && cancel->load()) return 0;
 	DIR* d;
 	struct dirent* de;
 	struct stat st;
@@ -103,14 +105,14 @@ static uint64_t _Get_Folder_Size(const string& Path) {
 	d = opendir(Path.c_str());
 	if (d == NULL) return 0;
 
-	while ((de = readdir(d)) != NULL) {
+	while ((!cancel || !cancel->load()) && (de = readdir(d)) != NULL) {
 		if(!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..") || !strcmp(de->d_name, "lost+found"))
 			continue;
 		FullPath = Path + "/";
 		FullPath += de->d_name;
 		if (lstat(FullPath.c_str(), &st)) continue;
 		if ((st.st_mode & S_IFDIR) && de->d_type != DT_SOCK) {
-			dusize += _Get_Folder_Size(FullPath);
+			dusize += _Get_Folder_Size(FullPath, cancel);
 		} else if (st.st_mode & S_IFREG || st.st_mode & S_IFLNK) {
 			dusize += (uint64_t)(st.st_size);
 		}
@@ -119,11 +121,11 @@ static uint64_t _Get_Folder_Size(const string& Path) {
 	return dusize;
 }
 
-uint64_t TWExclude::Get_Exclusions_Folder_Size() {
+uint64_t TWExclude::Get_Exclusions_Folder_Size(const std::atomic<bool>* cancel) {
 	uint64_t dusize = 0;
-	for (size_t i = 0; i < absolutedir.size(); i++) {
+	for (size_t i = 0; i < absolutedir.size() && (!cancel || !cancel->load()); i++) {
 		string exclude_dir = absolutedir[i];
-		if (TWFunc::IsPathExists(exclude_dir)) dusize += _Get_Folder_Size(exclude_dir);
+		if (TWFunc::IsPathExists(exclude_dir)) dusize += _Get_Folder_Size(exclude_dir, cancel);
 	}
 	return dusize;
 }

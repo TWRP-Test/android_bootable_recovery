@@ -1950,8 +1950,9 @@ void TWPartitionManager::MarkDataLocked() {
     // a policy for, so the next decrypt would install nothing.
     fscrypt_lock_ce_storage(user.user_id);
     user.is_decrypted = false;
-    android::base::SetProperty(std::format("twrp.user.{}.decrypt", user.user_id), "1");
+    android::base::SetProperty(std::format("twrp.user.{}.decrypt", user.user_id), "0");
   }
+  if (TWPartition* data = FindPartitionByPath("/data")) data->is_decrypted_ = false;
   CheckUsersDecryptionStatus();
   DataManager::SetValue(TW_IS_DECRYPTED, 0);
   DataManager::SetValue(TW_IS_ENCRYPTED, 1);
@@ -1980,7 +1981,10 @@ void TWPartitionManager::CheckUsersDecryptionStatus() const {
     LOGINFO("All found users are decrypted.\n");
     DataManager::SetValue("tw_all_users_decrypted", "1");
     android::base::SetProperty("twrp.all.users.decrypted", "true");
-  } else DataManager::SetValue("tw_all_users_decrypted", "0");
+  } else {
+    DataManager::SetValue("tw_all_users_decrypted", "0");
+    android::base::SetProperty("twrp.all.users.decrypted", "false");
+  }
 #endif
 }
 
@@ -3025,6 +3029,28 @@ void TWPartitionManager::HandleUevent(const UeventBlockData& uevent_data) {
       }
       if (device == uevent_data.sysfs_path.substr(0, device.size())) {
         // Found a match
+        if (uevent_data.type == "partition") {
+          // The disk's add event can arrive before its partitions.
+          // Rescan using the disk path, not the new partition as a
+          // wildcard prefix (sda1* would miss sda2).
+          if (uevent_data.action == "add" || uevent_data.action == "change") {
+            partition->FindActualBlockDevice();
+          } else if (uevent_data.action == "remove") {
+            const std::string block = fs::path("/dev/block") / uevent_data.block_device;
+            for (auto it = partitions_.begin(); it != partitions_.end(); ++it) {
+              TWPartition* child = *it;
+              if (child->is_sub_partition_ && child->sub_partition_of_ == partition->mount_point_ &&
+                  child->primary_block_device_ == block) {
+                child->Unmount(false);
+                rmdir(child->mount_point_.c_str());
+                partitions_.erase(it);
+                delete child;
+                break;
+              }
+            }
+          }
+          return;
+        }
         if (uevent_data.action == "add") {
           partition->primary_block_device_ = fs::path("/dev/block") / uevent_data.block_device;
           partition->alternate_block_device_ = partition->primary_block_device_;
@@ -3111,16 +3137,22 @@ UeventBlockData TWPartitionManager::GetEventBlockValues(char* buf, const int len
 }
 
 void TWPartitionManager::ReadUevent() const {
-  char buf[1024];
-
-  const auto len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT);
-  if (len == -1) {
-    LOGINFO("recv error on uevent\n");
-    return;
-  }
-  if (const UeventBlockData uevent_data = GetEventBlockValues(buf, static_cast<int>(len));
-    uevent_data.subsystem == "block" && uevent_data.type == "disk") {
-    PartitionManager.HandleUevent(uevent_data);
+  // USB discovery emits many unrelated events. Drain a bounded batch so a
+  // partition is not delayed by one event per rendered frame.
+  for (int count = 0; count < 64; ++count) {
+    char buf[4096];
+    const auto len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT | MSG_TRUNC);
+    if (len < 0) {
+      if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+        LOGINFO("recv error on uevent: %s\n", strerror(errno));
+      return;
+    }
+    if (len == 0 || len >= static_cast<decltype(len)>(sizeof(buf))) continue;
+    const UeventBlockData uevent_data = GetEventBlockValues(buf, static_cast<int>(len));
+    if (uevent_data.subsystem == "block" &&
+        (uevent_data.type == "disk" || uevent_data.type == "partition")) {
+      PartitionManager.HandleUevent(uevent_data);
+    }
   }
 }
 
