@@ -70,8 +70,8 @@ void twrp_sideload_backend::run() {
     int wipe_cache = 0;
     int wipe_dalvik = 0;
     DataManager::GetValue("tw_wipe_dalvik", wipe_dalvik);
-    if (wipe_cache || DataManager::GetIntValue("tw_wipe_cache")) PartitionManager.Wipe_By_Path("/cache");
-    if (wipe_dalvik) PartitionManager.Wipe_Dalvik_Cache();
+    if (wipe_cache || DataManager::GetIntValue("tw_wipe_cache")) PartitionManager.WipeByPath("/cache");
+    if (wipe_dalvik) PartitionManager.WipeDalvikCache();
   }
   TWFunc::ToggleMtp(mtp_was_enabled);
   operation_end(ret);

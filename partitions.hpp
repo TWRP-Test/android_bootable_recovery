@@ -88,6 +88,11 @@ enum class PartitionManagerOp {
 
 class TWPartition;
 
+namespace gui2_backend {
+class twrp_tools_backend;
+class twrp_mount_backend;
+}  // namespace gui2_backend
+
 // Settings for backup session
 struct PartitionSettings {
   // Partition to pass to the partition backup loop
@@ -607,6 +612,11 @@ private:
 
   friend class TWPartitionManager;
   friend class DataManager;
+  // gui2 backends render the same partition details as gui/action.cpp.
+  friend class gui2_backend::twrp_tools_backend;
+  // The mount page owns the explicit Data remount, so it reads is_fbe_
+  // and removable_, and calls RestoreDeKeys() on that path only.
+  friend class gui2_backend::twrp_mount_backend;
   friend class GUIPartitionList;
   friend class GUIAction;
   friend class PageManager;

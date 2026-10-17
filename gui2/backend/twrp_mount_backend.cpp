@@ -101,7 +101,7 @@ bool twrp_mount_backend::set_mounted(const std::string& mount_point, bool mounte
         data->Unmount(true);
         return false;
       }
-      if (data->is_fbe_ && TWPartition::Data_Is_Locked()) return true;
+      if (data->is_fbe_ && TWPartition::DataIsLocked()) return true;
     }
     PartitionManager.AddMtpStorage(mount_point);
     return true;
@@ -237,19 +237,19 @@ bool twrp_mount_backend::usb_storage_enabled() {
 bool twrp_mount_backend::set_usb_storage_enabled(bool enabled) {
   if (enabled) {
     DataManager::SetValue(TW_ACTION_BUSY, 1);
-    if (!has_usb_storage() || !PartitionManager.usb_storage_enable()) {
+    if (!has_usb_storage() || !PartitionManager.UsbStorageEnable()) {
       DataManager::SetValue(TW_ACTION_BUSY, 0);
       return false;
     }
     // The partition manager requests the switch; init acknowledges it.
     if (!android::base::WaitForProperty("sys.usb.state", "mass_storage,adb",
                                         std::chrono::milliseconds(1500))) {
-      PartitionManager.usb_storage_disable();
+      PartitionManager.UsbStorageDisable();
       DataManager::SetValue(TW_ACTION_BUSY, 0);
       return false;
     }
   } else {
-    if (!PartitionManager.usb_storage_disable()) return false;
+    if (!PartitionManager.UsbStorageDisable()) return false;
     DataManager::SetValue(TW_ACTION_BUSY, 0);
   }
   usb_storage_on_ = enabled;

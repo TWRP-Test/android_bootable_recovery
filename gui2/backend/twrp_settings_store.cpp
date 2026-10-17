@@ -56,8 +56,8 @@ void twrp_settings_store::update_timezone() {
 bool twrp_settings_store::restore_defaults() {
   operation_start("Restore Defaults");
   DataManager::ResetDefaults();
-  PartitionManager.Update_System_Details();
-  PartitionManager.Mount_Current_Storage(true);
+  PartitionManager.UpdateSystemDetails();
+  PartitionManager.MountCurrentStorage(true);
   operation_end(0);
   return true;
 }

@@ -55,7 +55,7 @@ file_listing twrp_file_list(const std::string& folder, const file_filter& filter
   // leave the path variable pointing somewhere nobody asked for. Only make
   // it while the storage is up, or it lands on the ramdisk under a mount
   // point with nothing mounted on it.
-  if (mPathCreate && !TWFunc::IsPathExists(folder) && PartitionManager.Is_Mounted_By_Path(folder))
+  if (mPathCreate && !TWFunc::IsPathExists(folder) && PartitionManager.IsMountedByPath(folder))
     TWFunc::RecursiveMkdir(folder);
 
   d = opendir(folder.c_str());

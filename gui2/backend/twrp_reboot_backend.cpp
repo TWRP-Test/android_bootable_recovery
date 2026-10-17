@@ -34,22 +34,22 @@ const reboot_capabilities& twrp_reboot_backend::capabilities() const {
 
 std::string twrp_reboot_backend::active_slot() const {
   if (!capabilities().boot_slots) return {};
-  return PartitionManager.Get_Active_Slot_Display();
+  return PartitionManager.GetActiveSlotDisplay();
 }
 
 // GUIAction::setbootslot
 bool twrp_reboot_backend::set_active_slot(boot_slot slot) {
   const std::string arg = slot == boot_slot::A ? "A" : "B";
   operation_start("Set Boot Slot");
-  if (PartitionManager.Find_Partition_By_Path("/vendor")) {
-    if (!PartitionManager.UnMount_By_Path("/vendor", false)) {
+  if (PartitionManager.FindPartitionByPath("/vendor")) {
+    if (!PartitionManager.UnmountByPath("/vendor", false)) {
       // PartitionManager failed to unmount /vendor, this should not happen,
       // but in case it does, do a lazy unmount
       LOGINFO("WARNING: vendor partition could not be unmounted normally!\n");
-      PartitionManager.UnMount_By_Path("/vendor", false, MNT_DETACH);
+      PartitionManager.UnmountByPath("/vendor", false, MNT_DETACH);
     }
   }
-  PartitionManager.Set_Active_Slot(arg);
+  PartitionManager.SetActiveSlot(arg);
   operation_end(0);
   return true;
 }

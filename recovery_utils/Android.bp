@@ -99,6 +99,7 @@ cc_library_static {
     // libedify, libotautil, librecovery_ui).
     visibility: [
         "//bootable/recovery",
+        "//bootable/recovery/gui2",
         "//bootable/recovery/install",
         "//bootable/recovery/minadbd",
         "//bootable/recovery/tests",

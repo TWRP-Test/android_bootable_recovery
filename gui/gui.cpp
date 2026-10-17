@@ -875,12 +875,13 @@ std::string gui_parse_text(std::string str)
 
 		size_t default_loc = var.find('=', 0);
 		std::string lookup;
+		const ResourceManager* res = PageManager::GetResources();
 		if (default_loc == std::string::npos) {
-			str.insert(next, PageManager::GetResources()->FindString(var));
+			str.insert(next, res ? res->FindString(var) : var);
 		} else {
 			lookup = var.substr(0, default_loc);
 			std::string default_string = var.substr(default_loc + 1, var.size() - default_loc - 1);
-			str.insert(next, PageManager::GetResources()->FindString(lookup, default_string));
+			str.insert(next, res ? res->FindString(lookup, default_string) : default_string);
 		}
 	}
 	pos = 0;
@@ -905,7 +906,8 @@ std::string gui_parse_text(std::string str)
 			std::string value;
 			if (var.size() > 0 && var[0] == '@') {
 				// this is a string resource ("%@string_name%")
-				value = PageManager::GetResources()->FindString(var.substr(1));
+				const ResourceManager* res = PageManager::GetResources();
+				value = res ? res->FindString(var.substr(1)) : var.substr(1);
 				str.insert(next, value);
 			}
 			else if (DataManager::GetValue(var, value) == 0)
@@ -917,7 +919,8 @@ std::string gui_parse_text(std::string str)
 }
 
 std::string gui_lookup(const std::string& resource_name, const std::string& default_value) {
-	return PageManager::GetResources()->FindString(resource_name, default_value);
+	const ResourceManager* res = PageManager::GetResources();
+	return res ? res->FindString(resource_name, default_value) : default_value;
 }
 
 int gui_init()
@@ -936,6 +939,29 @@ int gui_init()
 		LOGERR("Failed to load splash screen XML.\n");
 	}
 	else {
+		PageManager::SelectPackage("splash");
+		PageManager::Render();
+		flip();
+		PageManager::ReleasePackage("splash");
+	}
+
+#ifdef TW_DELAY_TOUCH_INIT_MS
+	usleep(TW_DELAY_TOUCH_INIT_MS);
+#endif
+	ev_init();
+	return 0;
+}
+
+int gui_init_reuse_display()
+{
+	if (gr_fb_pixel_bytes() <= 0)
+		return -1;
+
+	TWFunc::SetBrightness(DataManager::GetStrValue("tw_brightness"));
+
+	if (PageManager::LoadPackage("splash", TWRES "splash.xml", "splash")) {
+		LOGERR("Failed to load splash screen XML.\n");
+	} else {
 		PageManager::SelectPackage("splash");
 		PageManager::Render();
 		flip();

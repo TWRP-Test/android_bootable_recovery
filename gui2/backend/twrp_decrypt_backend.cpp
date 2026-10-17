@@ -20,7 +20,7 @@ twrp_decrypt_backend::~twrp_decrypt_backend() {
 }
 
 bool twrp_decrypt_backend::is_encrypted() {
-  if (DataManager::GetIntValue(TW_IS_FBE)) return TWPartition::Data_Is_Locked();
+  if (DataManager::GetIntValue(TW_IS_FBE)) return TWPartition::DataIsLocked();
   return DataManager::GetIntValue(TW_IS_ENCRYPTED) != 0;
 }
 
@@ -77,7 +77,7 @@ bool twrp_decrypt_backend::start_refresh() {
 // GUIAction::refreshsizes
 void twrp_decrypt_backend::run_refresh() {
   operation_start("Refreshing Sizes");
-  PartitionManager.Update_System_Details();
+  PartitionManager.UpdateSystemDetails();
   operation_end(0);
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -101,7 +101,7 @@ void twrp_decrypt_backend::run(std::string password) {
     if (DataManager::GetIntValue(TW_IS_FBE)) {  // for FBE
       DataManager::GetValue("tw_crypto_user_id", userID);
       if (userID != "") {
-        op_status = PartitionManager.Decrypt_Device(Password, atoi(userID.c_str()));
+        op_status = PartitionManager.DecryptDevice(Password, atoi(userID.c_str()));
         if (userID != "0") {
           if (op_status != 0) op_status = 1;
           operation_end(op_status);
@@ -113,7 +113,7 @@ void twrp_decrypt_backend::run(std::string password) {
         op_status = 1;
       }
     } else {  // for FDE
-      op_status = PartitionManager.Decrypt_Device(Password);
+      op_status = PartitionManager.DecryptDevice(Password);
     }
 
     if (op_status != 0)
@@ -121,7 +121,7 @@ void twrp_decrypt_backend::run(std::string password) {
     else {
       DataManager::SetValue(TW_IS_ENCRYPTED, 0);
       DataManager::SetBackupFolder();
-      PartitionManager.Add_MTP_Storage("/data");
+      PartitionManager.AddMtpStorage("/data");
 
       int has_datamedia;
 

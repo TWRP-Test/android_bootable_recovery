@@ -141,7 +141,7 @@ void twrp_background_backend::start() {
 // One pass of runPages' loop body, minus drawing and input.
 void twrp_background_backend::poll() {
   // Apply completed background size scans on the GUI thread.
-  PartitionManager.Process_Async_Data_Size();
+  PartitionManager.ProcessAsyncDataSize();
 
   std::lock_guard<std::mutex> lock(ors_mutex);
   fd_set fdset;
@@ -162,7 +162,7 @@ void twrp_background_backend::poll() {
   timeout.tv_usec = 1;
   if (select(select_fd, &fdset, NULL, NULL, &timeout) <= 0) return;
   if (PartitionManager.uevent_pfd.fd > 0 && FD_ISSET(PartitionManager.uevent_pfd.fd, &fdset))
-    PartitionManager.read_uevent();
+    PartitionManager.ReadUevent();
   if (ors_read_fd > 0 && !orsout && FD_ISSET(ors_read_fd, &fdset)) ors_command_read();
 }
 

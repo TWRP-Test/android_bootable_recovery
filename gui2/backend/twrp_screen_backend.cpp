@@ -90,7 +90,7 @@ bool twrp_screen_backend::has_brightness() const {
 std::string twrp_screen_backend::make_media_path(const char* directory, const char* prefix,
                                                  const char* extension) const {
   const std::string storage = DataManager::GetCurrentStoragePath();
-  const bool mounted = !storage.empty() && PartitionManager.Is_Mounted_By_Path(storage);
+  const bool mounted = !storage.empty() && PartitionManager.IsMountedByPath(storage);
   const std::string root = mounted ? storage : "/tmp";
   // Use /tmp when storage is unavailable.
   std::string folder = mounted ? root + "/" + directory : root;
@@ -116,7 +116,7 @@ capture_result twrp_screen_backend::save_screenshot() {
   gid_t gid = AID_MEDIA_RW;
 
   const std::string storage = DataManager::GetCurrentStoragePath();
-  if (PartitionManager.Is_Mounted_By_Path(storage)) {
+  if (PartitionManager.IsMountedByPath(storage)) {
     snprintf(path, sizeof(path), "%s/Pictures/Screenshots/", storage.c_str());
   } else {
     strcpy(path, "/tmp/");

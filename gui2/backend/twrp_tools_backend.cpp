@@ -34,7 +34,7 @@ int repair() {
   operation_start("Repair Partition");
   std::string part_path;
   DataManager::GetValue("tw_partition_mount_point", part_path);
-  if (PartitionManager.Repair_By_Path(part_path, true)) {
+  if (PartitionManager.RepairByPath(part_path, true)) {
     op_status = 0;  // success
   } else {
     op_status = 1;  // fail
@@ -50,7 +50,7 @@ int resize() {
   operation_start("Resize Partition");
   std::string part_path;
   DataManager::GetValue("tw_partition_mount_point", part_path);
-  if (PartitionManager.Resize_By_Path(part_path, true)) {
+  if (PartitionManager.ResizeByPath(part_path, true)) {
     op_status = 0;  // success
   } else {
     op_status = 1;  // fail
@@ -69,13 +69,13 @@ int changefilesystem() {
   std::string part_path, file_system;
   DataManager::GetValue("tw_partition_mount_point", part_path);
   DataManager::GetValue("tw_action_new_file_system", file_system);
-  if (PartitionManager.Wipe_By_Path(part_path, file_system)) {
+  if (PartitionManager.WipeByPath(part_path, file_system)) {
     op_status = 0;  // success
   } else {
     gui_err("change_fs_err=Error changing file system.");
     op_status = 1;  // fail
   }
-  PartitionManager.Update_System_Details();
+  PartitionManager.UpdateSystemDetails();
   operation_end(op_status);
   return op_status;
 }
@@ -103,7 +103,7 @@ int copylog() {
 
     DataManager::GetValue("tw_include_kernel_log", copy_kernel_log);
     DataManager::GetValue("tw_include_logcat", copy_logcat);
-    PartitionManager.Mount_Current_Storage(true);
+    PartitionManager.MountCurrentStorage(true);
     curr_storage = DataManager::GetCurrentStoragePath();
     dst = curr_storage + "/recovery.log";
     TWFunc::CopyFile("/tmp/recovery.log", dst.c_str(), 0755);
@@ -123,7 +123,7 @@ int fixcontexts() {
 
   operation_start("Fix Contexts");
   LOGINFO("fix contexts started!\n");
-  op_status = PartitionManager.Fix_Contexts();
+  op_status = PartitionManager.FixContexts();
   if (op_status != 0) op_status = 1;  // failure
   operation_end(op_status);
   return op_status;
@@ -134,7 +134,7 @@ int unmapsuperdevices() {
   int op_status = 1;
 
   operation_start("Remove Super Devices");
-  if (PartitionManager.Unmap_Super_Devices()) {
+  if (PartitionManager.UnmapSuperDevices()) {
     op_status = 0;
   }
 
@@ -163,7 +163,7 @@ int repackimage() {
   operation_start("Repack Image");
   {
     std::string path = DataManager::GetStrValue("tw_filename");
-    Repack_Options_struct Repack_Options;
+    RepackOptionsStruct Repack_Options;
     Repack_Options.Disable_Verity = false;
     Repack_Options.Disable_Force_Encrypt = false;
     Repack_Options.Backup_First = DataManager::GetIntValue("tw_repack_backup_first") != 0;
@@ -182,7 +182,7 @@ exit:
 // GUIAction::refreshsizes
 int refreshsizes() {
   operation_start("Refreshing Sizes");
-  PartitionManager.Update_System_Details();
+  PartitionManager.UpdateSystemDetails();
   operation_end(0);
   return 0;
 }
@@ -237,9 +237,9 @@ int fixabrecoverybootloop() {
       goto exit;
     }
     DataManager::SetProgress(0);
-    TWPartition* part = PartitionManager.Find_Partition_By_Path("/boot");
+    TWPartition* part = PartitionManager.FindPartitionByPath("/boot");
     if (part)
-      gui_msg(Msg("unpacking_image=Unpacking {1}...")(part->Get_Display_Name()));
+      gui_msg(Msg("unpacking_image=Unpacking {1}...")(part->GetDisplayName()));
     else {
       gui_msg(Msg(msg::kError, "unable_to_locate=Unable to locate {1}.")("/boot"));
       goto exit;
@@ -270,7 +270,7 @@ int fixabrecoverybootloop() {
       }
     }
     DataManager::SetProgress(.5);
-    gui_msg(Msg("repacking_image=Repacking {1}...")(part->Get_Display_Name()));
+    gui_msg(Msg("repacking_image=Repacking {1}...")(part->GetDisplayName()));
     command = "cd " REPACK_ORIG_DIR " && /system/bin/magiskboot repack " REPACK_ORIG_DIR "boot.img";
     if (TWFunc::ExecCmd(command) != 0) {
       gui_msg(Msg(msg::kError, "repack_error=Error repacking image."));
@@ -280,7 +280,7 @@ int fixabrecoverybootloop() {
     std::string path = REPACK_ORIG_DIR;
     std::string file = "new-boot.img";
     DataManager::SetValue("tw_flash_partition", "/boot;");
-    if (!PartitionManager.Flash_Image(path, file)) {
+    if (!PartitionManager.FlashImage(path, file)) {
       LOGINFO("Error flashing new image\n");
       goto exit;
     }
@@ -296,7 +296,7 @@ exit:
 // GUIAction::mergesnapshots, which has no operation_start of its own.
 int mergesnapshots() {
   int op_status = 1;
-  if (PartitionManager.Check_Pending_Merges()) {
+  if (PartitionManager.CheckPendingMerges()) {
     op_status = 0;
   }
   operation_end(op_status);
@@ -308,7 +308,7 @@ int disableAVB2() {
   int op_status = 1;
   operation_start("Disable AVB2.0");
   gui_highlight("disabling_AVB2=Disabling AVB2.0...");
-  if (PartitionManager.Disable_AVB2(true)) {
+  if (PartitionManager.DisableAvb2(true)) {
     op_status = 0;
   }
   operation_end(op_status);
@@ -331,7 +331,7 @@ twrp_tools_backend::~twrp_tools_backend() {
 bool twrp_tools_backend::details(const std::string& mount_point, partition_details* out) {
   if (out == nullptr) return false;
   *out = {};
-  TWPartition* Part = PartitionManager.Find_Partition_By_Path(mount_point);
+  TWPartition* Part = PartitionManager.FindPartitionByPath(mount_point);
   if (Part == nullptr) {
     LOGERR("Unable to locate partition: '%s'\n", mount_point.c_str());
     DataManager::SetValue("tw_partition_name", "");
@@ -341,21 +341,21 @@ bool twrp_tools_backend::details(const std::string& mount_point, partition_detai
     return false;
   }
   DataManager::SetValue("tw_partition_path", mount_point);
-  DataManager::SetValue("tw_partition_name", Part->Display_Name);
-  DataManager::SetValue("tw_partition_mount_point", Part->Mount_Point);
-  DataManager::SetValue("tw_partition_file_system", Part->Current_File_System);
-  DataManager::SetValue("tw_partition_size", UnitConversion::FormatBytes(Part->Size));
-  DataManager::SetValue("tw_partition_used", UnitConversion::FormatBytes(Part->Used));
-  DataManager::SetValue("tw_partition_free", UnitConversion::FormatBytes(Part->Free));
-  DataManager::SetValue("tw_partition_backup_size", UnitConversion::FormatBytes(Part->Backup_Size));
-  DataManager::SetValue("tw_partition_removable", Part->Removable);
-  DataManager::SetValue("tw_partition_is_present", Part->Is_Present);
+  DataManager::SetValue("tw_partition_name", Part->display_name_);
+  DataManager::SetValue("tw_partition_mount_point", Part->mount_point_);
+  DataManager::SetValue("tw_partition_file_system", Part->current_file_system_);
+  DataManager::SetValue("tw_partition_size", UnitConversion::FormatBytes(Part->size_));
+  DataManager::SetValue("tw_partition_used", UnitConversion::FormatBytes(Part->used_));
+  DataManager::SetValue("tw_partition_free", UnitConversion::FormatBytes(Part->free_));
+  DataManager::SetValue("tw_partition_backup_size", UnitConversion::FormatBytes(Part->backup_size_));
+  DataManager::SetValue("tw_partition_removable", Part->removable_);
+  DataManager::SetValue("tw_partition_is_present", Part->is_present_);
 
-  if (Part->Can_Repair())
+  if (Part->CanRepair())
     DataManager::SetValue("tw_partition_can_repair", 1);
   else
     DataManager::SetValue("tw_partition_can_repair", 0);
-  if (Part->Can_Resize())
+  if (Part->CanResize())
     DataManager::SetValue("tw_partition_can_resize", 1);
   else
     DataManager::SetValue("tw_partition_can_resize", 0);
