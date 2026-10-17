@@ -32,6 +32,9 @@
 
 #include "gui.hpp"
 #include "objects.hpp"
+#include "terminal.hpp"
+
+#include <sys/select.h>
 #include "rapidxml.hpp"
 #include "twcommon.h"
 #include "twrpminui/minui.h"
@@ -55,6 +58,12 @@ public:
 	}
 
 	bool started() const { return pid > 0; }
+
+	bool foregroundJob() const {
+		int foreground = 0;
+		return started() && ioctl(fdMaster, TIOCGPGRP, &foreground) == 0 &&
+		       foreground > 0 && foreground != pid;
+	}
 
 	bool start()
 	{
@@ -388,6 +397,7 @@ public:
 	}
 
 	void stop() {
+		alternateScreen = false;
 		pty.stop();
 	}
 
@@ -466,6 +476,8 @@ public:
 
 	size_t getLinesCount() const { return lines.size(); }
 	const Line& getLine(size_t n) { if (unpackedY == n) packLine(); return lines[n]; }
+	bool isAlternateScreen() const { return alternateScreen; }
+	bool foregroundJob() const { return pty.foregroundJob(); }
 	int getCursorX() const { return cursorX; }
 	int getCursorY() const { return cursorY; }
 	int getUpdateCounter() const { return updateCounter; }
@@ -480,8 +492,8 @@ public:
 
 	void setY(int y)
 	{
-		//y = min(height, max(y, 0));
 		y = max(y, 0);
+		if (pty.foregroundJob()) y = min(height - 1, y);
 		cursorY = y;
 		linewrap = false;
 		while (lines.size() <= (size_t) y)
@@ -553,7 +565,13 @@ private:
 			case 10: // LF
 			case 11: // VT
 			case 12: // FF
-				down();
+				if (pty.foregroundJob() && cursorY == height - 1) {
+					packLine();
+					if (!lines.empty()) lines.erase(lines.begin());
+					lines.resize(height);
+					unpackLine(cursorY);
+					++updateCounter;
+				} else down();
 				break;
 			case 13: // CR
 				setX(0);
@@ -643,7 +661,7 @@ private:
 			state = kStateGround;
 			return;
 		}
-		if (isdigit(cp) || cp == ';' /* || (ch >= 0x3c && ch <= 0x3f) */) {
+		if (isdigit(cp) || cp == ';' || cp == '?') {
 			ctlseq += cp;
 			// state = kStateCsiParam;
 			return;
@@ -662,7 +680,18 @@ private:
 
 	void execControlSequence(std::string ctlseq)
 	{
-		// assert(!ctlseq.empty());
+		// Observe DEC alternate-screen requests without guessing command names.
+		if (!ctlseq.empty() && ctlseq[0] == '?') {
+			const char modeAction = ctlseq.back();
+			std::string modes = ctlseq.substr(1, ctlseq.size() - 2);
+			while (!modes.empty() && isdigit(modes[0])) {
+				const int mode = parseArg(modes, 0);
+				if ((mode == 47 || mode == 1047 || mode == 1049) &&
+				    (modeAction == 'h' || modeAction == 'l'))
+					alternateScreen = modeAction == 'h';
+			}
+			return;
+		}
 		if (ctlseq == "6n") {
 			// CPR - cursor position report
 			char answer[20];
@@ -701,7 +730,6 @@ private:
 				setX(parseArg(ctlseq, 1)-1);
 				break;
 			case 'H': // CUP - cursor position
-				// TODO: consider scrollback area
 				setY(parseArg(ctlseq, 1)-1);
 				setX(parseArg(ctlseq, 1)-1);
 				break;
@@ -748,7 +776,24 @@ private:
 					}
 				}
 				break;
-			// case 'L': // IL - insert line
+			case 'L': // IL - insert lines
+			case 'M': // DL - delete lines
+				{
+					const int count = min(height - cursorY, max(1, parseArg(ctlseq, 1)));
+					if (count <= 0) break;
+					packLine();
+					lines.resize(max(height, cursorY + 1));
+					if (f == 'L') {
+						lines.insert(lines.begin() + cursorY, count, Line());
+						lines.resize(height);
+					} else {
+						lines.erase(lines.begin() + cursorY, lines.begin() + cursorY + count);
+						lines.resize(height);
+					}
+					unpackLine(cursorY);
+					++updateCounter;
+				}
+				break;
 
 			default:
 				debug_printf("unknown ctlseq: '%s'\n", ctlseq.c_str());
@@ -758,6 +803,7 @@ private:
 
 private:
 	int cursorX, cursorY; // 0-based, char based. TODO: decide how to handle scrollback
+	bool alternateScreen = false;
 	bool linewrap; // true to put next character into next line
 	int width, height; // window size in chars
 	std::vector<Line> lines; // the text buffer
@@ -778,6 +824,82 @@ private:
 
 // The one and only terminal engine for now
 TerminalEngine gEngine;
+
+namespace twrp_terminal {
+
+void start()
+{
+	gEngine.initPty();
+}
+
+bool running()
+{
+	return gEngine.status();
+}
+
+void stop()
+{
+	gEngine.stop();
+}
+
+bool alternate_screen()
+{
+	return gEngine.status() && gEngine.isAlternateScreen();
+}
+
+bool foreground_job() { return gEngine.foregroundJob(); }
+int cursor_x() { return gEngine.getCursorX(); }
+int cursor_y() { return gEngine.getCursorY(); }
+
+void set_size(int columns, int rows)
+{
+	gEngine.setSize(columns, rows, 0, 0);
+}
+
+void pump()
+{
+	// The pty is a blocking descriptor. gui.cpp only reads it once select says
+	// there is something there; reading it blind stalls the caller until the
+	// shell writes again. Drain what is ready and no more.
+	for (int round = 0; round < 64 && gEngine.status() && g_pty_fd > 0; ++round) {
+		fd_set ready;
+		FD_ZERO(&ready);
+		FD_SET(g_pty_fd, &ready);
+		struct timeval no_wait = { 0, 0 };
+		if (select(g_pty_fd + 1, &ready, NULL, NULL, &no_wait) <= 0 || !FD_ISSET(g_pty_fd, &ready))
+			break;
+		gEngine.readPty();
+	}
+}
+
+int update_counter()
+{
+	return gEngine.getUpdateCounter();
+}
+
+size_t line_count()
+{
+	return gEngine.getLinesCount();
+}
+
+std::string line(size_t index)
+{
+	if (index >= gEngine.getLinesCount())
+		return std::string();
+	return gEngine.getLine(index).text;
+}
+
+void input_char(int codepoint)
+{
+	gEngine.inputChar(codepoint);
+}
+
+void input_key(int key)
+{
+	gEngine.inputKey(key);
+}
+
+}  // namespace twrp_terminal
 
 void terminal_pty_read()
 {
