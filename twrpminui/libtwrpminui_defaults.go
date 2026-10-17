@@ -3,7 +3,6 @@ package twrp
 import (
 	"android/soong/android"
 	"android/soong/cc"
-	"fmt"
 	"path/filepath"
 )
 
@@ -20,47 +19,37 @@ func globalFlags(ctx android.BaseContext) []string {
 		cflags = append(cflags, "-DHAS_DRM")
 	}
 
-	var pixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT")
+	var forcedPixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT")
+	var pixelFormat = forcedPixelFormat
+	if pixelFormat == "" {
+		pixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_PIXEL_FORMAT")
+	}
 
 	switch pixelFormat {
 	case "RGBA_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := RGBA_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_RGBA")
 		break
 
 	case "RGBX_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := RGBX_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_RGBX")
 		break
 
 	case "BGRA_8888":
-		fmt.Println("****************************************************************************)")
-		fmt.Println("* TARGET_RECOVERY_FORCE_PIXEL_FORMAT := BGRA_8888 not implemented yet      *)")
-		fmt.Println("****************************************************************************)")
 		cflags = append(cflags, "-DRECOVERY_BGRA")
 		break
 
-	case "RGB_565":
-		cflags = append(cflags, "-DRECOVERY_FORCE_RGB_565")
-		break
-	}
-
-	pixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_PIXEL_FORMAT")
-	switch pixelFormat {
 	case "ABGR_8888":
 		cflags = append(cflags, "-DRECOVERY_ABGR")
 		break
 
-	case "RGBX_8888":
-		cflags = append(cflags, "-DRECOVERY_RGBX")
+	case "ARGB_8888":
+		cflags = append(cflags, "-DRECOVERY_ARGB")
 		break
 
-	case "BGRA_8888":
-		cflags = append(cflags, "-DRECOVERY_BGRA")
+	case "RGB_565":
+		if forcedPixelFormat != "" {
+			cflags = append(cflags, "-DRECOVERY_FORCE_RGB_565")
+		}
 		break
 	}
 

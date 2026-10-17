@@ -233,6 +233,7 @@ static GRRect direct_pending_damage;
 static int displayed_buffer = -1;
 static bool legacy_page_flip = true;
 static bool atomic_page_flip = true;
+static int atomic_page_flip_failures = 0;
 static bool direct_scanout;
 static bool warned_empty_damage;
 static uint64_t stats_frames;
@@ -262,6 +263,24 @@ static std::string spr_prop_name;
 
 static int set_legacy_crtc(uint32_t fb_id);
 static void switch_to_fast_mode(int buffer);
+
+static void free_object_properties(drmModeObjectProperties** properties,
+                                   drmModePropertyRes*** properties_info) {
+  if (properties_info != nullptr && *properties_info != nullptr && properties != nullptr &&
+      *properties != nullptr) {
+    for (uint32_t i = 0; i < (*properties)->count_props; ++i) {
+      if ((*properties_info)[i] != nullptr) drmModeFreeProperty((*properties_info)[i]);
+    }
+  }
+  if (properties_info != nullptr && *properties_info != nullptr) {
+    free(*properties_info);
+    *properties_info = nullptr;
+  }
+  if (properties != nullptr && *properties != nullptr) {
+    drmModeFreeObjectProperties(*properties);
+    *properties = nullptr;
+  }
+}
 
 static bool rect_empty(const GRRect& rect) {
   return rect.left >= rect.right || rect.top >= rect.bottom;
@@ -786,22 +805,34 @@ static drm_surface *drm_create_surface(int width, int height) {
 #if defined(RECOVERY_ABGR)
     format = DRM_FORMAT_RGBA8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::ABGR8888);
     printf("setting DRM_FORMAT_RGBA8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
 #elif defined(RECOVERY_BGRA)
     format = DRM_FORMAT_ARGB8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::BGRA8888);
     printf("setting DRM_FORMAT_ARGB8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
 #elif defined(RECOVERY_RGBA)
     format = DRM_FORMAT_ABGR8888;
     base_format = GGL_PIXEL_FORMAT_BGRA_8888;
-    printf("setting DRM_FORMAT_ABGR8888 and GGL_PIXEL_FORMAT_BGRA_8888, GGL_PIXEL_FORMAT may not match!\n");
+    gr_set_pixel_format(GRPixelFormat::RGBA8888);
+    printf("setting DRM_FORMAT_ABGR8888 and GGL_PIXEL_FORMAT_BGRA_8888\n");
 #elif defined(RECOVERY_RGBX)
     format = DRM_FORMAT_XBGR8888;
     base_format = GGL_PIXEL_FORMAT_RGBA_8888;
+    gr_set_pixel_format(GRPixelFormat::RGBX8888);
     printf("setting DRM_FORMAT_XBGR8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
+#elif defined(RECOVERY_ARGB)
+    format = DRM_FORMAT_BGRA8888;
+    // GGL has no ARGB byte-order format. The LVGL path uses the explicit
+    // GRPixelFormat value above; keep the legacy renderer's closest format.
+    base_format = GGL_PIXEL_FORMAT_BGRA_8888;
+    gr_set_pixel_format(GRPixelFormat::ARGB8888);
+    printf("setting DRM_FORMAT_BGRA8888 and ARGB8888 output conversion\n");
 #else
     format = DRM_FORMAT_RGB565;
     base_format = GGL_PIXEL_FORMAT_RGB_565;
+    gr_set_pixel_format(GRPixelFormat::RGB565);
     printf("setting DRM_FORMAT_RGB565 and GGL_PIXEL_FORMAT_RGB_565\n");
 #endif
 
@@ -1180,12 +1211,16 @@ static int present_atomic_buffer(int buffer) {
       ret = wait_for_page_flip(&waiting);
     if (ret == 0) {
       displayed_buffer = buffer;
+      atomic_page_flip_failures = 0;
       return 0;
     }
 
-    printf("Atomic page flip failed ret=%d; falling back to blocking commit\n", ret);
-    fflush(stdout);
-    atomic_page_flip = false;
+    if (++atomic_page_flip_failures >= 8) {
+      printf("Atomic page flip failed ret=%d %d times; falling back to blocking commit\n", ret,
+             atomic_page_flip_failures);
+      fflush(stdout);
+      atomic_page_flip = false;
+    }
   }
 
   int ret = commit_atomic_buffer(buffer, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
@@ -1293,6 +1328,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
     return nullptr;
   }
 
+  gr_set_physical_size(main_monitor_connector->mmWidth, main_monitor_connector->mmHeight);
   main_monitor_crtc = find_crtc_for_connector(drm_fd, res, main_monitor_connector);
 
   if (!main_monitor_crtc) {
@@ -1342,6 +1378,7 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
   displayed_buffer = -1;
   legacy_page_flip = true;
   atomic_page_flip = true;
+  atomic_page_flip_failures = 0;
   direct_scanout = legacy_modeset ||
       android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
   warned_empty_damage = false;
@@ -1577,19 +1614,63 @@ static GRSurface* drm_flip(minui_backend* backend __unused) {
 }
 
 static void drm_exit(minui_backend* backend __unused) {
+    if (drm_fd < 0) return;
+
+    // The recovery UI can initialize minui more than once: the legacy UI is
+    // used for early pages and GUI2 owns a later instance. Release every DRM
+    // object before closing the fd; otherwise the next drm_init() can use
+    // property metadata belonging to the previous fd and its first atomic
+    // commit fails with EPERM (-13).
     drm_blank(nullptr, true);
-    drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+    if (crtc_res.mode_blob_id != 0)
+        drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
     if (fast_mode_blob_id != 0)
         drmModeDestroyPropertyBlob(drm_fd, fast_mode_blob_id);
     fast_mode_blob_id = 0;
+    if (crtc_res.spr_blob_id != 0)
+        drmModeDestroyPropertyBlob(drm_fd, crtc_res.spr_blob_id);
+
+    for (uint32_t i = 0; i < NUM_PLANES; ++i) {
+        free_object_properties(&plane_res[i].props, &plane_res[i].props_info);
+        if (plane_res[i].plane != nullptr) {
+            drmModeFreePlane(plane_res[i].plane);
+            plane_res[i].plane = nullptr;
+        }
+    }
+    free_object_properties(&conn_res.props, &conn_res.props_info);
+    free_object_properties(&crtc_res.props, &crtc_res.props_info);
+
+    if (main_monitor_crtc != nullptr) {
+        drmModeFreeCrtc(main_monitor_crtc);
+        main_monitor_crtc = nullptr;
+    }
+    if (main_monitor_connector != nullptr) {
+        drmModeFreeConnector(main_monitor_connector);
+        main_monitor_connector = nullptr;
+    }
+
     drm_destroy_surface(drm_surfaces[0]);
     drm_destroy_surface(drm_surfaces[1]);
+    drm_surfaces[0] = nullptr;
+    drm_surfaces[1] = nullptr;
     if (draw_buf) {
         free(draw_buf->data);
         free(draw_buf);
     }
     draw_buf = nullptr;
     direct_scanout = false;
+    displayed_buffer = -1;
+    current_buffer = 0;
+    current_blank_state = true;
+    fb_prop_id = 0;
+    number_of_lms = DEFAULT_NUM_LMS;
+    legacy_modeset = false;
+    legacy_page_flip = true;
+    atomic_page_flip = true;
+    atomic_page_flip_failures = 0;
+    spr_enabled = 0;
+    spr_bypass = 0;
+    spr_prop_name.clear();
     close(drm_fd);
     drm_fd = -1;
 }
