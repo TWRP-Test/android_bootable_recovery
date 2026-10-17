@@ -1,0 +1,206 @@
+#include "shell/page_host.h"
+
+#include <algorithm>
+
+#include "core/ui_helpers.h"
+#include "shell/navigation_fade.h"
+
+namespace gui2_shell {
+
+void page_host::initialize(lv_obj_t* layer, const gui2_core::ui_metrics& metrics) {
+  layer_ = layer;
+  metrics_ = &metrics;
+  content_ = nullptr;
+  current_page_ = nullptr;
+  previous_page_ = nullptr;
+  input_blocker_ = nullptr;
+  fade_ = nullptr;
+  reserved_ = 0;
+  transition_ = gui2_core::page_transition::NONE;
+  transition_active_ = false;
+  transition_pending_ = false;
+}
+
+page_scaffold_result page_host::build(const char* title, const char* summary, int bottom_reserved,
+                                      gui2_core::page_transition transition, bool with_fade) {
+  page_scaffold_result result;
+  if (layer_ == nullptr || metrics_ == nullptr) return result;
+
+  // A new page gets its own root so the old page can remain visible while the
+  // transition runs. The shell's status bar and bottom navigation are outside
+  // this root and therefore remain fixed in place.
+  stop_transition();
+  lv_obj_t* new_page = lv_obj_create(layer_);
+  lv_obj_set_pos(new_page, 0, 0);
+  lv_obj_set_size(new_page, metrics_->width,
+                  std::max(1, metrics_->height - metrics_->status_height));
+  gui2_core::set_surface_style(new_page, metrics_->background, LV_OPA_COVER);
+  lv_obj_set_style_pad_all(new_page, 0, LV_PART_MAIN);
+  gui2_core::disable_scrolling(new_page);
+
+  result = build_page_scaffold(new_page, *metrics_, title, summary, bottom_reserved);
+  fade_ = with_fade ? create_navigation_fade(new_page, *metrics_, bottom_reserved) : nullptr;
+  reserved_ = bottom_reserved;
+  content_ = result.content;
+  bind_navigation_fade(fade_, content_);
+
+  if (current_page_ == nullptr) {
+    current_page_ = new_page;
+    return result;
+  }
+
+  previous_page_ = current_page_;
+  current_page_ = new_page;
+  transition_ = transition;
+  if (transition == gui2_core::page_transition::NONE ||
+      transition == gui2_core::page_transition::REPLACE) {
+    lv_obj_delete(previous_page_);
+    previous_page_ = nullptr;
+    return result;
+  }
+
+  const int width = metrics_->width;
+  if (transition == gui2_core::page_transition::FADE) {
+    lv_obj_set_style_opa(new_page, LV_OPA_TRANSP, LV_PART_MAIN);
+  } else if (transition == gui2_core::page_transition::POP) {
+    lv_obj_set_x(new_page, -width);
+  } else {
+    lv_obj_set_x(new_page, width);
+  }
+
+  transition_pending_ = true;
+  return result;
+}
+
+void page_host::start_transition() {
+  if (!transition_pending_) return;
+  transition_pending_ = false;
+  if (current_page_ == nullptr || previous_page_ == nullptr || metrics_ == nullptr) return;
+
+  // Keep both pages non-interactive until the new page is settled. The
+  // blocker is inside page_layer, so the persistent navigation remains usable.
+  input_blocker_ = lv_obj_create(layer_);
+  lv_obj_set_pos(input_blocker_, 0, 0);
+  lv_obj_set_size(input_blocker_, metrics_->width,
+                  std::max(1, metrics_->height - metrics_->status_height));
+  gui2_core::set_surface_style(input_blocker_, metrics_->background, LV_OPA_TRANSP);
+  lv_obj_set_style_pad_all(input_blocker_, 0, LV_PART_MAIN);
+  gui2_core::disable_scrolling(input_blocker_);
+  lv_obj_set_clickable(input_blocker_, true);
+
+  lv_anim_t animation;
+  lv_anim_init(&animation);
+  lv_anim_set_var(&animation, this);
+  lv_anim_set_user_data(&animation, this);
+  lv_anim_set_values(&animation, 0, 1000);
+  lv_anim_set_duration(&animation, transition_ == gui2_core::page_transition::FADE ? 300 : 220);
+  lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+  lv_anim_set_exec_cb(&animation, animation_exec);
+  lv_anim_set_completed_cb(&animation, animation_ready);
+  transition_active_ = true;
+  lv_anim_start(&animation);
+}
+
+void page_host::settle() {
+  if (content_ == nullptr || metrics_ == nullptr) return;
+  gui2_core::equalize_card_grids(content_);
+
+  // Measure without the reserve first: what matters is whether the content
+  // reaches into the strip the floating control owns, not whether it fills the
+  // screen.
+  lv_obj_set_style_pad_bottom(content_, 0, LV_PART_MAIN);
+  lv_obj_update_layout(content_);
+  const int overflow = lv_obj_get_scroll_bottom(content_);
+  const int room = reserved_ > 0 ? reserved_ + metrics_->cards_top_gap : 0;
+  // Decide on the reserve alone. Counting the breathing gap as well makes a page
+  // that ends exactly at the control look like it overflows by that gap.
+  lv_obj_set_style_pad_bottom(content_, overflow + reserved_ > 0 ? room : 0, LV_PART_MAIN);
+  lv_obj_update_layout(content_);
+
+  // Elastic scrolling bounces even when there is nothing below, which reads as
+  // a page that scrolls when it should not. Take the flag off instead.
+  if (lv_obj_get_scroll_bottom(content_) > 0) {
+    lv_obj_set_scrollable(content_, true);
+  } else {
+    lv_obj_scroll_to_y(content_, 0, LV_ANIM_OFF);
+    lv_obj_set_scrollable(content_, false);
+  }
+
+  update_navigation_fade(fade_, content_, false);
+  start_transition();
+}
+
+void page_host::clear() {
+  stop_transition();
+  if (layer_ != nullptr) lv_obj_clean(layer_);
+  content_ = nullptr;
+  current_page_ = nullptr;
+  previous_page_ = nullptr;
+  input_blocker_ = nullptr;
+  layer_ = nullptr;
+  metrics_ = nullptr;
+}
+
+void page_host::animation_exec(void* object, int32_t progress) {
+  auto* host = static_cast<page_host*>(object);
+  if (host == nullptr || host->current_page_ == nullptr || host->previous_page_ == nullptr) return;
+
+  if (host->transition_ == gui2_core::page_transition::FADE) {
+    lv_obj_set_style_opa(host->current_page_, static_cast<lv_opa_t>(LV_OPA_COVER * progress / 1000),
+                         LV_PART_MAIN);
+    return;
+  }
+  const int width = host->metrics_ == nullptr ? 0 : host->metrics_->width;
+  const int distance = static_cast<int>((static_cast<int64_t>(width) * progress) / 1000);
+  if (host->transition_ == gui2_core::page_transition::POP) {
+    lv_obj_set_x(host->previous_page_, distance);
+    lv_obj_set_x(host->current_page_, distance - width);
+  } else {
+    lv_obj_set_x(host->previous_page_, -(distance / 4));
+    lv_obj_set_x(host->current_page_, width - distance);
+  }
+}
+
+void page_host::animation_ready(lv_anim_t* animation) {
+  if (animation == nullptr) return;
+  auto* host = static_cast<page_host*>(lv_anim_get_user_data(animation));
+  if (host != nullptr) host->finish_transition();
+}
+
+void page_host::finish_transition() {
+  if (!transition_active_) return;
+  transition_active_ = false;
+  if (input_blocker_ != nullptr) {
+    lv_obj_delete(input_blocker_);
+    input_blocker_ = nullptr;
+  }
+  if (previous_page_ != nullptr) {
+    lv_obj_delete(previous_page_);
+    previous_page_ = nullptr;
+  }
+  if (current_page_ != nullptr) {
+    lv_obj_set_x(current_page_, 0);
+    lv_obj_set_style_opa(current_page_, LV_OPA_COVER, LV_PART_MAIN);
+  }
+  transition_ = gui2_core::page_transition::NONE;
+}
+
+void page_host::stop_transition() {
+  lv_anim_delete(this, animation_exec);
+  if (input_blocker_ != nullptr) {
+    lv_obj_delete(input_blocker_);
+    input_blocker_ = nullptr;
+  }
+  if (previous_page_ != nullptr) {
+    lv_obj_delete(previous_page_);
+    previous_page_ = nullptr;
+  }
+  if (current_page_ != nullptr) {
+    lv_obj_set_x(current_page_, 0);
+    lv_obj_set_style_opa(current_page_, LV_OPA_COVER, LV_PART_MAIN);
+  }
+  transition_active_ = false;
+  transition_ = gui2_core::page_transition::NONE;
+}
+
+}  // namespace gui2_shell
