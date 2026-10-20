@@ -606,8 +606,20 @@ void TWPartitionManager::DecryptData() {
       SetCryptoType("file");
 #ifdef TW_INCLUDE_FBE_METADATA_DECRYPT
 #ifdef USE_FSCRYPT
+      // Unmounting /data keeps the metadata mapping alive, and rebuilding it would
+      // collide with its own device-mapper name, so reuse the mapping when it is
+      // still there and only put the DE keys back.
+      std::string crypto_blkdev = data->decrypted_block_device_;
+      if (!crypto_blkdev.empty() && !TWFunc::IsPathExists(crypto_blkdev))
+        crypto_blkdev.clear();
+      if (crypto_blkdev.empty())
+        crypto_blkdev =
+            android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "error");
+      const bool reused_mapping =
+          crypto_blkdev != "error" && TWFunc::IsPathExists(crypto_blkdev);
       constexpr std::vector<bool> device_aliased;
       if (constexpr std::vector<std::string> user_devices;
+        reused_mapping ||
         android::vold::fscrypt_mount_metadata_encrypted(data->actual_block_device_,
                                                         data->mount_point_, false, false,
                                                         data->current_file_system_, false,
@@ -615,8 +627,9 @@ void TWPartitionManager::DecryptData() {
                                                         TWFunc::IsPathExists(additional_fstab)
                                                           ? additional_fstab
                                                           : "")) {
-        const std::string crypto_blkdev = android::base::GetProperty(
-            "ro.crypto.fs_crypto_blkdev", "error");
+        if (!reused_mapping)
+          crypto_blkdev =
+              android::base::GetProperty("ro.crypto.fs_crypto_blkdev", "error");
         data->decrypted_block_device_ = crypto_blkdev;
         LOGINFO(
             "Successfully decrypted metadata encrypted data partition with new block device: '%s'\n",
@@ -1944,6 +1957,8 @@ void TWPartitionManager::MarkUserDecrypted(int user_id) {
 
 void TWPartitionManager::MarkDataLocked() {
 #ifdef TW_INCLUDE_FBE
+  // No DE keys were loaded, so the unmount took none.
+  if (!DataManager::GetIntValue(TW_IS_FBE)) return;
   for (UsersStruct& user : users_list_) {
     if (!user.is_decrypted) continue;
     // fscrypt_unlock_ce_storage() returns early for a user vold still holds
@@ -1969,7 +1984,7 @@ bool TWPartitionManager::StorageNameInUse(const std::string& Name) {
 
 void TWPartitionManager::CheckUsersDecryptionStatus() const {
 #ifdef TW_INCLUDE_FBE
-  int all_is_decrypted = 1;
+  int all_is_decrypted = !users_list_.empty();
   for (const UsersStruct& user : users_list_) {
     if (!user.is_decrypted) {
       LOGINFO("User %d is not decrypted.\n", user.user_id);
@@ -2002,14 +2017,32 @@ int TWPartitionManager::DecryptDevice(const std::string& Password, const int use
 
   if (DataManager::GetIntValue(TW_IS_FBE)) {
 #ifdef TW_INCLUDE_FBE
-    if (!MountByPath("/data", true)) // /data has to be mounted for FBE
+    TWPartition* data = FindPartitionByPath("/data");
+    if (data == nullptr) {
+      LOGERR("Unable to locate /data for FBE decrypt\n");
       return -1;
+    }
+    const bool data_was_mounted = data->IsMounted();
+    if (!MountByPath("/data", true)) return -1; // /data has to be mounted for FBE
+    // Unmounting /data drops the DE keys. Every decrypt entry point must restore
+    // them before gatekeeper files and CE policies can be read.
+    if (!data->RestoreDeKeys()) {
+      if (!data_was_mounted) UnmountByPath("/data", true);
+      return -1;
+    }
 
+    bool user_found = false;
     bool user_need_decrypt = false;
     for (const UsersStruct& user : users_list_) {
-      if (user.user_id == user_id && !user.is_decrypted) {
-        user_need_decrypt = true;
+      if (user.user_id == user_id) {
+        user_found = true;
+        user_need_decrypt = !user.is_decrypted;
+        break;
       }
+    }
+    if (!user_found) {
+      LOGERR("User %d was not discovered during FBE setup\n", user_id);
+      return -1;
     }
     if (!user_need_decrypt) {
       LOGINFO("User %d does not require decryption\n", user_id);

@@ -2625,7 +2625,7 @@ void TWPartition::UpdateDataSizeAsync() {
       if (size == 0 && !cancel->load()) {
         // dump.f2fs unavailable: use the old walk.
         LOGINFO("Data size: falling back to folder walk.\n");
-        size = exclusions.Get_Folder_Size(path, false);
+        size = exclusions.Get_Folder_Size(path, false, cancel);
       }
       AsyncSizeState& state = GetAsyncSizeState();
       std::lock_guard lock(state.lock);
@@ -2728,22 +2728,6 @@ bool TWPartition::UpdateSize(const bool display_error, const bool defer_folder_s
   return true;
 }
 
-// Whatever the volume calls itself, empty when it has no label.
-static std::string GetVolumeLabel(const std::string& block_device) {
-  const char* label;
-  std::string name;
-
-  const auto pr = blkid_new_probe_from_filename(block_device.c_str());
-  if (!pr) return name;
-  // Free the probe on every exit path from here.
-  auto pr_guard = android::base::make_scope_guard([&] {
-    blkid_free_probe(pr);
-  });
-  if (blkid_do_fullprobe(pr) == 0 && blkid_probe_lookup_value(pr, "LABEL", &label, nullptr) ==
-      0) name = label;
-  return name;
-}
-
 bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
   // we will need to create separate mount points for each partition found and we use this index to name each one
   int mount_point_index = 0;
@@ -2765,14 +2749,22 @@ bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
 
     // GetPath() keeps the trailing slash, so do not add another one.
     std::string item = path + de->d_name;
-    if (PartitionManager.FindPartitionByBlockDevice(item)) continue;
+    if (PartitionManager.FindPartitionByBlockDevice(item)) {
+      ++mount_point_index;
+      continue;
+    }
+    std::string child_mount;
+    do {
+      child_mount = std::format("{}-{}", mount_point_, ++mount_point_index);
+    } while (PartitionManager.FindPartitionByPath(child_mount));
     auto* part = new TWPartition;
-    std::string buffer = std::format("{} {}-{} auto defaults defaults", item, mount_point_,
-                                     ++mount_point_index);
-    part->ProcessFstabLine(buffer.c_str(), false, nullptr);
-    // Prefer the label, number whatever name is already taken.
-    std::string display = GetVolumeLabel(item);
-    if (display.empty()) display = storage_name_;
+    std::string buffer = std::format("{} {} auto defaults defaults", item, child_mount);
+    if (!part->ProcessFstabLine(buffer.c_str(), false, nullptr)) {
+      delete part;
+      continue;
+    }
+    // Discovery must not probe or mount a slow or damaged filesystem on the GUI thread.
+    std::string display = storage_name_;
     if (PartitionManager.
       StorageNameInUse(display)) display += " " + std::to_string(mount_point_index);
     part->storage_name_ = display;
@@ -2787,7 +2779,7 @@ bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
     part->can_be_wiped_ = can_be_wiped_;
     part->wipe_available_in_gui_ = wipe_available_in_gui_;
     part->FindActualBlockDevice();
-    part->UpdateSize(false);
+    part->FindPartitionSize();
     has_sub_partition_ = true;
     TWPartitionManager::OutputPartition(part);
     PartitionManager.AddPartition(part);
@@ -2820,7 +2812,11 @@ void TWPartition::FindActualBlockDevice() {
     }
     return;
   }
-  if (is_decrypted_ && !decrypted_block_device_.empty()) {
+  // An unmount leaves the metadata mapping alive, and the mapping keeps the raw
+  // device for itself: mounting the raw node instead can only fail EBUSY. So the
+  // decrypted device wins whenever it exists, even with the CE keys dropped by
+  // MarkDataLocked() in between.
+  if (!decrypted_block_device_.empty()) {
     actual_block_device_ = decrypted_block_device_;
     if (TWFunc::IsPathExists(decrypted_block_device_)) {
       is_present_ = true;
