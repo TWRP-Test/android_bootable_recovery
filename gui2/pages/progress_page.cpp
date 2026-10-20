@@ -263,7 +263,10 @@ progress_page_view build_progress_page(const progress_page_options& options) {
 
   view.bar_tail = lv_obj_create(view.bar);
   lv_obj_set_size(view.bar_tail, 1, bar_height - border * 2);
-  const auto comet_color = gui2_core::tinted(metrics.accent, 28);
+  // The comet is a bright head fading back along its tail. Mixing toward white
+  // does that on either palette; the palette tint is black in light mode, which
+  // turned the whole comet black.
+  const auto comet_color = lv_color_mix(lv_color_white(), metrics.accent, 28);
   gui2_core::set_surface_style(view.bar_tail, comet_color);
   lv_obj_set_style_radius(view.bar_tail, bar_height / 2, 0);
   lv_obj_set_style_pad_all(view.bar_tail, 0, 0);
@@ -282,7 +285,7 @@ progress_page_view build_progress_page(const progress_page_options& options) {
   lv_obj_align(head, LV_ALIGN_RIGHT_MID, 0, 0);
   gui2_core::set_surface_style(head, comet_color);
   lv_obj_set_style_radius(head, 0, 0);
-  lv_obj_set_style_bg_grad_color(head, gui2_core::tinted(metrics.accent, 160), 0);
+  lv_obj_set_style_bg_grad_color(head, lv_color_mix(lv_color_white(), metrics.accent, 160), 0);
   lv_obj_set_style_bg_grad_dir(head, LV_GRAD_DIR_HOR, 0);
   gui2_core::disable_scrolling(head);
   lv_obj_set_clickable(head, false);

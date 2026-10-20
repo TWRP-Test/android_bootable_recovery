@@ -58,8 +58,9 @@ ui_palette palette(bool dark) {
     p.key_pressed = lv_color_hex(0x585858);
     p.key_subdued = lv_color_hex(0x2E2E2E);
   } else {
-    // Light mode follows the miuix light scheme: a F7F7F7 page, white cards,
-    // 3482FF primary, and the EAF2FF tint the tip cards sit on.
+    // Light mode follows the miuix light scheme: a F7F7F7 page and white cards,
+    // 3482FF primary. The tip and warning surfaces are a shade deeper than the
+    // page so a card reads as a card without a border.
     p.background = lv_color_hex(0xF7F7F7);
     p.card_color = lv_color_hex(0xFFFFFF);
     p.nav_color = lv_color_hex(0xFFFFFF);
@@ -68,19 +69,19 @@ ui_palette palette(bool dark) {
     p.tint = lv_color_hex(0x000000);
     p.outline = lv_color_hex(0xD9D9D9);
     p.accent_soft = lv_color_hex(0x3482FF);
-    p.accent_surface = lv_color_hex(0xEAF2FF);
+    p.accent_surface = lv_color_hex(0xE2ECFF);
     p.danger_soft = lv_color_hex(0xE94634);
-    p.danger_surface = lv_color_hex(0xFDF6F4);
-    p.danger_surface_soft = lv_color_hex(0xFDF6F4);
+    p.danger_surface = lv_color_hex(0xFBECEA);
+    p.danger_surface_soft = lv_color_hex(0xFBECEA);
     p.warning = lv_color_hex(0xA86A00);
-    p.warning_surface = lv_color_hex(0xFFF3DC);
+    p.warning_surface = lv_color_hex(0xFDEBD0);
     p.control_track = lv_color_hex(0xE0E0E0);
     p.control_text = lv_color_hex(0x959595);
     p.idle_dot = lv_color_hex(0xB2B2B2);
     p.key_panel = lv_color_hex(0xE8E8E8);
     p.key_fill = lv_color_hex(0xFFFFFF);
-    p.key_pressed = lv_color_hex(0xDCDCDC);
-    p.key_subdued = lv_color_hex(0xA2A2A2);
+    p.key_pressed = lv_color_hex(0xCFCFCF);
+    p.key_subdued = lv_color_hex(0xD9D9D9);
   }
   p.scrim = lv_color_hex(0x000000);
   p.accent = lv_color_hex(dark ? 0x347FF1 : 0x3482FF);
