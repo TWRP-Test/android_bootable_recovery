@@ -27,7 +27,7 @@ language_page_view build_language_page(const language_page_options& options) {
   lv_obj_set_flex_align(view.body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START);
 
-  const size_t count = std::min(options.language_count, size_t(3));
+  const size_t count = std::min(options.language_count, gui2_i18n::kLanguageCount);
   for (size_t i = 0; i < count; ++i) {
     const auto language = options.languages[i];
     const auto option = gui2_components::create_option_card(

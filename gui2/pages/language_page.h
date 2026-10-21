@@ -11,8 +11,8 @@ namespace gui2_pages {
 
 struct language_page_view {
   lv_obj_t* body = nullptr;
-  lv_obj_t* option_cards[3] = {};
-  lv_obj_t* check_labels[3] = {};
+  lv_obj_t* option_cards[gui2_i18n::kLanguageCount] = {};
+  lv_obj_t* check_labels[gui2_i18n::kLanguageCount] = {};
 };
 
 struct language_page_options {

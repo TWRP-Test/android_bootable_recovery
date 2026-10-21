@@ -1,13 +1,27 @@
 #ifndef TWRP_LVGL_DEMO_I18N_H
 #define TWRP_LVGL_DEMO_I18N_H
 
+#include <cstddef>
+#include <string_view>
+
 namespace gui2_i18n {
 
 enum class language_id {
   ENGLISH,
   ZH_CN,
   ZH_TW,
+  RUSSIAN,
+  COUNT,
 };
+
+inline constexpr size_t kLanguageCount = static_cast<size_t>(language_id::COUNT);
+inline constexpr language_id kLanguageValues[] = {
+  language_id::ENGLISH,
+  language_id::ZH_CN,
+  language_id::ZH_TW,
+  language_id::RUSSIAN,
+};
+static_assert(sizeof(kLanguageValues) / sizeof(kLanguageValues[0]) == kLanguageCount);
 
 struct action_text {
   const char* title;
@@ -418,6 +432,8 @@ struct language_pack {
 };
 
 const language_pack& get_language_pack(language_id language);
+const char* language_code(language_id language);
+language_id language_from_code(std::string_view code);
 
 }  // namespace gui2_i18n
 

@@ -55,8 +55,8 @@ struct reboot_page_state {
 struct page_state {
   gui2_i18n::language_id current_language = gui2_i18n::language_id::ZH_CN;
   gui2_i18n::language_id pending_language = gui2_i18n::language_id::ZH_CN;
-  lv_obj_t* language_option_cards[3] = {};
-  lv_obj_t* language_check_labels[3] = {};
+  lv_obj_t* language_option_cards[gui2_i18n::kLanguageCount] = {};
+  lv_obj_t* language_check_labels[gui2_i18n::kLanguageCount] = {};
 
   int pending_timezone_index = 0;
   int pending_offset_index = 0;

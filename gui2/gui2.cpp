@@ -233,13 +233,9 @@ static std::string console_translator(const std::string& name) {
 
 using gui2_components::create_svg_image;
 
-static lv_obj_t* (&language_option_cards)[3] = page_state.language_option_cards;
-static lv_obj_t* (&language_check_labels)[3] = page_state.language_check_labels;
-static constexpr app_language language_values[3] = {
-  app_language::ENGLISH,
-  app_language::ZH_CN,
-  app_language::ZH_TW,
-};
+static auto& language_option_cards = page_state.language_option_cards;
+static auto& language_check_labels = page_state.language_check_labels;
+static constexpr auto& language_values = gui2_i18n::kLanguageValues;
 
 static void show_home_page(page_transition transition);
 static void show_action_page(const action_definition& definition, page_transition transition);
@@ -340,23 +336,8 @@ static bool& quick_brightness_dirty = page_state.quick_brightness_dirty;
 
 static void hardware_slider_state_event_cb(lv_event_t* event);
 
-static const char* language_code(app_language language) {
-  switch (language) {
-    case app_language::ENGLISH:
-      return "en";
-    case app_language::ZH_CN:
-      return "zh_CN";
-    case app_language::ZH_TW:
-      return "zh_TW";
-  }
-  return "en";
-}
-
-static app_language language_from_code(const std::string& code) {
-  if (code == "zh_CN") return app_language::ZH_CN;
-  if (code == "zh_TW") return app_language::ZH_TW;
-  return app_language::ENGLISH;
-}
+using gui2_i18n::language_code;
+using gui2_i18n::language_from_code;
 
 using gui2_core::accept_click;
 using gui2_core::add_press_cancel_guard;
@@ -773,9 +754,9 @@ static void language_option_event_cb(lv_event_t* event) {
   const auto* language = static_cast<const app_language*>(lv_event_get_user_data(event));
   if (language == nullptr) return;
 
-  pending_language = *language;
-  for (int i = 0; i < 3; ++i) {
-    const bool selected = pending_language == static_cast<app_language>(i);
+  pending_language = language_from_code(language_code(*language));
+  for (size_t i = 0; i < gui2_i18n::kLanguageCount; ++i) {
+    const bool selected = pending_language == language_values[i];
     gui2_core::set_selected_fill(language_option_cards[i], selected, ui.card_color);
     if (language_check_labels[i] != nullptr)
       lv_label_set_text(language_check_labels[i], selected ? LV_SYMBOL_OK : "");
@@ -1166,7 +1147,7 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
 #endif
   close_quick_menu();
   mount_view = {};
-  for (int i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < gui2_i18n::kLanguageCount; ++i) {
     language_option_cards[i] = nullptr;
     language_check_labels[i] = nullptr;
   }
@@ -1381,8 +1362,8 @@ static void settings_option_event_cb(lv_event_t* event) {
 }
 
 static void refresh_language_options(void) {
-  for (int i = 0; i < 3; ++i) {
-    const bool selected = pending_language == static_cast<app_language>(i);
+  for (size_t i = 0; i < gui2_i18n::kLanguageCount; ++i) {
+    const bool selected = pending_language == language_values[i];
     gui2_core::set_selected_fill(language_option_cards[i], selected, ui.card_color);
     if (language_check_labels[i] != nullptr)
       lv_label_set_text(language_check_labels[i], selected ? LV_SYMBOL_OK : "");
@@ -5500,12 +5481,12 @@ static void show_language_page(page_transition transition) {
   options.metrics = &ui;
   options.strings = &strings();
   options.languages = language_values;
-  options.language_count = 3;
+  options.language_count = gui2_i18n::kLanguageCount;
   options.pending_language = pending_language;
   options.option_event_callback = language_option_event_cb;
   options.press_guard_callback = press_cancel_guard_cb;
   const auto view = gui2_pages::build_language_page(options);
-  for (int i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < gui2_i18n::kLanguageCount; ++i) {
     language_option_cards[i] = view.option_cards[i];
     language_check_labels[i] = view.check_labels[i];
   }
