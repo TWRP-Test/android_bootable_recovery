@@ -1226,6 +1226,30 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
                            : bottom_reserved;
   const auto scaffold =
       page_host.build(title, summary, reserved, transition, !page_is_progress(page));
+  if (is_home && scaffold.heading != nullptr) {
+    lv_obj_t* version = lv_label_create(scaffold.heading);
+    lv_label_set_text(version, gui2_shell::version_text());
+    lv_label_set_long_mode(version, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(version, ui.secondary_text, LV_PART_MAIN);
+    lv_obj_set_style_text_font(version, ui.status_font, LV_PART_MAIN);
+    lv_obj_set_style_text_align(version, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    lv_point_t size;
+    lv_text_get_size(&size, gui2_shell::version_text(), ui.status_font,
+                     lv_obj_get_style_text_letter_space(version, LV_PART_MAIN),
+                     lv_obj_get_style_text_line_space(version, LV_PART_MAIN),
+                     LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    const int box_width = size.x + gui2_core::ui_px(24);
+    // Share the title's baseline even when its font size changes with the display.
+    const int title_baseline = gui2_core::ui_px(2) + ui.brand_font->line_height -
+                               ui.brand_font->base_line;
+    const int version_top = title_baseline - ui.status_font->line_height +
+                            ui.status_font->base_line;
+    lv_obj_set_size(version, box_width, size.y);
+    lv_obj_set_pos(version,
+                    std::max(0, ui.content_width - gui2_core::ui_px(10) - box_width -
+                                    gui2_core::ui_px(4)),
+                    version_top);
+  }
   main_content = scaffold.content;
   page_summary = scaffold.summary;
   page_layer = page_host.current_page();
@@ -5332,7 +5356,7 @@ static void show_timezone_page(page_transition transition) {
 }
 
 static void show_home_page(page_transition transition) {
-  create_page_scaffold(page_kind::HOME, true, "YARP", strings().home_summary, 0, transition);
+  create_page_scaffold(page_kind::HOME, true, "YARP", "", 0, transition);
   gui2_pages::home_page_options options;
   options.content = main_content;
   options.metrics = &ui;

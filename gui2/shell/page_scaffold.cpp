@@ -37,25 +37,6 @@ page_scaffold_result build_page_scaffold(lv_obj_t* page_layer, const gui2_core::
   lv_obj_set_style_text_color(title_label, metrics.primary_text, LV_PART_MAIN);
   lv_obj_set_style_text_font(title_label, metrics.brand_font, LV_PART_MAIN);
 
-  lv_obj_t* version = lv_label_create(result.heading);
-  lv_label_set_text(version, kVersionText);
-  lv_label_set_long_mode(version, LV_LABEL_LONG_CLIP);
-  lv_obj_set_style_text_color(version, metrics.secondary_text, LV_PART_MAIN);
-  lv_obj_set_style_text_font(version, metrics.status_font, LV_PART_MAIN);
-  lv_obj_set_style_text_align(version, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-  {
-    const int32_t letter_space = lv_obj_get_style_text_letter_space(version, LV_PART_MAIN);
-    const int32_t line_space = lv_obj_get_style_text_line_space(version, LV_PART_MAIN);
-    lv_point_t size;
-    lv_text_get_size(&size, kVersionText, metrics.status_font, letter_space, line_space,
-                     LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    const int box_width = size.x + gui2_core::ui_px(24);
-    const int usable_width = metrics.content_width - heading_pad_left;
-    lv_obj_set_size(version, box_width, size.y);
-    lv_obj_set_pos(version, std::max(0, usable_width - box_width - gui2_core::ui_px(4)),
-                   gui2_core::ui_px(10));
-  }
-
   result.summary = lv_label_create(result.heading);
   lv_label_set_text(result.summary, summary);
   lv_obj_align(result.summary, LV_ALIGN_BOTTOM_LEFT, 0, -gui2_core::ui_px(6));
