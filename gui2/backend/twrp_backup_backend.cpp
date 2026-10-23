@@ -78,7 +78,7 @@ void twrp_backup_backend::run() {
   std::string auto_gen = gui_lookup("auto_generate", "(Auto Generate)");
   if (Backup_Name == auto_gen || Backup_Name == gui_lookup("curr_date", "(Current Date)") ||
       Backup_Name == "0" || Backup_Name == "(" ||
-      PartitionManager.IsBackupNameValid(Backup_Name, true, true) == 0) {
+      PartitionManager.IsBackupNameValid(Backup_Name, true, true)) {
     ret = PartitionManager.RunBackup();
     DataManager::SetValue("tw_encrypt_backup", 0);  // reset value so we don't encrypt every subsequent backup
     if (!PartitionManager.stop_backup) {
