@@ -30,19 +30,15 @@ cc_library_shared {
     include_dirs: [
         "bootable/recovery",
         "bootable/recovery/twrpinstall/include",
-        "bootable/recovery/libpixelflinger/include",
     ],
     srcs: [
         "graphics.cpp",
         "graphics_fbdev.cpp",
-        "resources.cpp",
-        "truetype.cpp",
         "graphics_utils.cpp",
         "events.cpp",
         "force_feedback.cpp"
     ],
     shared_libs: [
-        "libft2",
         "libz",
         "libc",
         "libcutils",
@@ -55,5 +51,4 @@ cc_library_shared {
         "libsync",
 	"libbinder_ndk"
     ],
-    static_libs: ["libpixelflinger_twrp"]
 }

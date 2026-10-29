@@ -32,7 +32,6 @@
 
 #include "twrpminui/minui.h"
 #include "graphics.h"
-#include <pixelflinger/pixelflinger.h>
 
 static GRSurface* fbdev_init(minui_backend*);
 static GRSurface* fbdev_flip(minui_backend*);
@@ -232,34 +231,13 @@ static GRSurface* fbdev_init(minui_backend* backend) {
     vi.xres_virtual = fi.line_length / gr_framebuffer[0].pixel_bytes;
 #endif
     gr_framebuffer[0].data = reinterpret_cast<uint8_t*>(bits);
-    if (vi.bits_per_pixel == 16) {
-        printf("setting GGL_PIXEL_FORMAT_RGB_565\n");
-        gr_framebuffer[0].format = GGL_PIXEL_FORMAT_RGB_565;
-    } else if (vi.red.offset == 8 || vi.red.offset == 16) {
-        printf("setting GGL_PIXEL_FORMAT_BGRA_8888\n");
-        gr_framebuffer[0].format = GGL_PIXEL_FORMAT_BGRA_8888;
-    } else if (vi.red.offset == 0) {
-        printf("setting GGL_PIXEL_FORMAT_RGBA_8888\n");
-        gr_framebuffer[0].format = GGL_PIXEL_FORMAT_RGBA_8888;
-    } else if (vi.red.offset == 24) {
-        printf("setting GGL_PIXEL_FORMAT_RGBX_8888\n");
-        gr_framebuffer[0].format = GGL_PIXEL_FORMAT_RGBX_8888;
-    } else {
-        if (vi.red.length == 8) {
-            printf("No valid pixel format detected, trying GGL_PIXEL_FORMAT_RGBX_8888\n");
-            gr_framebuffer[0].format = GGL_PIXEL_FORMAT_RGBX_8888;
-        } else {
-            printf("No valid pixel format detected, trying GGL_PIXEL_FORMAT_RGB_565\n");
-            gr_framebuffer[0].format = GGL_PIXEL_FORMAT_RGB_565;
-        }
-    }
-
     GRPixelFormat pixel_format = fbdev_pixel_format();
     if (pixel_format == GRPixelFormat::UNKNOWN)
         pixel_format = gr_pixel_format();
     if (pixel_format == GRPixelFormat::UNKNOWN)
         pixel_format = gr_framebuffer[0].pixel_bytes == 2
                 ? GRPixelFormat::RGB565 : GRPixelFormat::RGBX8888;
+    gr_framebuffer[0].format = pixel_format;
     gr_set_pixel_format(pixel_format);
     printf("fbdev pixel order: %d\n", static_cast<int>(pixel_format));
 
@@ -318,18 +296,6 @@ static GRSurface* fbdev_init(minui_backend* backend) {
 }
 
 static GRSurface* fbdev_flip(minui_backend* backend __unused) {
-#if defined(RECOVERY_BGRA)
-    // In case of BGRA, do some byte swapping
-    unsigned char* ucfb_vaddr = (unsigned char*)gr_draw->data;
-    if (!gr_raw_frame_native()) {
-        for (int idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes);
-                idx += 4) {
-            unsigned char tmp = ucfb_vaddr[idx];
-            ucfb_vaddr[idx    ] = ucfb_vaddr[idx + 2];
-            ucfb_vaddr[idx + 2] = tmp;
-        }
-    }
-#endif
     if (double_buffered) {
         // Copy from the in-memory surface to the framebuffer.
         memcpy(gr_framebuffer[1-displayed_buffer].data, gr_draw->data,

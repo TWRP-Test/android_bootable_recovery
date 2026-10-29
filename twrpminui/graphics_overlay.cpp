@@ -36,9 +36,8 @@
 #include <linux/msm_ion.h>
 #endif
 
-#include "minui.h"
+#include "twrpminui/minui.h"
 #include "graphics.h"
-#include <pixelflinger/pixelflinger.h>
 
 #define MDP_V4_0 400
 #define MAX_DISPLAY_DIM  2048
@@ -77,13 +76,13 @@ static memInfo mem_info;
 
 static int map_mdp_pixel_format()
 {
-    if (gr_framebuffer.format == GGL_PIXEL_FORMAT_RGB_565)
+    if (gr_framebuffer.format == GRPixelFormat::RGB565)
         return MDP_RGB_565;
-    else if (gr_framebuffer.format == GGL_PIXEL_FORMAT_BGRA_8888)
+    else if (gr_framebuffer.format == GRPixelFormat::BGRA8888)
         return MDP_BGRA_8888;
-    else if (gr_framebuffer.format == GGL_PIXEL_FORMAT_RGBA_8888)
+    else if (gr_framebuffer.format == GRPixelFormat::RGBA8888)
         return MDP_RGBA_8888;
-    else if (gr_framebuffer.format == GGL_PIXEL_FORMAT_RGBX_8888)
+    else if (gr_framebuffer.format == GRPixelFormat::RGBX8888)
         return MDP_RGBA_8888;
     printf("No known pixel format for map_mdp_pixel_format, defaulting to MDP_RGB_565.\n");
     return MDP_RGB_565;
@@ -498,18 +497,6 @@ int overlay_display_frame(int fd, void* data, size_t size)
 }
 
 static GRSurface* overlay_flip(minui_backend* backend __unused) {
-#if defined(RECOVERY_BGRA)
-    // In case of BGRA, do some byte swapping
-    unsigned char* ucfb_vaddr = (unsigned char*)gr_draw->data;
-    if (!gr_raw_frame_native()) {
-        for (int idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes);
-                idx += 4) {
-            unsigned char tmp = ucfb_vaddr[idx];
-            ucfb_vaddr[idx    ] = ucfb_vaddr[idx + 2];
-            ucfb_vaddr[idx + 2] = tmp;
-        }
-    }
-#endif
     // Copy from the in-memory surface to the framebuffer.
     overlay_display_frame(fb_fd, gr_draw->data, frame_size);
     return gr_draw;
@@ -611,48 +598,29 @@ static GRSurface* overlay_init(minui_backend* backend) {
     gr_framebuffer.pixel_bytes = vi.bits_per_pixel / 8;
     //gr_framebuffer.data = reinterpret_cast<uint8_t*>(bits);
     if (vi.bits_per_pixel == 16) {
-        printf("setting GGL_PIXEL_FORMAT_RGB_565\n");
-        gr_framebuffer.format = GGL_PIXEL_FORMAT_RGB_565;
+        printf("setting GRPixelFormat::RGB565\n");
+        gr_framebuffer.format = GRPixelFormat::RGB565;
     } else if (vi.red.offset == 8 || vi.red.offset == 16) {
-        printf("setting GGL_PIXEL_FORMAT_BGRA_8888\n");
-        gr_framebuffer.format = GGL_PIXEL_FORMAT_BGRA_8888;
+        printf("setting GRPixelFormat::BGRA8888\n");
+        gr_framebuffer.format = GRPixelFormat::BGRA8888;
     } else if (vi.red.offset == 0) {
-        printf("setting GGL_PIXEL_FORMAT_RGBA_8888\n");
-        gr_framebuffer.format = GGL_PIXEL_FORMAT_RGBA_8888;
+        printf("setting GRPixelFormat::RGBA8888\n");
+        gr_framebuffer.format = GRPixelFormat::RGBA8888;
     } else if (vi.red.offset == 24) {
-        printf("setting GGL_PIXEL_FORMAT_RGBX_8888\n");
-        gr_framebuffer.format = GGL_PIXEL_FORMAT_RGBX_8888;
+        printf("setting GRPixelFormat::RGBX8888\n");
+        gr_framebuffer.format = GRPixelFormat::RGBX8888;
     } else {
         if (vi.red.length == 8) {
-            printf("No valid pixel format detected, trying GGL_PIXEL_FORMAT_RGBX_8888\n");
-            gr_framebuffer.format = GGL_PIXEL_FORMAT_RGBX_8888;
+            printf("No valid pixel format detected, trying GRPixelFormat::RGBX8888\n");
+            gr_framebuffer.format = GRPixelFormat::RGBX8888;
         } else {
-            printf("No valid pixel format detected, trying GGL_PIXEL_FORMAT_RGB_565\n");
-            gr_framebuffer.format = GGL_PIXEL_FORMAT_RGB_565;
+            printf("No valid pixel format detected, trying GRPixelFormat::RGB565\n");
+            gr_framebuffer.format = GRPixelFormat::RGB565;
         }
     }
 
-    // Overlay uses the same mmap byte order as fbdev. Keep the explicit
-    // format separate from GGL because LVGL can also target RGB565 and the
-    // ABGR/ARGB DRM orders have no direct GGL equivalent.
-    if (gr_pixel_format() == GRPixelFormat::UNKNOWN) {
-        switch (gr_framebuffer.format) {
-            case GGL_PIXEL_FORMAT_RGB_565:
-                gr_set_pixel_format(GRPixelFormat::RGB565);
-                break;
-            case GGL_PIXEL_FORMAT_BGRA_8888:
-                gr_set_pixel_format(GRPixelFormat::BGRA8888);
-                break;
-            case GGL_PIXEL_FORMAT_RGBA_8888:
-                gr_set_pixel_format(GRPixelFormat::RGBA8888);
-                break;
-            case GGL_PIXEL_FORMAT_RGBX_8888:
-                gr_set_pixel_format(GRPixelFormat::RGBX8888);
-                break;
-            default:
-                break;
-        }
-    }
+    // The overlay mapping and CPU writes must use the same byte order.
+    gr_set_pixel_format(gr_framebuffer.format);
 
     frame_size = fi.line_length * vi.yres;
 

@@ -65,7 +65,6 @@
 
 #include "twrpminui/minui.h"
 #include "graphics.h"
-#include <pixelflinger/pixelflinger.h>
 
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*(A)))
 
@@ -793,7 +792,6 @@ static int drm_format_to_bpp(uint32_t format) {
 
 static drm_surface *drm_create_surface(int width, int height) {
     uint32_t format;
-    __u32 base_format;
     int ret;
 
     drm_surface* surface = static_cast<drm_surface*>(calloc(1, sizeof(*surface)));
@@ -804,37 +802,31 @@ static drm_surface *drm_create_surface(int width, int height) {
 
 #if defined(RECOVERY_ABGR)
     format = DRM_FORMAT_RGBA8888;
-    base_format = GGL_PIXEL_FORMAT_RGBA_8888;
     gr_set_pixel_format(GRPixelFormat::ABGR8888);
-    printf("setting DRM_FORMAT_RGBA8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
+    printf("setting DRM_FORMAT_RGBA8888\n");
 #elif defined(RECOVERY_BGRA)
     format = DRM_FORMAT_ARGB8888;
-    base_format = GGL_PIXEL_FORMAT_RGBA_8888;
     gr_set_pixel_format(GRPixelFormat::BGRA8888);
-    printf("setting DRM_FORMAT_ARGB8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
+    printf("setting DRM_FORMAT_ARGB8888\n");
 #elif defined(RECOVERY_RGBA)
     format = DRM_FORMAT_ABGR8888;
-    base_format = GGL_PIXEL_FORMAT_BGRA_8888;
     gr_set_pixel_format(GRPixelFormat::RGBA8888);
-    printf("setting DRM_FORMAT_ABGR8888 and GGL_PIXEL_FORMAT_BGRA_8888\n");
+    printf("setting DRM_FORMAT_ABGR8888\n");
 #elif defined(RECOVERY_RGBX)
     format = DRM_FORMAT_XBGR8888;
-    base_format = GGL_PIXEL_FORMAT_RGBA_8888;
     gr_set_pixel_format(GRPixelFormat::RGBX8888);
-    printf("setting DRM_FORMAT_XBGR8888 and GGL_PIXEL_FORMAT_RGBA_8888\n");
+    printf("setting DRM_FORMAT_XBGR8888\n");
 #elif defined(RECOVERY_ARGB)
     format = DRM_FORMAT_BGRA8888;
-    // GGL has no ARGB byte-order format. The LVGL path uses the explicit
-    // GRPixelFormat value above; keep the legacy renderer's closest format.
-    base_format = GGL_PIXEL_FORMAT_BGRA_8888;
     gr_set_pixel_format(GRPixelFormat::ARGB8888);
     printf("setting DRM_FORMAT_BGRA8888 and ARGB8888 output conversion\n");
 #else
     format = DRM_FORMAT_RGB565;
-    base_format = GGL_PIXEL_FORMAT_RGB_565;
     gr_set_pixel_format(GRPixelFormat::RGB565);
-    printf("setting DRM_FORMAT_RGB565 and GGL_PIXEL_FORMAT_RGB_565\n");
+    printf("setting DRM_FORMAT_RGB565\n");
 #endif
+
+    surface->base.format = gr_pixel_format();
 
     drm_mode_create_dumb create_dumb = {};
     create_dumb.height = height;
@@ -878,7 +870,6 @@ static drm_surface *drm_create_surface(int width, int height) {
     surface->base.width = width;
     surface->base.row_bytes = create_dumb.pitch;
     surface->base.pixel_bytes = create_dumb.bpp / 8;
-    surface->base.format = base_format;
     surface->base.data = (unsigned char*)
                          mmap(nullptr,
                               surface->base.height * surface->base.row_bytes,

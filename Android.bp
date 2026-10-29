@@ -541,7 +541,6 @@ cc_binary {
         "libmounts",
         "libotautil",
         "libsparse",
-        "libpixelflinger_twrp",
         "libfusesideload",
         "libgsi",
         "libvold",
