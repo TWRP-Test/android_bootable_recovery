@@ -59,24 +59,60 @@ bool all_replied(const std::string& reply) {
   return reply.find(" 0% packet loss") != std::string::npos;
 }
 
-// wpa_cli prints anything outside printable ASCII as \xNN.
+// wpa_supplicant prints SSIDs through printf_encode(): '"' and '\\' become
+// \" and \\, control characters become \e \n \r \t, and anything else
+// outside printable ASCII becomes \xNN.  All of them have to be decoded here,
+// otherwise an SSID such as Xia"omi 15 is shown - and later used to connect -
+// as Xia\"omi 15.
 std::string unescaped(const std::string& value) {
   std::string out;
   out.reserve(value.size());
+  const auto hex_digit = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
+  };
   for (size_t i = 0; i < value.size();) {
-    if (i + 3 < value.size() && value[i] == '\\' && value[i + 1] == 'x') {
-      const auto digit = [](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
-        if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
-        return -1;
-      };
-      const int high = digit(value[i + 2]);
-      const int low = digit(value[i + 3]);
-      if (high >= 0 && low >= 0) {
-        out.push_back(static_cast<char>((high << 4) | low));
-        i += 4;
-        continue;
+    if (value[i] == '\\' && i + 1 < value.size()) {
+      switch (value[i + 1]) {
+        case '"':
+          out.push_back('"');
+          i += 2;
+          continue;
+        case '\\':
+          out.push_back('\\');
+          i += 2;
+          continue;
+        case 'e':
+          out.push_back('\033');
+          i += 2;
+          continue;
+        case 'n':
+          out.push_back('\n');
+          i += 2;
+          continue;
+        case 'r':
+          out.push_back('\r');
+          i += 2;
+          continue;
+        case 't':
+          out.push_back('\t');
+          i += 2;
+          continue;
+        case 'x':
+          if (i + 3 < value.size()) {
+            const int high = hex_digit(value[i + 2]);
+            const int low = hex_digit(value[i + 3]);
+            if (high >= 0 && low >= 0) {
+              out.push_back(static_cast<char>((high << 4) | low));
+              i += 4;
+              continue;
+            }
+          }
+          break;
+        default:
+          break;
       }
     }
     out.push_back(value[i]);
@@ -301,15 +337,34 @@ void twrp_wifi_backend::run_connect(std::string ssid, wifi_security security,
   // One network entry, rebuilt every time, exactly as the legacy page does it.
   wpa("remove_network 0");
   wpa("add_network");
+  // ssid and psk are enclosed in double quotes and passed through verbatim:
+  // wpa_config_parse_string() and wpa_config_parse_psk() keep everything
+  // between the first and the last quote and do not decode backslash escapes,
+  // so '"' and '\\' inside them must not be escaped.
   wpa("set_network 0 ssid " + quoted("\"" + ssid + "\""));
   wpa(std::string("set_network 0 key_mgmt ") + key_management_for(security));
+  if (security == wifi_security::WPA3) {
+    // WPA3-SAE mandates PMF.  Without ieee80211w=2 wpa_supplicant skips the
+    // BSS with "no mgmt frame protection enabled but AP requires it".
+    // sae_pwe=2 permits both H2E and hunting-and-pecking, needed by APs that
+    // advertise only SAE-H2E.
+    wpa("set_network 0 ieee80211w 2");
+    wpa("set_network 0 sae_pwe 2");
+  } else if (security == wifi_security::WPA2 || security == wifi_security::WPA) {
+    // Transition-mode APs sometimes advertise WPA2 but set MFPR (PMF
+    // required); optional PMF keeps them connectable and does not hurt APs
+    // that do not support it.
+    wpa("set_network 0 ieee80211w 1");
+  }
   if (security != wifi_security::OPEN)
     wpa("set_network 0 psk " + quoted("\"" + password + "\""));
   wpa("enable_network 0");
 
   note("Authenticating...\n");
   bool connected = false;
-  for (int attempt = 0; attempt < 20; ++attempt) {
+  // 40 s: SAE + PMF on a DFS / 6 GHz channel can take well over 20 s before
+  // the first association completes.
+  for (int attempt = 0; attempt < 40; ++attempt) {
     if (wpa("status").find("wpa_state=COMPLETED") != std::string::npos) {
       connected = true;
       break;
