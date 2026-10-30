@@ -14,77 +14,35 @@
  * limitations under the License.
  */
 
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+// Baseline: current minui/graphics_fbdev.cpp; local differences are marked TWRP.
+
+#include "graphics_fbdev.h"
 
 #include <fcntl.h>
+#include <linux/fb.h>
 #include <stdio.h>
-
-#include <sys/cdefs.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <unistd.h>
 
-#include <linux/fb.h>
-#include <linux/kd.h>
+#include <memory>
+#include <algorithm>
+
+#include <android-base/unique_fd.h>
 
 #include "twrpminui/minui.h"
-#include "graphics.h"
 
-static GRSurface* fbdev_init(minui_backend*);
-static GRSurface* fbdev_flip(minui_backend*);
-static void fbdev_blank(minui_backend*, bool);
-static void fbdev_exit(minui_backend*);
-
-static GRSurface gr_framebuffer[2];
-static bool double_buffered;
-static GRSurface* gr_draw = NULL;
-static int displayed_buffer;
-
-static fb_var_screeninfo vi;
-static int fb_fd = -1;
-static __u32 smem_len;
-
-static GRPixelFormat fbdev_pixel_format()
-{
-    if (vi.bits_per_pixel == 16)
-        return GRPixelFormat::RGB565;
-
-    if (vi.bits_per_pixel != 32 || vi.red.length != 8 ||
-        vi.green.length != 8 || vi.blue.length != 8)
-        return GRPixelFormat::UNKNOWN;
-
-    // fb_var_screeninfo offsets describe the bit layout of the actual
-    // mmap()ed bytes. Do not infer this from red.offset alone: ARGB and
-    // BGRA, for example, overlap on one channel offset.
-    if (vi.red.offset == 0 && vi.green.offset == 8 && vi.blue.offset == 16)
-        return vi.transp.length == 8 ? GRPixelFormat::RGBA8888
-                                     : GRPixelFormat::RGBX8888;
-    if (vi.blue.offset == 0 && vi.green.offset == 8 && vi.red.offset == 16)
-        return GRPixelFormat::BGRA8888;
-    if (vi.red.offset == 24 && vi.green.offset == 16 && vi.blue.offset == 8)
-        return vi.transp.length == 8 && vi.transp.offset == 0
-                ? GRPixelFormat::ABGR8888 : GRPixelFormat::XRGB8888;
-    if (vi.blue.offset == 24 && vi.green.offset == 16 && vi.red.offset == 8)
-        return GRPixelFormat::ARGB8888;
-    return GRPixelFormat::UNKNOWN;
+std::unique_ptr<GRSurfaceFbdev> GRSurfaceFbdev::Create(size_t width, size_t height,
+                                                       size_t row_bytes, size_t pixel_bytes) {
+  // Cannot use std::make_unique to access non-public ctor.
+  return std::unique_ptr<GRSurfaceFbdev>(new GRSurfaceFbdev(width, height, row_bytes, pixel_bytes));
 }
 
-static minui_backend my_backend = {
-    .init = fbdev_init,
-    .flip = fbdev_flip,
-    .blank = fbdev_blank,
-    .exit = fbdev_exit,
-};
-
-minui_backend* open_fbdev() {
-    return &my_backend;
-}
-
-static void fbdev_blank(minui_backend* backend __unused, bool blank __unused)
-{
+// TWRP: brightness fallback and secondary brightness path (2948b6f3).
+void MinuiBackendFbdev::Blank(bool blank) {
 #if defined(TW_NO_SCREEN_BLANK) && defined(TW_BRIGHTNESS_PATH) && defined(TW_MAX_BRIGHTNESS)
     int fd;
     char brightness[4];
@@ -118,49 +76,43 @@ static void fbdev_blank(minui_backend* backend __unused, bool blank __unused)
 #endif
 }
 
-static void set_displayed_framebuffer(unsigned n)
-{
-    if (n > 1 || !double_buffered) return;
-
-    vi.yres_virtual = gr_framebuffer[0].height * 2;
-    vi.yoffset = n * gr_framebuffer[0].height;
-    vi.bits_per_pixel = gr_framebuffer[0].pixel_bytes * 8;
-    if (ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
-        perror("active fb swap failed");
-#ifdef TW_FBIOPAN
-    } else {
-        if (ioctl(fb_fd, FBIOPAN_DISPLAY, &vi) < 0) {
-            perror("pan failed");
-        }
-#endif
-    }
-    displayed_buffer = n;
+void MinuiBackendFbdev::Blank(bool blank, DrmConnector index) {
+  if (index == DRM_MAIN) {
+    MinuiBackendFbdev::Blank(blank);
+  } else {
+    fprintf(stderr, "Unsupported multiple connectors, blank = %d, index = %d\n", blank, index);
+  }
 }
 
-static GRSurface* fbdev_init(minui_backend* backend) {
-    int retry = 20;
-    int fd = -1;
-    while (fd == -1) {
-        fd = open("/dev/graphics/fb0", O_RDWR);
-        if (fd == -1) {
-            if (--retry) {
-                // wait for init to create the device node
-                perror("cannot open fb0 (retrying)");
-                usleep(100000);
-            } else {
-                perror("cannot open fb0 (giving up)");
-                return NULL;
-            }
-        }
-    }
+bool MinuiBackendFbdev::HasMultipleConnectors() {
+  fprintf(stderr, "Unsupported multiple connectors\n");
+  return false;
+}
 
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &vi) < 0) {
-        perror("failed to get fb0 info (FBIOGET_VSCREENINFO)");
-        close(fd);
-        return NULL;
-    }
-    gr_set_physical_size(static_cast<int>(vi.width), static_cast<int>(vi.height));
+void MinuiBackendFbdev::SetDisplayedFramebuffer(size_t n) {
+  if (n > 1 || !double_buffered) return;
 
+  vi.yres_virtual = gr_framebuffer[0]->height * 2;
+  vi.yoffset = n * gr_framebuffer[0]->height;
+  vi.bits_per_pixel = gr_framebuffer[0]->pixel_bytes * 8;
+  if (ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
+    // TWRP: HiSilicon kernels require FBIOPAN_DISPLAY (0ac2293a).
+    if (ioctl(fb_fd, FBIOPAN_DISPLAY, &vi) < 0) perror("active fb swap failed");
+  }
+  displayed_buffer = n;
+}
+
+GRSurface* MinuiBackendFbdev::Init() {
+  // TWRP: wait briefly for init to create fb0 (b9d8f62c).
+  android::base::unique_fd fd;
+  for (int attempt = 0; attempt < 20 && fd < 0; ++attempt) {
+    fd.reset(open("/dev/graphics/fb0", O_RDWR | O_CLOEXEC));
+    if (fd < 0 && attempt != 19) usleep(100000);
+  }
+  if (fd < 0) return nullptr;
+  if (ioctl(fd, FBIOGET_VSCREENINFO, &vi) < 0) return nullptr;
+  gr_set_physical_size(static_cast<int>(vi.width), static_cast<int>(vi.height));
+  // TWRP: forcing RGB565 must precede querying the fixed framebuffer layout.
 #ifdef RECOVERY_FORCE_RGB_565
     // Changing fb_var_screeninfo can affect fb_fix_screeninfo,
     // so this needs done before querying for fi.
@@ -180,143 +132,119 @@ static GRSurface* fbdev_init(minui_backend* backend) {
 
     if (ioctl(fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
         perror("failed to put force_rgb_565 fb0 info");
-        close(fd);
-        return NULL;
+        return nullptr;
     }
 #endif
 
-    fb_fix_screeninfo fi;
-    if (ioctl(fd, FBIOGET_FSCREENINFO, &fi) < 0) {
-        perror("failed to get fb0 info (FBIOGET_FSCREENINFO)");
-        close(fd);
-        return NULL;
-    }
 
-    // We print this out for informational purposes only, but
-    // throughout we assume that the framebuffer device uses an RGBX
-    // pixel format.  This is the case for every development device I
-    // have access to.  For some of those devices (eg, hammerhead aka
-    // Nexus 5), FBIOGET_VSCREENINFO *reports* that it wants a
-    // different format (XBGR) but actually produces the correct
-    // results on the display when you write RGBX.
-    //
-    // If you have a device that actually *needs* another pixel format
-    // (ie, BGRX, or 565), patches welcome...
+  fb_fix_screeninfo fi;
+  if (ioctl(fd, FBIOGET_FSCREENINFO, &fi) < 0) return nullptr;
+  // We print this out for informational purposes only, but
+  // throughout we assume that the framebuffer device uses an RGBX
+  // pixel format.  This is the case for every development device I
+  // have access to.  For some of those devices (eg, hammerhead aka
+  // Nexus 5), FBIOGET_VSCREENINFO *reports* that it wants a
+  // different format (XBGR) but actually produces the correct
+  // results on the display when you write RGBX.
+  //
+  // If you have a device that actually *needs* another pixel format
+  // (ie, BGRX, or 565), patches welcome...
 
-    printf("fb0 reports (possibly inaccurate):\n"
-           "  vi.bits_per_pixel = %d\n"
-           "  vi.red.offset   = %3d   .length = %3d\n"
-           "  vi.green.offset = %3d   .length = %3d\n"
-           "  vi.blue.offset  = %3d   .length = %3d\n",
-           vi.bits_per_pixel,
-           vi.red.offset, vi.red.length,
-           vi.green.offset, vi.green.length,
-           vi.blue.offset, vi.blue.length);
+  printf(
+      "fb0 reports (possibly inaccurate):\n"
+      "  vi.bits_per_pixel = %d\n"
+      "  vi.red.offset   = %3d   .length = %3d\n"
+      "  vi.green.offset = %3d   .length = %3d\n"
+      "  vi.blue.offset  = %3d   .length = %3d\n",
+      vi.bits_per_pixel, vi.red.offset, vi.red.length, vi.green.offset, vi.green.length,
+      vi.blue.offset, vi.blue.length);
 
-    void* bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (bits == MAP_FAILED) {
-        perror("failed to mmap framebuffer");
-        close(fd);
-        return NULL;
-    }
+  void* bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (bits == MAP_FAILED) {
+    perror("failed to mmap framebuffer");
+    return nullptr;
+  }
 
-    memset(bits, 0, fi.smem_len);
+  // TWRP: retain mapping ownership even if later surface allocation fails.
+  mapping = bits;
+  mapping_size = fi.smem_len;
+  memset(bits, 0, fi.smem_len);
 
-    gr_framebuffer[0].width = vi.xres;
-    gr_framebuffer[0].height = vi.yres;
-    gr_framebuffer[0].row_bytes = fi.line_length;
-    gr_framebuffer[0].pixel_bytes = vi.bits_per_pixel / 8;
+  gr_framebuffer[0] =
+      GRSurfaceFbdev::Create(vi.xres, vi.yres, fi.line_length, vi.bits_per_pixel / 8);
+  gr_framebuffer[0]->buffer_ = static_cast<uint8_t*>(bits);
+  memset(gr_framebuffer[0]->buffer_, 0, gr_framebuffer[0]->height * gr_framebuffer[0]->row_bytes);
+
+  gr_framebuffer[1] =
+      GRSurfaceFbdev::Create(gr_framebuffer[0]->width, gr_framebuffer[0]->height,
+                             gr_framebuffer[0]->row_bytes, gr_framebuffer[0]->pixel_bytes);
+
+  // TWRP: explicit output byte order is used by LVGL and PNG capture.
+  gr_set_pixel_format(gr_framebuffer_format(vi, gr_frame_pixel_format()));
 #ifdef RECOVERY_GRAPHICS_FORCE_USE_LINELENGTH
-    printf("Forcing line length\n");
-    vi.xres_virtual = fi.line_length / gr_framebuffer[0].pixel_bytes;
+  vi.xres_virtual = fi.line_length / gr_framebuffer[0]->pixel_bytes;
 #endif
-    gr_framebuffer[0].data = reinterpret_cast<uint8_t*>(bits);
-    GRPixelFormat pixel_format = fbdev_pixel_format();
-    if (pixel_format == GRPixelFormat::UNKNOWN)
-        pixel_format = gr_pixel_format();
-    if (pixel_format == GRPixelFormat::UNKNOWN)
-        pixel_format = gr_framebuffer[0].pixel_bytes == 2
-                ? GRPixelFormat::RGB565 : GRPixelFormat::RGBX8888;
-    gr_framebuffer[0].format = pixel_format;
-    gr_set_pixel_format(pixel_format);
-    printf("fbdev pixel order: %d\n", static_cast<int>(pixel_format));
-
-    // Drawing directly to the framebuffer takes about 5 times longer.
-    // Instead, we will allocate some memory and draw to that, then
-    // memcpy the data into the framebuffer later.
-    gr_draw = (GRSurface*) malloc(sizeof(GRSurface));
-    if (!gr_draw) {
-        perror("failed to allocate gr_draw");
-        close(fd);
-        munmap(bits, fi.smem_len);
-        return NULL;
-    }
-    memcpy(gr_draw, gr_framebuffer, sizeof(GRSurface));
-    gr_draw->data = (unsigned char*) calloc(gr_draw->height * gr_draw->row_bytes, 1);
-    if (!gr_draw->data) {
-        perror("failed to allocate in-memory surface");
-        close(fd);
-        free(gr_draw);
-        munmap(bits, fi.smem_len);
-        return NULL;
-    }
-
-    /* check if we can use double buffering */
+  /* check if we can use double buffering */
 #ifndef RECOVERY_GRAPHICS_FORCE_SINGLE_BUFFER
-    if (vi.yres * fi.line_length * 2 <= fi.smem_len) {
-        double_buffered = true;
-        printf("double buffered\n");
-
-        memcpy(gr_framebuffer+1, gr_framebuffer, sizeof(GRSurface));
-        gr_framebuffer[1].data = gr_framebuffer[0].data +
-            gr_framebuffer[0].height * gr_framebuffer[0].row_bytes;
-
-    } else {
+  if (vi.yres * fi.line_length * 2 <= fi.smem_len) {
 #else
-    {
-        printf("RECOVERY_GRAPHICS_FORCE_SINGLE_BUFFER := true\n");
+  if (false) { // TWRP: 4a71d4f6, force single-buffer scanout.
 #endif
-        double_buffered = false;
-        printf("single buffered\n");
-    }
-#if defined(RECOVERY_BGRA)
-    printf("RECOVERY_BGRA\n");
-#endif
-    fb_fd = fd;
-    set_displayed_framebuffer(0);
+    double_buffered = true;
 
-    printf("framebuffer: %d (%d x %d)\n", fb_fd, gr_draw->width, gr_draw->height);
+    gr_framebuffer[1]->buffer_ =
+        gr_framebuffer[0]->buffer_ + gr_framebuffer[0]->height * gr_framebuffer[0]->row_bytes;
+  } else {
+    double_buffered = false;
 
-    fbdev_blank(backend, true);
-    fbdev_blank(backend, false);
+    // Without double-buffering, we allocate RAM for a buffer to draw in, and then "flipping" the
+    // buffer consists of a memcpy from the buffer we allocated to the framebuffer.
+    memory_buffer.resize(gr_framebuffer[1]->height * gr_framebuffer[1]->row_bytes);
+    gr_framebuffer[1]->buffer_ = memory_buffer.data();
+  }
 
-    smem_len = fi.smem_len;
+  gr_draw = gr_framebuffer[1].get();
+  memset(gr_draw->buffer_, 0, gr_draw->height * gr_draw->row_bytes);
+  fb_fd = std::move(fd);
+  SetDisplayedFramebuffer(0);
 
-    return gr_draw;
+  printf("framebuffer: %d (%zu x %zu)\n", fb_fd.get(), gr_draw->width, gr_draw->height);
+  Blank(false);
+
+  // TWRP: minui's scanout surfaces stay backend-owned; LVGL draws into stable RAM.
+  staging_buffer = GRSurface::Create(gr_draw->width, gr_draw->height,
+                                     gr_draw->row_bytes, gr_draw->pixel_bytes);
+  if (!staging_buffer) return nullptr;
+  memset(staging_buffer->data(), 0, staging_buffer->row_bytes * staging_buffer->height);
+  return staging_buffer.get();
 }
 
-static GRSurface* fbdev_flip(minui_backend* backend __unused) {
-    if (double_buffered) {
-        // Copy from the in-memory surface to the framebuffer.
-        memcpy(gr_framebuffer[1-displayed_buffer].data, gr_draw->data,
-               gr_draw->height * gr_draw->row_bytes);
-        set_displayed_framebuffer(1-displayed_buffer);
-    } else {
-        // Copy from the in-memory surface to the framebuffer.
-        memcpy(gr_framebuffer[0].data, gr_draw->data,
-               gr_draw->height * gr_draw->row_bytes);
-    }
-    return gr_draw;
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+GRSurface* MinuiBackendFbdev::Flip() {
+  if (double_buffered) {
+    // Change gr_draw to point to the buffer currently displayed, then flip the driver so we're
+    // displaying the other buffer instead.
+    gr_draw = gr_framebuffer[displayed_buffer].get();
+    SetDisplayedFramebuffer(1 - displayed_buffer);
+  } else {
+    // Copy from the in-memory surface to the framebuffer.
+    memcpy(gr_framebuffer[0]->buffer_, gr_draw->buffer_, gr_draw->height * gr_draw->row_bytes);
+  }
+  return gr_draw;
 }
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+GRSurface* MinuiBackendFbdev::Flip() {
+  // TWRP: preserve partial LVGL updates while scanout changes buffers.
+  const int target = double_buffered ? 1 - displayed_buffer : 0;
+  memcpy(gr_framebuffer[target]->buffer_, staging_buffer->data(),
+         staging_buffer->height * staging_buffer->row_bytes);
+  if (double_buffered) SetDisplayedFramebuffer(target);
+  return staging_buffer.get();
+}
+#endif // TWRP
 
-static void fbdev_exit(minui_backend* backend __unused) {
-    close(fb_fd);
-    fb_fd = -1;
 
-    if (gr_draw) {
-        free(gr_draw->data);
-        free(gr_draw);
-    }
-    gr_draw = NULL;
-    munmap(gr_framebuffer[0].data, smem_len);
+// TWRP: minui's unique_fd closes the device; the mmap needs explicit ownership.
+MinuiBackendFbdev::~MinuiBackendFbdev() {
+  if (mapping) munmap(mapping, mapping_size);
 }

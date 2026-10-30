@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+// Baseline: current minui/graphics_drm.cpp; local differences are marked TWRP.
+// Historical hand-ports 673bffeb (atomic), bee78dde (topology) and edf59d8b
+// (SPR) are superseded by minui's CLO implementations, including reverse pipe
+// allocation, secondary connectors and demura handoff. TWRP fixes are layered below.
+
 /*
  * DRM based mode setting test program
  * Copyright 2008 Tungsten Graphics
@@ -40,23 +45,28 @@
  * IN THE SOFTWARE.
  */
 
+#include "graphics_drm.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android-base/properties.h>
-
+#include <memory>
+// TWRP: raw frame synchronization and optional presentation statistics.
 #include <algorithm>
-#include <array>
 #include <cinttypes>
-#include <map>
+#include <cstring>
+#include <limits>
+
+#include <android-base/macros.h>
+#include <android-base/properties.h>
+#include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <string>
 #include <drm_fourcc.h>
 #include <xf86drm.h>
@@ -64,304 +74,25 @@
 #include <sstream>
 
 #include "twrpminui/minui.h"
-#include "graphics.h"
 
-#define ARRAY_SIZE(A) (sizeof(A)/sizeof(*(A)))
-
-struct drm_surface {
-    GRSurface base;
-    uint32_t fb_id;
-    uint32_t handle;
-};
-
-#define NUM_MAIN 1
-#define NUM_PLANES 4
-#define DEFAULT_NUM_LMS 2
-
-#define SPR_INIT_PARAM_SIZE_1 4
-#define SPR_INIT_PARAM_SIZE_2 5
-#define SPR_INIT_PARAM_SIZE_3 16
-#define SPR_INIT_PARAM_SIZE_4 24
-#define SPR_INIT_PARAM_SIZE_5 32
-#define SPR_INIT_PARAM_SIZE_6 7
-#define SPR_FLAG_BYPASS (1 << 0)
-enum class SPRPackType {
-  kPentile,
-  kRGBW,
-  kYYGW,
-  kYYGM,
-  kDelta3,
-  kMax = 0xFF,
-};
-enum class SPRFilterType {
-  kPixelDrop,
-  kBilinear,
-  kFourTap,
-  kAdaptive,
-  k2DAvg,
-  kMax = 0xFF,
-};
-enum class SPRAdaptiveModeType {
-  kYYGM,
-  kYYGW,
-  kMax = 0xFF,
-};
-static const std::map<SPRPackType, uint32_t> kDefaultColorPhaseIncrement = {
-  { { { SPRPackType::kPentile }, { 8 } },
-    { { SPRPackType::kYYGM }, { 6 } },
-    { { SPRPackType::kYYGW }, { 6 } },
-    { { SPRPackType::kDelta3 }, { 6 } },
-    { { SPRPackType::kRGBW }, { 8 } } }
-};
-static const std::map<SPRPackType, uint32_t> kDefaultColorPhaseRepeat = {
-  { { { SPRPackType::kPentile }, { 2 } },
-    { { SPRPackType::kYYGM }, { 2 } },
-    { { SPRPackType::kYYGW }, { 2 } },
-    { { SPRPackType::kDelta3 }, { 2 } },
-    { { SPRPackType::kRGBW }, { 2 } } }
-};
-static const std::map<SPRPackType, std::array<uint16_t, SPR_INIT_PARAM_SIZE_1>> kDecimationRatioMap{
-  {
-      { { SPRPackType::kPentile }, { 1, 0, 1, 0 } },
-      { { SPRPackType::kYYGM }, { 2, 2, 2, 0 } },
-      { { SPRPackType::kYYGW }, { 2, 2, 2, 0 } },
-      { { SPRPackType::kRGBW }, { 1, 1, 1, 1 } },
-  }
-};
-static const std::map<SPRFilterType, std::array<int16_t, SPR_INIT_PARAM_SIZE_3>>
-    kDefaultFilterCoeffsMap{
-      { { { SPRFilterType::kPixelDrop }, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-        { { SPRFilterType::kBilinear },
-          { 0, 512, 0, 0, -33, 443, 110, -8, -23, 279, 279, -23, -8, 110, 443, -33 } },
-        { { SPRFilterType::kFourTap },
-          { 128, 256, 128, 0, 86, 241, 164, 21, 52, 204, 204, 52, 21, 164, 241, 86 } },
-        { { SPRFilterType::kAdaptive },
-          { 0, 256, 256, 0, 0, 256, 256, 0, 0, 256, 256, 0, 0, 256, 256, 0 } } }
-    };
-static const std::map<SPRPackType, std::array<int16_t, SPR_INIT_PARAM_SIZE_4>>
-    kDefaultColorPhaseMap{
-      { { { SPRPackType::kPentile },
-          { -2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-        { { SPRPackType::kYYGM },
-          { -3, 0, 0, 0, 0, 0, -1, 2, 1, 1, 0, 0, 1, -2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 } },
-        { { SPRPackType::kYYGW },
-          { -4, 2, 0, 0, 0, -1, 2, 2, 0, -1, -1, -1, 2, 2, -1, -1, -1, 2, 0, 0, 0, 0, 0, 0 } },
-        { { SPRPackType::kDelta3 },
-          { -3, 0, 0, 0, 0, 0, 0, -3, 0, 0, 0, 0, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-        { { SPRPackType::kRGBW },
-          { -4, 0, 0, 0, 0, 0, -2, 2, 0, 0, 0, 0, 0, -4, 0, 0, 0, 0, 2, -2, 0, 0, 0, 0 } } }
-    };
-static const std::array<uint16_t, SPR_INIT_PARAM_SIZE_1> kDefaultRGBWGains = { 1024, 1024, 1024,
-                                                                               341 };
-static const std::array<uint16_t, SPR_INIT_PARAM_SIZE_1> kDefaultOPRGains = { 341, 341, 341, 0 };
-static const std::array<uint16_t, SPR_INIT_PARAM_SIZE_2> kDefaultAdaptiveStrengths = { 0, 4, 8, 12,
-                                                                                       16 };
-static const std::array<uint16_t, SPR_INIT_PARAM_SIZE_5> kDefaultOPROffsets = {
-  0,    132,  264,  396,  529,  661,  793,  925,  1057, 1189, 1321, 1453, 1586, 1718, 1850, 1982,
-  2114, 2246, 2378, 2510, 2643, 2775, 2907, 3039, 3171, 3303, 3435, 3567, 3700, 3832, 3964, 4095
-};
-
-struct Crtc {
-  drmModeObjectProperties *props;
-  drmModePropertyRes **props_info;
-  uint32_t mode_blob_id;
-  uint32_t spr_blob_id;
-};
-
-struct Connector {
-  drmModeObjectProperties *props;
-  drmModePropertyRes **props_info;
-};
-
-struct Plane {
-  drmModePlane *plane;
-  drmModeObjectProperties *props;
-  drmModePropertyRes ** props_info;
-};
-
-struct drm_msm_spr_init_cfg {
-  __u64 flags;
-  __u16 cfg0;
-  __u16 cfg1;
-  __u16 cfg2;
-  __u16 cfg3;
-  __u16 cfg4;
-  __u16 cfg5;
-  __u16 cfg6;
-  __u16 cfg7;
-  __u16 cfg8;
-  __u16 cfg9;
-  __u32 cfg10;
-  __u16 cfg11[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg12[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg13[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg14[SPR_INIT_PARAM_SIZE_2];
-  __u16 cfg15[SPR_INIT_PARAM_SIZE_5];
-  int cfg16[SPR_INIT_PARAM_SIZE_3];
-  int cfg17[SPR_INIT_PARAM_SIZE_4];
-};
-struct drm_msm_spr_init_cfg_v2 {
-  __u64 flags;
-  __u16 cfg0;
-  __u16 cfg1;
-  __u16 cfg2;
-  __u16 cfg3;
-  __u16 cfg4;
-  __u16 cfg5;
-  __u16 cfg6;
-  __u16 cfg7;
-  __u16 cfg8;
-  __u16 cfg9;
-  __u32 cfg10;
-  __u16 cfg11[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg12[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg13[SPR_INIT_PARAM_SIZE_1];
-  __u16 cfg14[SPR_INIT_PARAM_SIZE_2];
-  __u16 cfg15[SPR_INIT_PARAM_SIZE_5];
-  int cfg16[SPR_INIT_PARAM_SIZE_3];
-  int cfg17[SPR_INIT_PARAM_SIZE_4];
-  __u16 cfg18_en;
-  __u8 cfg18[SPR_INIT_PARAM_SIZE_6];
-};
-
-static drm_surface *drm_surfaces[2];
-static int current_buffer;
-static GRSurface *draw_buf = nullptr;
-static GRRect staging_pending_damage[2];
-static GRRect direct_pending_damage;
-static int displayed_buffer = -1;
-static bool legacy_page_flip = true;
-static bool atomic_page_flip = true;
-static int atomic_page_flip_failures = 0;
-static bool direct_scanout;
-static bool warned_empty_damage;
-static uint64_t stats_frames;
-static uint64_t stats_copied_bytes;
-static uint64_t stats_full_bytes;
-static constexpr uint64_t kStatsInterval = 120;
-
-static drmModeCrtc *main_monitor_crtc;
-static drmModeConnector *main_monitor_connector;
-
-static int drm_fd = -1;
-
-static bool current_blank_state = true;
-static int fb_prop_id;
-static struct Crtc crtc_res;
-static struct Connector conn_res;
-static struct Plane plane_res[NUM_PLANES];
-static uint32_t number_of_lms = DEFAULT_NUM_LMS;
-static bool legacy_modeset = false;
-// Optional higher-refresh mode for direct or two-stage modesetting.
-// Enable TW_DRM_TWO_STAGE_MODESET if switching during takeover blanks the panel.
-static drmModeModeInfo fast_mode;
-static uint32_t fast_mode_blob_id;
-static uint32_t spr_enabled;
-static uint32_t spr_bypass;
-static std::string spr_prop_name;
-
-static int set_legacy_crtc(uint32_t fb_id);
-static void switch_to_fast_mode(int buffer);
-
-static void free_object_properties(drmModeObjectProperties** properties,
-                                   drmModePropertyRes*** properties_info) {
-  if (properties_info != nullptr && *properties_info != nullptr && properties != nullptr &&
-      *properties != nullptr) {
-    for (uint32_t i = 0; i < (*properties)->count_props; ++i) {
-      if ((*properties_info)[i] != nullptr) drmModeFreeProperty((*properties_info)[i]);
-    }
-  }
-  if (properties_info != nullptr && *properties_info != nullptr) {
-    free(*properties_info);
-    *properties_info = nullptr;
-  }
-  if (properties != nullptr && *properties != nullptr) {
-    drmModeFreeObjectProperties(*properties);
-    *properties = nullptr;
-  }
-}
-
-static bool rect_empty(const GRRect& rect) {
-  return rect.left >= rect.right || rect.top >= rect.bottom;
-}
-
-static void union_damage(GRRect* dst, const GRRect& src) {
-  if (rect_empty(src))
-    return;
-  if (rect_empty(*dst)) {
-    *dst = src;
-    return;
-  }
-
-  dst->left = std::min(dst->left, src.left);
-  dst->top = std::min(dst->top, src.top);
-  dst->right = std::max(dst->right, src.right);
-  dst->bottom = std::max(dst->bottom, src.bottom);
-}
-
-static size_t copy_damage(const GRSurface* source, GRSurface* destination,
-                          const GRRect& damage) {
-  if (rect_empty(damage))
-    return 0;
-
-  const size_t row_bytes =
-      static_cast<size_t>(damage.right - damage.left) * source->pixel_bytes;
-  const int rows = damage.bottom - damage.top;
-  if (damage.left == 0 && row_bytes == static_cast<size_t>(source->row_bytes)) {
-    memcpy(destination->data + damage.top * destination->row_bytes,
-           source->data + damage.top * source->row_bytes, row_bytes * rows);
-  } else {
-    for (int y = damage.top; y < damage.bottom; ++y) {
-      memcpy(destination->data + y * destination->row_bytes +
-                 damage.left * destination->pixel_bytes,
-             source->data + y * source->row_bytes + damage.left * source->pixel_bytes,
-             row_bytes);
-    }
-  }
-  return row_bytes * rows;
-}
-
-static void log_copy_stats(size_t copied_bytes, const GRSurface* surface,
-                           const char* mode) {
-  ++stats_frames;
-  stats_copied_bytes += copied_bytes;
-  stats_full_bytes += static_cast<uint64_t>(surface->height) * surface->row_bytes;
-  if (stats_frames % kStatsInterval != 0)
-    return;
-
-  if (android::base::GetBoolProperty("twrp.drm.stats", false)) {
-    const uint64_t saved_percent = stats_full_bytes == 0
-        ? 0 : 100 - std::min<uint64_t>(100, stats_copied_bytes * 100 / stats_full_bytes);
-    printf("DRM copy stats: mode=%s, frames=%" PRIu64 ", copied=%" PRIu64
-           "/%" PRIu64 " bytes, saved=%" PRIu64 "%%\n",
-           mode, stats_frames, stats_copied_bytes, stats_full_bytes, saved_percent);
-    fflush(stdout);
-  }
-  stats_frames = 0;
-  stats_copied_bytes = 0;
-  stats_full_bytes = 0;
-}
-
-#define find_prop_id(_res, type, Type, obj_id, prop_name, prop_id)    \
-  do {                                                                \
-    int j = 0;                                                        \
-    int prop_count = 0;                                               \
-    struct Type *obj = NULL;                                          \
-    obj = (_res);                                                     \
-    if (!obj || main_monitor_##type->type##_id != (obj_id)){          \
-      prop_id = 0;                                                    \
-      break;                                                          \
-    }                                                                 \
-    prop_count = (int)obj->props->count_props;                        \
-    for (j = 0; j < prop_count; ++j)                                  \
-      if (!strcmp(obj->props_info[j]->name, (prop_name)))             \
-        break;                                                        \
-    (prop_id) = (j == prop_count)?                                    \
-      0 : obj->props_info[j]->prop_id;                                \
+#define find_prop_id(_res, type, Type, obj_id, prop_name, prop_id, index)            \
+  do {                                                                               \
+    int j = 0;                                                                       \
+    int prop_count = 0;                                                              \
+    struct Type* obj = NULL;                                                         \
+    obj = (_res);                                                                    \
+    if (!obj || !(obj->props) || drm[index].monitor_##type->type##_id != (obj_id)) { \
+      prop_id = 0;                                                                   \
+      break;                                                                         \
+    }                                                                                \
+    prop_count = (int)obj->props->count_props;                                       \
+    for (j = 0; j < prop_count; ++j)                                                 \
+      if (!strcmp(obj->props_info[j]->name, (prop_name))) break;                     \
+    (prop_id) = (j == prop_count) ? 0 : obj->props_info[j]->prop_id;                 \
   } while (0)
 
-#define add_prop(res, type, Type, id, id_name, id_val) \
-  find_prop_id(res, type, Type, id, id_name, prop_id); \
+#define add_prop(res, type, Type, id, id_name, id_val, index) \
+  find_prop_id(res, type, Type, id, id_name, prop_id, index); \
   if (prop_id)                                         \
     drmModeAtomicAddProperty(atomic_req, id, prop_id, id_val);
 
@@ -427,6 +158,32 @@ static uint32_t get_topology_lm_number(int fd, uint32_t blob_id) {
   return num_lm;
 }
 
+static bool is_primary_plane(int fd, uint32_t blob_id) {
+
+  bool primary = false;
+  uint32_t master_plane_id_val = 0;
+  drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(fd, blob_id);
+  if (!blob)
+    return false;
+
+  const char *fmt_str = (const char *)(blob->data);
+  std::stringstream stream(fmt_str);
+  std::string line = {};
+  const std::string master_plane = "primary_smart_plane_id=";
+
+  while (std::getline(stream, line)) {
+    if (line.find(master_plane) != std::string::npos) {
+        line = std::string(line, master_plane.length());
+        master_plane_id_val = std::atoi(line.c_str());
+        break;
+    }
+  }
+
+  drmModeFreePropertyBlob(blob);
+  primary = master_plane_id_val ? false : true;
+  return primary;
+}
+
 static int find_plane_prop_id(uint32_t obj_id, const char *prop_name,
                               Plane *plane_res) {
   int i, j = 0;
@@ -435,7 +192,7 @@ static int find_plane_prop_id(uint32_t obj_id, const char *prop_name,
 
   for (i = 0; i < NUM_PLANES; ++i) {
     obj = &plane_res[i];
-    if (!obj || obj->plane->plane_id != obj_id)
+    if (!obj->plane || !obj->props || obj->plane->plane_id != obj_id) // TWRP: unused pipe slots.
       continue;
     prop_count = (int)obj->props->count_props;
     for (j = 0; j < prop_count; ++j)
@@ -472,13 +229,13 @@ static int SetupSprBlobV1(int fd, uint32_t* blob_id) {
   SPRFilterType filter_type = SPRFilterType::kFourTap;
   SPRAdaptiveModeType adpative_mode = SPRAdaptiveModeType::kYYGM;
 
-  // Whatever is not filled in below still reaches the kernel, so start at zero.
-  drm_msm_spr_init_cfg spr_init_cfg = {};
+  drm_msm_spr_init_cfg spr_init_cfg{}; // TWRP: initialize every kernel ABI field (60acba5e).
+  // TWRP: panel-requested bypass (6ee9a21b).
+  spr_init_cfg.flags = android::base::GetBoolProperty("vendor.display.enable_spr_bypass", false) ? 1 : 0;
   spr_init_cfg.cfg0 = 1;
   spr_init_cfg.cfg1 = 1;
   spr_init_cfg.cfg2 = 1;
   spr_init_cfg.cfg3 = 0;
-  spr_init_cfg.flags = spr_bypass ? SPR_FLAG_BYPASS : 0;
   spr_init_cfg.cfg4 = (pack_type == SPRPackType::kRGBW);
   spr_init_cfg.cfg5 = kDefaultColorPhaseIncrement.at(pack_type);
   spr_init_cfg.cfg6 = kDefaultColorPhaseRepeat.at(pack_type);
@@ -486,7 +243,7 @@ static int SetupSprBlobV1(int fd, uint32_t* blob_id) {
   spr_init_cfg.cfg8 = static_cast<uint16_t>(adpative_mode);
   if (pack_type == SPRPackType::kRGBW) {
     spr_init_cfg.cfg9 = 512;
-    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg.cfg12);
+    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg.cfg12); // TWRP: gains live in cfg12 (60acba5e).
   }
   spr_init_cfg.cfg10 = 0;
   std::copy(kDecimationRatioMap.at(pack_type).begin(), kDecimationRatioMap.at(pack_type).end(),
@@ -512,13 +269,13 @@ static int SetupSprBlobV2(int fd, uint32_t* blob_id) {
   SPRFilterType filter_type = SPRFilterType::kFourTap;
   SPRAdaptiveModeType adpative_mode = SPRAdaptiveModeType::kYYGM;
 
-  // Whatever is not filled in below still reaches the kernel, so start at zero.
-  drm_msm_spr_init_cfg_v2 spr_init_cfg_v2 = {};
+  drm_msm_spr_init_cfg_v2 spr_init_cfg_v2{}; // TWRP: 60acba5e.
+  // TWRP: panel-requested bypass (6ee9a21b).
+  spr_init_cfg_v2.flags = android::base::GetBoolProperty("vendor.display.enable_spr_bypass", false) ? 1 : 0;
   spr_init_cfg_v2.cfg0 = 1;
   spr_init_cfg_v2.cfg1 = 1;
   spr_init_cfg_v2.cfg2 = 1;
   spr_init_cfg_v2.cfg3 = 0;
-  spr_init_cfg_v2.flags = spr_bypass ? SPR_FLAG_BYPASS : 0;
   spr_init_cfg_v2.cfg4 = (pack_type == SPRPackType::kRGBW);
   spr_init_cfg_v2.cfg5 = kDefaultColorPhaseIncrement.at(pack_type);
   spr_init_cfg_v2.cfg6 = kDefaultColorPhaseRepeat.at(pack_type);
@@ -526,7 +283,7 @@ static int SetupSprBlobV2(int fd, uint32_t* blob_id) {
   spr_init_cfg_v2.cfg8 = static_cast<uint16_t>(adpative_mode);
   if (pack_type == SPRPackType::kRGBW) {
     spr_init_cfg_v2.cfg9 = 512;
-    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg_v2.cfg12);
+    std::copy(kDefaultRGBWGains.begin(), kDefaultRGBWGains.end(), spr_init_cfg_v2.cfg12); // TWRP: 60acba5e.
   }
   spr_init_cfg_v2.cfg10 = 0;
   std::copy(kDecimationRatioMap.at(pack_type).begin(), kDecimationRatioMap.at(pack_type).end(),
@@ -561,20 +318,23 @@ static int SetupSprBlob(int fd, const std::string& prop_name, uint32_t* blob_id)
   return ret;
 }
 
-static int atomic_populate_plane(int plane, int buffer,
-                                 drmModeAtomicReqPtr atomic_req) {
+int MinuiBackendDrm::AtomicPopulatePlane(int plane, drmModeAtomicReqPtr atomic_req, DrmConnector index) {
+  // TWRP: isolate CLO pipeline state between main and secondary connectors.
+  auto& plane_res = drm[index].plane_res;
+  auto& number_of_lms = drm[index].number_of_lms;
+
   uint32_t src_x, src_y, src_w, src_h;
   uint32_t crtc_x, crtc_y, crtc_w, crtc_h;
-  int width = main_monitor_crtc->mode.hdisplay;
-  int height = main_monitor_crtc->mode.vdisplay;
+  int width = drm[index].monitor_crtc->mode.hdisplay;
+  int height = drm[index].monitor_crtc->mode.vdisplay;
   int zpos = 0;
+
   src_y = 0;
   src_w = width/number_of_lms;
   src_h =  height;
   crtc_y = 0;
   crtc_w = width/number_of_lms;
   crtc_h = height;
-
   src_x = (width/number_of_lms) * plane;
   crtc_x = (width/number_of_lms) * plane;
 
@@ -587,7 +347,7 @@ static int atomic_populate_plane(int plane, int buffer,
 
   if (atomic_add_prop_to_plane(plane_res, atomic_req,
                                plane_res[plane].plane->plane_id, "FB_ID",
-                               drm_surfaces[buffer]->fb_id))
+                               drm[index].GRSurfaceDrms[drm[index].current_buffer]->fb_id))
     return -EINVAL;
 
   if (atomic_add_prop_to_plane(plane_res, atomic_req,
@@ -624,22 +384,32 @@ static int atomic_populate_plane(int plane, int buffer,
 
   if (atomic_add_prop_to_plane(plane_res, atomic_req,
                                plane_res[plane].plane->plane_id, "CRTC_ID",
-                               main_monitor_crtc->crtc_id))
+                               drm[index].monitor_crtc->crtc_id))
     return -EINVAL;
 
   return 0;
 }
 
-static int teardown_pipeline(drmModeAtomicReqPtr atomic_req) {
+int MinuiBackendDrm::TeardownPipeline(drmModeAtomicReqPtr atomic_req, DrmConnector index) {
+  // TWRP: isolate CLO pipeline state between main and secondary connectors.
+  auto& crtc_res = drm[index].crtc_res;
+  auto& conn_res = drm[index].conn_res;
+  auto& plane_res = drm[index].plane_res;
+  auto& number_of_lms = drm[index].number_of_lms;
+  auto& fb_prop_id = drm[index].fb_prop_id;
+  auto& spr_enabled = drm[index].spr_enabled;
+  auto& spr_prop_name = drm[index].spr_prop_name;
+
   uint32_t i, prop_id;
   int ret;
 
   /* During suspend, tear down pipeline */
-  add_prop(&conn_res, connector, Connector, main_monitor_connector->connector_id, "CRTC_ID", 0);
-  add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "MODE_ID", 0);
-  add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "ACTIVE", 0);
+  add_prop(&conn_res, connector, Connector, drm[index].monitor_connector->connector_id, "CRTC_ID", 0, index);
+  add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, "MODE_ID", 0, index);
+  add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, "ACTIVE", 0, index);
   if (spr_enabled) {
-    add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, spr_prop_name.c_str(), 0);
+    add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, spr_prop_name.c_str(), 0,
+             index);
   }
 
   for(i = 0; i < number_of_lms; i++) {
@@ -659,28 +429,36 @@ static int teardown_pipeline(drmModeAtomicReqPtr atomic_req) {
   return 0;
 }
 
-static int drm_disable_crtc(drmModeAtomicReqPtr atomic_req) {
-  return teardown_pipeline(atomic_req);
-}
+int MinuiBackendDrm::SetupPipeline(drmModeAtomicReqPtr atomic_req, DrmConnector index) {
+  // TWRP: isolate CLO pipeline state between main and secondary connectors.
+  auto& crtc_res = drm[index].crtc_res;
+  auto& conn_res = drm[index].conn_res;
+  auto& plane_res = drm[index].plane_res;
+  auto& number_of_lms = drm[index].number_of_lms;
+  auto& spr_enabled = drm[index].spr_enabled;
+  auto& spr_prop_name = drm[index].spr_prop_name;
+  auto& demura_prop_name = drm[index].demura_prop_name;
 
-static int setup_pipeline(int buffer, drmModeAtomicReqPtr atomic_req) {
   uint32_t i, prop_id;
   int ret;
 
   for(i = 0; i < number_of_lms; i++) {
-    add_prop(&conn_res, connector, Connector, main_monitor_connector->connector_id,
-         "CRTC_ID", main_monitor_crtc->crtc_id);
-    add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "MODE_ID", crtc_res.mode_blob_id);
-    add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "ACTIVE", 1);
+    add_prop(&conn_res, connector, Connector, drm[index].monitor_connector->connector_id,
+         "CRTC_ID", drm[index].monitor_crtc->crtc_id, index);
+    add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, "MODE_ID", crtc_res.mode_blob_id, index);
+    add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, "ACTIVE", 1, index);
     if (spr_enabled) {
-      add_prop(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, spr_prop_name.c_str(),
-           crtc_res.spr_blob_id);
+      add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, spr_prop_name.c_str(),
+               crtc_res.spr_blob_id, index);
     }
+    /* Disable demura for hand off */
+    add_prop(&crtc_res, crtc, Crtc, drm[index].monitor_crtc->crtc_id, demura_prop_name.c_str(), 0,
+             index);
   }
 
   /* Setup planes */
   for(i = 0; i < number_of_lms; i++) {
-    ret = atomic_populate_plane(i, buffer, atomic_req);
+    ret = AtomicPopulatePlane(i, atomic_req, index);
     if (ret < 0) {
       printf("Error populating plane_id = %d\n", plane_res[i].plane->plane_id);
       return ret;
@@ -688,31 +466,375 @@ static int setup_pipeline(int buffer, drmModeAtomicReqPtr atomic_req) {
   }
 
   return 0;
-
-}
-static int drm_enable_crtc(int buffer, drmModeAtomicReqPtr atomic_req) {
-  return setup_pipeline(buffer, atomic_req);
 }
 
-static void drm_blank(minui_backend* backend __unused, bool blank) {
-  int ret = 0;
+GRSurfaceDrm::~GRSurfaceDrm() {
+  if (mmapped_buffer_) {
+    munmap(mmapped_buffer_, row_bytes * height);
+  }
 
-  if (blank == current_blank_state)
-    return;
-
-  if (legacy_modeset) {
-    const int buffer = displayed_buffer >= 0 ? displayed_buffer : current_buffer;
-    ret = set_legacy_crtc(blank ? 0 : drm_surfaces[buffer]->fb_id);
-    if (!ret) {
-      current_blank_state = blank;
-      if (!blank)
-        displayed_buffer = buffer;
-      printf("Legacy modeset %s\n", blank ? "disabled" : "enabled");
-    } else {
-      printf("Legacy modeset failed, rc = %d\n", ret);
+  if (fb_id) {
+    if (drmModeRmFB(drm_fd_, fb_id) != 0) {
+      perror("Failed to drmModeRmFB");
+      // Falling through to free other resources.
     }
+  }
+
+  if (handle) {
+    drm_gem_close gem_close = {};
+    gem_close.handle = handle;
+
+    if (drmIoctl(drm_fd_, DRM_IOCTL_GEM_CLOSE, &gem_close) != 0) {
+      perror("Failed to DRM_IOCTL_GEM_CLOSE");
+    }
+  }
+}
+
+static int drm_format_to_bpp(uint32_t format) {
+  switch (format) {
+    case DRM_FORMAT_ABGR8888:
+    case DRM_FORMAT_BGRA8888:
+    case DRM_FORMAT_RGBX8888:
+    case DRM_FORMAT_RGBA8888:
+    case DRM_FORMAT_ARGB8888:
+    case DRM_FORMAT_BGRX8888:
+    case DRM_FORMAT_XBGR8888:
+    case DRM_FORMAT_XRGB8888:
+      return 32;
+    case DRM_FORMAT_RGB565:
+      return 16;
+    default:
+      printf("Unknown format %d\n", format);
+      return 32;
+  }
+}
+
+std::unique_ptr<GRSurfaceDrm> GRSurfaceDrm::Create(int drm_fd, int width, int height) {
+  uint32_t format;
+  PixelFormat pixel_format = gr_pixel_format();
+  // PixelFormat comes in byte order, whereas DRM_FORMAT_* uses little-endian
+  // (external/libdrm/include/drm/drm_fourcc.h). Note that although drm_fourcc.h also defines a
+  // macro of DRM_FORMAT_BIG_ENDIAN, it doesn't seem to be actually supported (see the discussion
+  // in https://lists.freedesktop.org/archives/amd-gfx/2017-May/008560.html).
+  if (pixel_format == PixelFormat::ABGR) {
+    format = DRM_FORMAT_RGBA8888;
+  } else if (pixel_format == PixelFormat::BGRA) {
+    format = DRM_FORMAT_ARGB8888;
+  } else if (pixel_format == PixelFormat::RGBX) {
+    format = DRM_FORMAT_XBGR8888;
+  } else if (pixel_format == PixelFormat::ARGB) {
+    format = DRM_FORMAT_BGRA8888;
+  } else {
+    format = DRM_FORMAT_RGB565;
+  }
+
+  // TWRP: native byte-order formats include RGBA/RGB565 (7756859a, c52a090f).
+  switch (gr_frame_pixel_format()) {
+    case GRPixelFormat::RGBA8888: format = DRM_FORMAT_ABGR8888; break;
+    case GRPixelFormat::RGBX8888: format = DRM_FORMAT_XBGR8888; break;
+    case GRPixelFormat::BGRA8888: format = DRM_FORMAT_ARGB8888; break;
+    case GRPixelFormat::ABGR8888: format = DRM_FORMAT_RGBA8888; break;
+    case GRPixelFormat::ARGB8888:
+    case GRPixelFormat::XRGB8888: format = DRM_FORMAT_BGRA8888; break;
+    case GRPixelFormat::RGB565: format = DRM_FORMAT_RGB565; break;
+    default: return nullptr;
+  }
+
+  drm_mode_create_dumb create_dumb = {};
+  create_dumb.height = height;
+  create_dumb.width = width;
+  create_dumb.bpp = drm_format_to_bpp(format);
+  create_dumb.flags = 0;
+
+  if (drmIoctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_dumb) != 0) {
+    perror("Failed to DRM_IOCTL_MODE_CREATE_DUMB");
+    return nullptr;
+  }
+  printf("Allocating buffer with resolution %d x %d pitch: %d bpp: %d, size: %llu\n", width, height,
+         create_dumb.pitch, create_dumb.bpp, create_dumb.size);
+
+  // Cannot use std::make_unique to access non-public ctor.
+  auto surface = std::unique_ptr<GRSurfaceDrm>(new GRSurfaceDrm(
+      width, height, create_dumb.pitch, create_dumb.bpp / 8, drm_fd, create_dumb.handle));
+
+  uint32_t handles[4]{}, pitches[4]{}, offsets[4]{}; // TWRP: no uninitialized plane metadata.
+
+  handles[0] = surface->handle;
+  pitches[0] = create_dumb.pitch;
+  offsets[0] = 0;
+  if (drmModeAddFB2(drm_fd, width, height, format, handles, pitches, offsets, &surface->fb_id, 0) !=
+      0) {
+    perror("Failed to drmModeAddFB2");
+    return nullptr;
+  }
+
+  drm_mode_map_dumb map_dumb = {};
+  map_dumb.handle = create_dumb.handle;
+  if (drmIoctl(drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb) != 0) {
+    perror("Failed to DRM_IOCTL_MODE_MAP_DUMB");
+    return nullptr;
+  }
+
+  auto mmapped =
+      mmap(nullptr, create_dumb.size, PROT_READ | PROT_WRITE, MAP_SHARED, drm_fd, map_dumb.offset);
+  if (mmapped == MAP_FAILED) {
+    perror("Failed to mmap()");
+    return nullptr;
+  }
+  surface->mmapped_buffer_ = static_cast<uint8_t*>(mmapped);
+  // TWRP: initial scanout must contain a complete, defined frame.
+  memset(surface->mmapped_buffer_, 0, create_dumb.size);
+  printf("Framebuffer of size %llu allocated @ %p\n", create_dumb.size, surface->mmapped_buffer_);
+  return surface;
+}
+
+int MinuiBackendDrm::DrmDisableCrtc(drmModeAtomicReqPtr atomic_req, DrmConnector index) {
+  return TeardownPipeline(atomic_req, index);
+}
+
+int MinuiBackendDrm::DrmEnableCrtc(drmModeAtomicReqPtr atomic_req, DrmConnector index){
+  return SetupPipeline(atomic_req, index);
+}
+
+void MinuiBackendDrm::Blank(bool blank) {
+  Blank(blank, DRM_MAIN);
+}
+
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+int MinuiBackendDrm::Initdisplay(DrmConnector index) {
+  /* Get possible plane_ids */
+  drmModePlaneRes* plane_options = drmModeGetPlaneResources(drm_fd);
+  if (!plane_options || !plane_options->planes || (plane_options->count_planes < number_of_lms))
+    return -1;
+
+  /* Set crtc resources */
+  crtc_res.props =
+      drmModeObjectGetProperties(drm_fd, drm[index].monitor_crtc->crtc_id, DRM_MODE_OBJECT_CRTC);
+  if (!crtc_res.props) return -1;
+
+  crtc_res.props_info = static_cast<drmModePropertyRes**>(
+      calloc(crtc_res.props->count_props, sizeof(crtc_res.props_info)));
+  if (!crtc_res.props_info)
+    return -1;
+  else
+    for (int j = 0; j < (int)crtc_res.props->count_props; ++j) {
+      crtc_res.props_info[j] = drmModeGetProperty(drm_fd, crtc_res.props->props[j]);
+      /* Get spr property name */
+      if (!strcmp(crtc_res.props_info[j]->name, "SDE_SPR_INIT_CFG_V1") ||
+          !strcmp(crtc_res.props_info[j]->name, "SDE_SPR_INIT_CFG_V2")) {
+        spr_prop_name = crtc_res.props_info[j]->name;
+      }
+      /* Get demura property name */
+      if (!strcmp(crtc_res.props_info[j]->name, "SDE_DEMURA_INIT_CFG_V1") ||
+          !strcmp(crtc_res.props_info[j]->name, "SDE_DEMURA_INIT_CFG_V3")) {
+        demura_prop_name = crtc_res.props_info[j]->name;
+      }
+    }
+
+  /* Set connector resources */
+  conn_res.props = drmModeObjectGetProperties(drm_fd, drm[index].monitor_connector->connector_id,
+                                              DRM_MODE_OBJECT_CONNECTOR);
+  if (!conn_res.props) return -1;
+
+  conn_res.props_info = static_cast<drmModePropertyRes**>(
+      calloc(conn_res.props->count_props, sizeof(conn_res.props_info)));
+  if (!conn_res.props_info)
+    return -1;
+  else {
+    for (int j = 0; j < (int)conn_res.props->count_props; ++j) {
+      conn_res.props_info[j] = drmModeGetProperty(drm_fd, conn_res.props->props[j]);
+
+      /* Get preferred mode information and extract the
+       * number of layer mixers needed from the topology name.
+       */
+      if (!strcmp(conn_res.props_info[j]->name, "mode_properties")) {
+        number_of_lms = get_topology_lm_number(drm_fd, conn_res.props->prop_values[j]);
+        printf("number of lms in topology %d\n", number_of_lms);
+      }
+    }
+  }
+
+  printf("plane count:%d\n",plane_options->count_planes);
+  struct Plane *plane_all_res;
+  uint32_t counter = 0;
+  plane_all_res = static_cast<struct Plane *>(
+     calloc(plane_options->count_planes, sizeof(struct Plane)));
+  /* Set plane resources */
+  for (uint32_t i = 0; i < plane_options->count_planes; ++i) {
+    plane_all_res[i].plane = drmModeGetPlane(drm_fd, plane_options->planes[i]);
+    if (!plane_all_res[i].plane)return -1;
+  }
+
+  for (uint32_t i = plane_options->count_planes - 1; i >= 0; i--) {
+    struct Plane* obj = &plane_all_res[i];
+    unsigned int j;
+    obj->props = drmModeObjectGetProperties(drm_fd, obj->plane->plane_id, DRM_MODE_OBJECT_PLANE);
+    if (!obj->props) continue;
+    obj->props_info = static_cast<drmModePropertyRes**>(
+        calloc(obj->props->count_props, sizeof(*obj->props_info)));
+    if (!obj->props_info) continue;
+    for (j = 0; j < obj->props->count_props; ++j) {
+      obj->props_info[j] = drmModeGetProperty(drm_fd, obj->props->props[j]);
+
+      if (!strcmp(obj->props_info[j]->name, "capabilities")) {
+        if(is_primary_plane(drm_fd, obj->props->prop_values[j])) {
+          plane_res[counter] = plane_all_res[i];
+          counter++;
+      }
+     }
+   }
+   if (counter == number_of_lms)
+     break;
+  }
+
+  drmModeFreePlaneResources(plane_options);
+  plane_options = NULL;
+
+  /* Setup spr blob id if enabled */
+  if (spr_enabled) {
+    if (SetupSprBlob(drm_fd, spr_prop_name, &crtc_res.spr_blob_id)) {
+      return -1;
+    }
+  }
+
+  /* Setup pipe and blob_id */
+  if (drmModeCreatePropertyBlob(drm_fd, &drm[index].monitor_crtc->mode, sizeof(drmModeModeInfo),
+                                &crtc_res.mode_blob_id)) {
+    printf("failed to create mode blob\n");
+    return -1;
+  }
+
+  /* Save fb_prop_id*/
+  uint32_t prop_id;
+  prop_id = find_plane_prop_id(plane_res[0].plane->plane_id, "FB_ID", plane_res);
+  fb_prop_id = prop_id;
+  return 0;
+}
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+int MinuiBackendDrm::Initdisplay(DrmConnector index) {
+
+  // TWRP: isolate CLO pipeline state between main and secondary connectors.
+  auto& crtc_res = drm[index].crtc_res;
+  auto& conn_res = drm[index].conn_res;
+  auto& plane_res = drm[index].plane_res;
+  auto& number_of_lms = drm[index].number_of_lms;
+  auto& fb_prop_id = drm[index].fb_prop_id;
+  auto& spr_enabled = drm[index].spr_enabled;
+  auto& spr_prop_name = drm[index].spr_prop_name;
+  auto& demura_prop_name = drm[index].demura_prop_name;
+
+  // TWRP: cache metadata across blank/unblank, release it with the owning fd.
+  if (drm[index].pipeline_ready) return 0;
+  if (crtc_res.props || conn_res.props) ReleasePipeline(index);
+  auto load_properties = [&](uint32_t id, uint32_t type, auto* object) {
+    object->props = drmModeObjectGetProperties(drm_fd, id, type);
+    if (!object->props) return false;
+    object->props_info = static_cast<drmModePropertyRes**>(
+        calloc(object->props->count_props, sizeof(*object->props_info)));
+    if (!object->props_info && object->props->count_props) return false;
+    for (uint32_t i = 0; i < object->props->count_props; ++i) {
+      object->props_info[i] = drmModeGetProperty(drm_fd, object->props->props[i]);
+      if (!object->props_info[i]) return false;
+    }
+    return true;
+  };
+  if (!load_properties(drm[index].monitor_crtc->crtc_id, DRM_MODE_OBJECT_CRTC, &crtc_res) ||
+      !load_properties(drm[index].monitor_connector->connector_id, DRM_MODE_OBJECT_CONNECTOR,
+                       &conn_res)) return -1;
+  for (uint32_t i = 0; i < crtc_res.props->count_props; ++i) {
+    const std::string name = crtc_res.props_info[i]->name;
+    if (name == "SDE_SPR_INIT_CFG_V1" || name == "SDE_SPR_INIT_CFG_V2") spr_prop_name = name;
+    if (name == "SDE_DEMURA_INIT_CFG_V1" || name == "SDE_DEMURA_INIT_CFG_V3") demura_prop_name = name;
+  }
+  // CLO: extract topology and select pipes in reverse population order.
+  for (uint32_t i = 0; i < conn_res.props->count_props; ++i) {
+    if (!strcmp(conn_res.props_info[i]->name, "mode_properties"))
+      number_of_lms = get_topology_lm_number(drm_fd, conn_res.props->prop_values[i]);
+  }
+  if (number_of_lms == 0 || number_of_lms > NUM_PLANES) {
+    fprintf(stderr, "TWRP DRM: invalid mixer count %u on display %d\n", number_of_lms, index);
+    return -1;
+  }
+  std::unique_ptr<drmModePlaneRes, decltype(&drmModeFreePlaneResources)> options(
+      drmModeGetPlaneResources(drm_fd), drmModeFreePlaneResources);
+  if (!options) return -1;
+  uint32_t selected = 0;
+  // TWRP: signed reverse traversal avoids CLO's unsigned underflow on missing pipes.
+  for (int i = static_cast<int>(options->count_planes) - 1; i >= 0 && selected < number_of_lms; --i) {
+    Plane candidate{};
+    candidate.plane = drmModeGetPlane(drm_fd, options->planes[i]);
+    if (!candidate.plane) continue;
+    if (!(candidate.plane->possible_crtcs & (1U << drm[index].crtc_index))) {
+      drmModeFreePlane(candidate.plane);
+      continue;
+    } // TWRP: do not attach another connector's pipes.
+    bool primary = false;
+    if (load_properties(candidate.plane->plane_id, DRM_MODE_OBJECT_PLANE, &candidate)) {
+      for (uint32_t j = 0; j < candidate.props->count_props; ++j) {
+        if (!strcmp(candidate.props_info[j]->name, "capabilities"))
+          primary = is_primary_plane(drm_fd, candidate.props->prop_values[j]);
+      }
+    }
+    if (primary) {
+      plane_res[selected++] = candidate;
+    } else {
+      if (candidate.props_info) {
+        for (uint32_t j = 0; j < candidate.props->count_props; ++j)
+          drmModeFreeProperty(candidate.props_info[j]);
+        free(candidate.props_info);
+      }
+      if (candidate.props) drmModeFreeObjectProperties(candidate.props);
+      drmModeFreePlane(candidate.plane);
+    }
+  }
+  if (selected != number_of_lms) {
+    fprintf(stderr, "TWRP DRM: display %d found %u/%u primary planes for CRTC index %d\n",
+            index, selected, number_of_lms, drm[index].crtc_index);
+    return -1;
+  }
+  // TWRP: missing optional SPR property must not disable the whole backend (9388d9af).
+  if (spr_enabled && spr_prop_name.empty()) spr_enabled = 0;
+  if (spr_enabled && SetupSprBlob(drm_fd, spr_prop_name, &crtc_res.spr_blob_id)) return -1;
+  if (drmModeCreatePropertyBlob(drm_fd, &drm[index].monitor_crtc->mode,
+                              sizeof(drmModeModeInfo), &crtc_res.mode_blob_id)) return -1;
+  if (drm[index].fast_mode.vrefresh &&
+      drmModeCreatePropertyBlob(drm_fd, &drm[index].fast_mode,
+                                sizeof(drmModeModeInfo), &drm[index].fast_mode_blob_id))
+    drm[index].fast_mode_blob_id = 0;
+  fb_prop_id = find_plane_prop_id(plane_res[0].plane->plane_id, "FB_ID", plane_res);
+  drm[index].pipeline_ready = fb_prop_id != 0;
+  return drm[index].pipeline_ready ? 0 : -1;
+}
+#endif // TWRP
+
+
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+void MinuiBackendDrm::Blank(bool blank, DrmConnector index) {
+  const auto* drmInterface = &drm[DRM_MAIN];
+
+  printf("[ENTRY]MinuiBackendDrm::Blank display %d blank %d\n", index, blank);
+
+  switch (index) {
+    case DRM_MAIN:
+      drmInterface = &drm[DRM_MAIN];
+      break;
+    case DRM_SEC:
+      drmInterface = &drm[DRM_SEC];
+      break;
+    default:
+      fprintf(stderr, "Invalid index: %d\n", index);
+      return;
+  }
+
+  if (!drmInterface->monitor_connector) {
+    fprintf(stderr, "Unsupported. index = %d\n", index);
     return;
   }
+
+  int ret = 0;
+
+  if (blank == current_blank_state[index])
+    return;
 
   drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
   if (!atomic_req) {
@@ -720,246 +842,141 @@ static void drm_blank(minui_backend* backend __unused, bool blank) {
      return;
   }
 
-  const int buffer = displayed_buffer >= 0 ? displayed_buffer : current_buffer;
   if (blank)
-    ret = drm_disable_crtc(atomic_req);
-  else
-    ret = drm_enable_crtc(buffer, atomic_req);
+    ret = DrmDisableCrtc(atomic_req, index);
+  else {
+    if (Initdisplay(index))
+      printf("Failed to init display [%d]\n", index);
+    ret = DrmEnableCrtc(atomic_req, index);
+    active_display = index;
+  }
+  printf("[MID]MinuiBackendDrm::DrmEnableCrtc/DrmDisableCrtc[%d] err [%d]\n", blank, ret);
 
   if (!ret)
     ret = drmModeAtomicCommit(drm_fd, atomic_req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
 
   if (!ret) {
-    printf("Atomic Commit succeed\n");
-    current_blank_state = blank;
-    if (!blank)
-      displayed_buffer = buffer;
-    if (!blank && fast_mode_blob_id != 0)
-      switch_to_fast_mode(buffer);
-  } else {
+    printf("Atomic Commit succeed");
+    current_blank_state[index] = blank;
+  }
+  else {
     printf("Atomic Commit failed, rc = %d\n", ret);
   }
+  printf("[EXIT]MinuiBackendDrm::Blank display %d blank %d\n", index, blank);
 
   drmModeAtomicFree(atomic_req);
+}
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+void MinuiBackendDrm::Blank(bool blank, DrmConnector index) {
+  if (index < DRM_MAIN || index >= DRM_MAX || !drm[index].monitor_connector || drm_fd < 0) return;
+  if (blank == current_blank_state[index]) return;
+  // TWRP: never expose a freed/in-flight buffer while switching connector or waking.
+  auto& output = drm[index];
+  const int drawing_buffer = output.current_buffer;
+  const int buffer = output.displayed_buffer >= 0 ? output.displayed_buffer : drawing_buffer;
+  output.current_buffer = buffer;
+  int ret;
+  if (legacy_modeset) {
+    ret = SetLegacyCrtc(index, blank ? 0 : output.GRSurfaceDrms[buffer]->fb_id);
+  } else {
+    if (!blank && Initdisplay(index)) { output.current_buffer = drawing_buffer; return; }
+    drmModeAtomicReqPtr request = drmModeAtomicAlloc();
+    if (!request) { output.current_buffer = drawing_buffer; return; }
+    ret = blank ? DrmDisableCrtc(request, index) : DrmEnableCrtc(request, index);
+    if (!ret) ret = drmModeAtomicCommit(drm_fd, request, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
+    drmModeAtomicFree(request);
+  }
+  output.current_buffer = drawing_buffer;
+  if (!ret) {
+    current_blank_state[index] = blank;
+    if (!blank) {
+      output.displayed_buffer = buffer;
+      active_display = index;
+      // TWRP: optional second-stage high refresh (307c02f1); keep takeover mode on wake.
+      if (output.fast_mode_blob_id) SwitchToFastMode(index);
+    }
+  } else {
+    printf("DRM blank failed: display=%d blank=%d rc=%d\n", index, blank, ret);
+  }
+}
+#endif // TWRP
 
+
+bool MinuiBackendDrm::HasMultipleConnectors() {
+  return (drm[DRM_SEC].GRSurfaceDrms[0] && drm[DRM_SEC].GRSurfaceDrms[1]);
 }
 
-static void drm_destroy_surface(struct drm_surface *surface) {
-    if(!surface) return;
+static drmModeCrtc* find_crtc_for_connector(int fd, drmModeRes* resources,
+                                            drmModeConnector* connector) {
+  // Find the encoder. If we already have one, just use it.
+  drmModeEncoder* encoder;
+  if (connector->encoder_id) {
+    encoder = drmModeGetEncoder(fd, connector->encoder_id);
+  } else {
+    encoder = nullptr;
+  }
 
-    if (surface->base.data) {
-        munmap(surface->base.data, surface->base.row_bytes * surface->base.height);
-    }
+  int32_t crtc;
+  if (encoder && encoder->crtc_id) {
+    crtc = encoder->crtc_id;
+    drmModeFreeEncoder(encoder);
+    return drmModeGetCrtc(fd, crtc);
+  }
 
-    if (surface->fb_id) {
-        int ret = drmModeRmFB(drm_fd, surface->fb_id);
-        if (ret) {
-            printf("drmModeRmFB failed ret=%d\n", ret);
-        }
-    }
+  // Didn't find anything, try to find a crtc and encoder combo.
+  crtc = -1;
+  for (int i = 0; i < connector->count_encoders; i++) {
+    encoder = drmModeGetEncoder(fd, connector->encoders[i]);
 
-    if (surface->handle) {
-        drm_gem_close gem_close = {};
-        gem_close.handle = surface->handle;
-
-        int ret = drmIoctl(drm_fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
-        if (ret) {
-            printf("DRM_IOCTL_GEM_CLOSE failed ret=%d\n", ret);
-        }
-    }
-
-    free(surface);
-}
-
-static int drm_format_to_bpp(uint32_t format) {
-    switch(format) {
-        case DRM_FORMAT_ABGR8888:
-        case DRM_FORMAT_BGRA8888:
-        case DRM_FORMAT_RGBX8888:
-        case DRM_FORMAT_RGBA8888:
-        case DRM_FORMAT_BGRX8888:
-        case DRM_FORMAT_XBGR8888:
-        case DRM_FORMAT_ARGB8888:
-        case DRM_FORMAT_XRGB8888:
-            return 32;
-        case DRM_FORMAT_RGB565:
-            return 16;
-        default:
-            printf("Unknown format %d\n", format);
-            return 32;
-    }
-}
-
-static drm_surface *drm_create_surface(int width, int height) {
-    uint32_t format;
-    int ret;
-
-    drm_surface* surface = static_cast<drm_surface*>(calloc(1, sizeof(*surface)));
-    if (!surface) {
-        printf("Can't allocate memory\n");
-        return nullptr;
-    }
-
-#if defined(RECOVERY_ABGR)
-    format = DRM_FORMAT_RGBA8888;
-    gr_set_pixel_format(GRPixelFormat::ABGR8888);
-    printf("setting DRM_FORMAT_RGBA8888\n");
-#elif defined(RECOVERY_BGRA)
-    format = DRM_FORMAT_ARGB8888;
-    gr_set_pixel_format(GRPixelFormat::BGRA8888);
-    printf("setting DRM_FORMAT_ARGB8888\n");
-#elif defined(RECOVERY_RGBA)
-    format = DRM_FORMAT_ABGR8888;
-    gr_set_pixel_format(GRPixelFormat::RGBA8888);
-    printf("setting DRM_FORMAT_ABGR8888\n");
-#elif defined(RECOVERY_RGBX)
-    format = DRM_FORMAT_XBGR8888;
-    gr_set_pixel_format(GRPixelFormat::RGBX8888);
-    printf("setting DRM_FORMAT_XBGR8888\n");
-#elif defined(RECOVERY_ARGB)
-    format = DRM_FORMAT_BGRA8888;
-    gr_set_pixel_format(GRPixelFormat::ARGB8888);
-    printf("setting DRM_FORMAT_BGRA8888 and ARGB8888 output conversion\n");
-#else
-    format = DRM_FORMAT_RGB565;
-    gr_set_pixel_format(GRPixelFormat::RGB565);
-    printf("setting DRM_FORMAT_RGB565\n");
-#endif
-
-    surface->base.format = gr_pixel_format();
-
-    drm_mode_create_dumb create_dumb = {};
-    create_dumb.height = height;
-    create_dumb.width = width;
-    create_dumb.bpp = drm_format_to_bpp(format);
-    create_dumb.flags = 0;
-
-    ret = drmIoctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_dumb);
-    if (ret) {
-        printf("DRM_IOCTL_MODE_CREATE_DUMB failed ret=%d\n",ret);
-        drm_destroy_surface(surface);
-        return nullptr;
-    }
-    surface->handle = create_dumb.handle;
-
-    uint32_t handles[4], pitches[4], offsets[4];
-
-    handles[0] = surface->handle;
-    pitches[0] = create_dumb.pitch;
-    offsets[0] = 0;
-
-    ret = drmModeAddFB2(drm_fd, width, height,
-            format, handles, pitches, offsets,
-            &(surface->fb_id), 0);
-    if (ret) {
-        printf("drmModeAddFB2 failed ret=%d\n", ret);
-        drm_destroy_surface(surface);
-        return nullptr;
-    }
-
-    struct drm_mode_map_dumb map_dumb = {};
-    map_dumb.handle = create_dumb.handle;
-    ret = drmIoctl(drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
-    if (ret) {
-        printf("DRM_IOCTL_MODE_MAP_DUMB failed ret=%d\n",ret);
-        drm_destroy_surface(surface);
-        return nullptr;;
-    }
-
-    surface->base.height = height;
-    surface->base.width = width;
-    surface->base.row_bytes = create_dumb.pitch;
-    surface->base.pixel_bytes = create_dumb.bpp / 8;
-    surface->base.data = (unsigned char*)
-                         mmap(nullptr,
-                              surface->base.height * surface->base.row_bytes,
-                              PROT_READ | PROT_WRITE, MAP_SHARED,
-                              drm_fd, map_dumb.offset);
-    if (surface->base.data == MAP_FAILED) {
-        printf("mmap() failed");
-        drm_destroy_surface(surface);
-        return nullptr;
-    }
-
-    return surface;
-}
-
-static drmModeCrtc *find_crtc_for_connector(int fd,
-                            drmModeRes *resources,
-                            drmModeConnector *connector) {
-    drmModeEncoder *encoder;
-    /*
-     * Find the encoder. If we already have one, just use it.
-     */
-    if (connector->encoder_id) {
-        encoder = drmModeGetEncoder(fd, connector->encoder_id);
-    }
-    else {
-        encoder = nullptr;
-    }
-
-    int32_t crtc;
-    if (encoder && encoder->crtc_id) {
-        crtc = encoder->crtc_id;
+    if (encoder) {
+      for (int j = 0; j < resources->count_crtcs; j++) {
+        if (!(encoder->possible_crtcs & (1 << j))) continue;
+        crtc = resources->crtcs[j];
+        break;
+      }
+      if (crtc >= 0) {
         drmModeFreeEncoder(encoder);
         return drmModeGetCrtc(fd, crtc);
+      }
     }
+  }
 
-    /*
-     * Didn't find anything, try to find a crtc and encoder combo.
-     */
-    crtc = -1;
-    for (int i = 0; i < connector->count_encoders; i++) {
-        encoder = drmModeGetEncoder(fd, connector->encoders[i]);
-
-        if (encoder) {
-            for (int j = 0; j < resources->count_crtcs; j++) {
-                if (!(encoder->possible_crtcs & (1 << j)))
-                    continue;
-                crtc = resources->crtcs[j];
-                break;
-            }
-            if (crtc >= 0) {
-                drmModeFreeEncoder(encoder);
-                return drmModeGetCrtc(fd, crtc);
-            }
-        }
-    }
-    return nullptr;
+  return nullptr;
 }
 
-static drmModeConnector *find_used_connector_by_type(int fd,
-                                 drmModeRes *resources,
-                                 unsigned type) {
-    for (int i = 0; i < resources->count_connectors; i++) {
-        drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
-        if (connector) {
-            if ((connector->connector_type == type) &&
-                    (connector->connection == DRM_MODE_CONNECTED) &&
-                    (connector->count_modes > 0))
-                return connector;
-
-            drmModeFreeConnector(connector);
-        }
+std::vector<drmModeConnector*> find_used_connector_by_type(int fd, drmModeRes* resources,
+                                                           unsigned type) {
+  std::vector<drmModeConnector*> drmConnectors;
+  for (int i = 0; i < resources->count_connectors; i++) {
+    drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
+    if (connector) {
+      if ((connector->connector_type == type) && (connector->connection == DRM_MODE_CONNECTED) &&
+          (connector->count_modes > 0)) {
+        drmConnectors.push_back(connector);
+      } else {
+        drmModeFreeConnector(connector);
+      }
     }
-    return nullptr;
+  }
+  return drmConnectors;
 }
 
-static drmModeConnector *find_first_connected_connector(int fd,
-                             drmModeRes *resources) {
-    for (int i = 0; i < resources->count_connectors; i++) {
-        drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
-        if (connector) {
-            if ((connector->count_modes > 0) &&
-                    (connector->connection == DRM_MODE_CONNECTED))
-                return connector;
+static drmModeConnector* find_first_connected_connector(int fd, drmModeRes* resources) {
+  for (int i = 0; i < resources->count_connectors; i++) {
+    drmModeConnector* connector;
 
-            drmModeFreeConnector(connector);
-        }
+    connector = drmModeGetConnector(fd, resources->connectors[i]);
+    if (connector) {
+      if ((connector->count_modes > 0) && (connector->connection == DRM_MODE_CONNECTED))
+        return connector;
+
+      drmModeFreeConnector(connector);
     }
-    return nullptr;
+  }
+  return nullptr;
 }
 
+// TWRP BEGIN: kernel mode selection and opt-in high refresh (862d597b, 4688c0bc).
 static bool get_kernel_video_mode(uint32_t* width, uint32_t* height) {
     FILE* cmdline = fopen("/proc/cmdline", "r");
     if (!cmdline)
@@ -1007,672 +1024,512 @@ static bool pick_fastest_mode(drmModeConnector* connector, uint32_t width, uint3
     return found;
 }
 
-static drmModeConnector *find_main_monitor(int fd, drmModeRes *resources,
-        uint32_t *mode_index) {
-    /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
-    unsigned kConnectorPriority[] = {
-        DRM_MODE_CONNECTOR_LVDS,
-        DRM_MODE_CONNECTOR_eDP,
-        DRM_MODE_CONNECTOR_DSI,
-    };
+// TWRP END
 
-    drmModeConnector *main_monitor_connector = nullptr;
-    unsigned i = 0;
-    do {
-        main_monitor_connector = find_used_connector_by_type(fd,
-                                         resources,
-                                         kConnectorPriority[i]);
-        i++;
-    } while (!main_monitor_connector && i < ARRAY_SIZE(kConnectorPriority));
+bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
+  /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
+  static constexpr unsigned kConnectorPriority[] = {
+    DRM_MODE_CONNECTOR_LVDS,
+    DRM_MODE_CONNECTOR_eDP,
+    DRM_MODE_CONNECTOR_DSI,
+  };
 
-    /* If we didn't find a connector, grab the first one that is connected. */
-    if (!main_monitor_connector)
-        main_monitor_connector =
-                find_first_connected_connector(fd, resources);
-
-    /* If we still didn't find a connector, give up and return. */
-    if (!main_monitor_connector)
-        return nullptr;
-
-    *mode_index = 0;
-    uint32_t requested_width = 0;
-    uint32_t requested_height = 0;
-    if (get_kernel_video_mode(&requested_width, &requested_height)) {
-        printf("Kernel video mode requested: %u x %u\n", requested_width,
-               requested_height);
-        for (int modes = 0; modes < main_monitor_connector->count_modes; modes++) {
-            const drmModeModeInfo& mode = main_monitor_connector->modes[modes];
-            if (mode.hdisplay == requested_width && mode.vdisplay == requested_height) {
-                *mode_index = modes;
-                printf("Choosing kernel video mode #%d\n", modes);
-                return main_monitor_connector;
-            }
-        }
-        printf("Requested kernel video mode is unavailable; using DRM preferred mode\n");
+  std::vector<drmModeConnector*> drmConnectors;
+  for (int i = 0; i < arraysize(kConnectorPriority) && drmConnectors.size() < DRM_MAX; i++) {
+    auto connectors = find_used_connector_by_type(fd, resources, kConnectorPriority[i]);
+    for (auto connector : connectors) {
+      drmConnectors.push_back(connector);
+      if (drmConnectors.size() >= DRM_MAX) break;
     }
-
-    for (int modes = 0; modes < main_monitor_connector->count_modes; modes++) {
-        if (main_monitor_connector->modes[modes].type &
-                DRM_MODE_TYPE_PREFERRED) {
-            *mode_index = modes;
-            break;
-        }
-    }
-
-    return main_monitor_connector;
-}
-
-/* virtio-gpu exposes a simple single-plane CRTC. Its atomic properties are
- * present, but the SDE-oriented multi-plane request below is not valid for it. */
-static int set_legacy_crtc(uint32_t fb_id) {
-  if (!main_monitor_crtc || !main_monitor_connector)
-    return -EINVAL;
-
-  if (fb_id == 0) {
-    return drmModeSetCrtc(drm_fd, main_monitor_crtc->crtc_id, 0, 0, 0,
-                          nullptr, 0, nullptr);
   }
 
-  uint32_t connector_id = main_monitor_connector->connector_id;
-  return drmModeSetCrtc(drm_fd, main_monitor_crtc->crtc_id, fb_id, 0, 0,
-                        &connector_id, 1, &main_monitor_crtc->mode);
-}
-
-static void page_flip_handler(int, unsigned int, unsigned int, unsigned int,
-                              void* user_data) {
-  *static_cast<bool*>(user_data) = false;
-}
-
-static int wait_for_page_flip(bool* waiting) {
-  drmEventContext event_context = {};
-  event_context.version = DRM_EVENT_CONTEXT_VERSION;
-  event_context.page_flip_handler = page_flip_handler;
-
-  while (*waiting) {
-    pollfd pfd = {};
-    pfd.fd = drm_fd;
-    pfd.events = POLLIN;
-    int ret;
-    do {
-      ret = poll(&pfd, 1, 1000);
-    } while (ret < 0 && errno == EINTR);
-    if (ret <= 0)
-      return ret == 0 ? -ETIMEDOUT : -errno;
-    if (drmHandleEvent(drm_fd, &event_context) != 0)
-      return -errno;
-  }
-  return 0;
-}
-
-static int present_legacy_buffer(int buffer) {
-  if (displayed_buffer == buffer)
-    return 0;
-
-  if (legacy_page_flip) {
-    bool waiting = true;
-    int ret = drmModePageFlip(drm_fd, main_monitor_crtc->crtc_id,
-                              drm_surfaces[buffer]->fb_id,
-                              DRM_MODE_PAGE_FLIP_EVENT, &waiting);
-    if (ret == 0)
-      ret = wait_for_page_flip(&waiting);
-    if (ret == 0) {
-      displayed_buffer = buffer;
-      return 0;
+  /* If we didn't find a connector, grab the first one that is connected. */
+  if (drmConnectors.empty()) {
+    drmModeConnector* connector = find_first_connected_connector(fd, resources);
+    if (connector) {
+      drmConnectors.push_back(connector);
     }
-
-    printf("Legacy page flip failed ret=%d; falling back to modeset\n", ret);
-    fflush(stdout);
-    legacy_page_flip = false;
   }
 
-  int ret = set_legacy_crtc(drm_surfaces[buffer]->fb_id);
-  if (ret == 0)
-    displayed_buffer = buffer;
-  return ret;
+  for (int drm_index = 0; drm_index < drmConnectors.size(); drm_index++) {
+    drm[drm_index].monitor_connector = drmConnectors[drm_index];
+
+    drm[drm_index].selected_mode = 0;
+    for (int modes = 0; modes < drmConnectors[drm_index]->count_modes; modes++) {
+      printf("Display Mode %d resolution: %d x %d @ %d FPS\n", modes,
+             drmConnectors[drm_index]->modes[modes].hdisplay,
+             drmConnectors[drm_index]->modes[modes].vdisplay,
+             drmConnectors[drm_index]->modes[modes].vrefresh);
+      if (drmConnectors[drm_index]->modes[modes].type & DRM_MODE_TYPE_PREFERRED) {
+        printf("Choosing display mode #%d\n", modes);
+        drm[drm_index].selected_mode = modes;
+        break;
+      }
+    }
+  }
+
+  // TWRP: QEMU's kernel-requested resolution takes precedence over preferred.
+  uint32_t requested_width, requested_height;
+  if (legacy_modeset && !drmConnectors.empty() &&
+      get_kernel_video_mode(&requested_width, &requested_height)) {
+    for (int mode = 0; mode < drm[DRM_MAIN].monitor_connector->count_modes; ++mode) {
+      const auto& candidate = drm[DRM_MAIN].monitor_connector->modes[mode];
+      if (candidate.hdisplay == requested_width && candidate.vdisplay == requested_height) {
+        drm[DRM_MAIN].selected_mode = mode;
+        break;
+      }
+    }
+  }
+  return drmConnectors.size() > 0;
 }
 
-static drmModeAtomicReqPtr create_atomic_flip_request(int buffer) {
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+void MinuiBackendDrm::DisableNonMainCrtcs(int fd, drmModeRes* resources, drmModeCrtc* main_crtc) {
+  uint32_t prop_id;
+  int ret = 0;
   drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
-  if (!atomic_req)
-    return nullptr;
 
-  uint32_t prop_id;
-  add_prop(&conn_res, connector, Connector,
-           main_monitor_connector->connector_id, "CRTC_ID",
-           main_monitor_crtc->crtc_id);
-
-  for (uint32_t i = 0; i < number_of_lms; ++i) {
-    if (drmModeAtomicAddProperty(atomic_req, plane_res[i].plane->plane_id,
-                                 fb_prop_id,
-                                 drm_surfaces[buffer]->fb_id) < 0) {
-      drmModeAtomicFree(atomic_req);
-      return nullptr;
-    }
-  }
-
-  return atomic_req;
-}
-
-/* Switching in the takeover commit blanks some panels. */
-static void switch_to_fast_mode(int buffer) {
-  drmModeAtomicReqPtr atomic_req = create_atomic_flip_request(buffer);
-  if (!atomic_req)
-    return;
-
-  uint32_t prop_id;
-  find_prop_id(&crtc_res, crtc, Crtc, main_monitor_crtc->crtc_id, "MODE_ID", prop_id);
-  int ret = prop_id == 0 ? -EINVAL
-                         : drmModeAtomicAddProperty(atomic_req, main_monitor_crtc->crtc_id,
-                                                    prop_id, fast_mode_blob_id);
-  if (ret >= 0)
-    ret = drmModeAtomicCommit(drm_fd, atomic_req, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
-  drmModeAtomicFree(atomic_req);
-
-  if (ret == 0) {
-    printf("Switched to %ux%u@%u\n", (unsigned)fast_mode.hdisplay,
-           (unsigned)fast_mode.vdisplay, fast_mode.vrefresh);
-  } else {
-    printf("Could not switch to %u Hz, rc = %d; staying at %u Hz\n", fast_mode.vrefresh, ret,
-           main_monitor_crtc->mode.vrefresh);
-    drmModeDestroyPropertyBlob(drm_fd, fast_mode_blob_id);
-    fast_mode_blob_id = 0;
-  }
-  fflush(stdout);
-}
-
-static int commit_atomic_buffer(int buffer, uint32_t flags, void* user_data) {
-  drmModeAtomicReqPtr atomic_req = create_atomic_flip_request(buffer);
-  if (!atomic_req)
-    return -ENOMEM;
-
-  int ret = drmModeAtomicCommit(drm_fd, atomic_req, flags, user_data);
-  drmModeAtomicFree(atomic_req);
-  return ret;
-}
-
-static int present_atomic_buffer(int buffer) {
-  if (displayed_buffer == buffer)
-    return 0;
-
-  if (atomic_page_flip) {
-    bool waiting = true;
-    int ret = commit_atomic_buffer(
-        buffer, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &waiting);
-    if (ret == 0)
-      ret = wait_for_page_flip(&waiting);
-    if (ret == 0) {
-      displayed_buffer = buffer;
-      atomic_page_flip_failures = 0;
-      return 0;
-    }
-
-    if (++atomic_page_flip_failures >= 8) {
-      printf("Atomic page flip failed ret=%d %d times; falling back to blocking commit\n", ret,
-             atomic_page_flip_failures);
-      fflush(stdout);
-      atomic_page_flip = false;
-    }
-  }
-
-  int ret = commit_atomic_buffer(buffer, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
-  if (ret == 0)
-    displayed_buffer = buffer;
-  return ret;
-}
-
-static void disable_non_main_crtcs(int fd,
-                    drmModeRes *resources,
-                    drmModeCrtc* main_crtc) {
-  if (legacy_modeset)
-    return;
-
-  uint32_t prop_id;
-  drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
   for (int i = 0; i < resources->count_connectors; i++) {
     drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
     drmModeCrtc* crtc = find_crtc_for_connector(fd, resources, connector);
     if (crtc->crtc_id != main_crtc->crtc_id) {
       // Switching to atomic commit. Given only crtc, we can only set ACTIVE = 0
       // to disable any Nonmain CRTCs
-      find_prop_id(&crtc_res, crtc, Crtc, crtc->crtc_id, "ACTIVE", prop_id);
+      find_prop_id(&crtc_res, crtc, Crtc, crtc->crtc_id, "ACTIVE", prop_id, DRM_SEC);
       if (prop_id == 0)
         return;
 
-      if (drmModeAtomicAddProperty(atomic_req, main_monitor_crtc->crtc_id, prop_id, 0) < 0)
+      if (drmModeAtomicAddProperty(atomic_req, drm[DRM_SEC].monitor_crtc->crtc_id, prop_id, 0) < 0)
         return;
-
     }
     drmModeFreeCrtc(crtc);
   }
-  if (drmModeAtomicCommit(drm_fd, atomic_req,DRM_MODE_ATOMIC_ALLOW_MODESET, NULL))
+
+  ret = drmModeAtomicCommit(drm_fd, atomic_req,DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+  if (ret)
     printf("Atomic Commit failed in DisableNonMainCrtcs\n");
 
   drmModeAtomicFree(atomic_req);
 }
-
-static int update_plane_fb(int buffer) {
-  if (legacy_modeset) {
-    return present_legacy_buffer(buffer);
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+void MinuiBackendDrm::DisableNonMainCrtcs(int fd, drmModeRes* resources, drmModeCrtc* main_crtc) {
+  // TWRP: CLO handoff must tolerate missing encoders/secondary CRTCs and release the request.
+  for (int i = 0; i < resources->count_crtcs; ++i) {
+    const uint32_t id = resources->crtcs[i];
+    if (id == main_crtc->crtc_id) continue;
+    if (legacy_modeset) { drmModeSetCrtc(fd, id, 0, 0, 0, nullptr, 0, nullptr); continue; }
+    auto* props = drmModeObjectGetProperties(fd, id, DRM_MODE_OBJECT_CRTC);
+    if (!props) continue;
+    auto* request = drmModeAtomicAlloc();
+    if (request) {
+      for (uint32_t j = 0; j < props->count_props; ++j) {
+        auto* property = drmModeGetProperty(fd, props->props[j]);
+        if (property) {
+          if (!strcmp(property->name, "ACTIVE")) {
+            drmModeAtomicAddProperty(request, id, property->prop_id, 0);
+            drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
+          }
+          drmModeFreeProperty(property);
+        }
+      }
+      drmModeAtomicFree(request);
+    }
+    drmModeFreeObjectProperties(props);
   }
-  return present_atomic_buffer(buffer);
+}
+#endif // TWRP
+
+
+int MinuiBackendDrm::UpdatePlaneFB(DrmConnector index, uint32_t flags, void* user_data) {
+
+  // TWRP: isolate CLO pipeline state between main and secondary connectors.
+  auto& conn_res = drm[index].conn_res;
+  auto& plane_res = drm[index].plane_res;
+  auto& number_of_lms = drm[index].number_of_lms;
+  auto& fb_prop_id = drm[index].fb_prop_id;
+
+  drmModeAtomicReqPtr atomic_req = drmModeAtomicAlloc();
+  if (!atomic_req) return -ENOMEM;
+  uint32_t prop_id;
+  // CLO: association is required by quadpipe topologies.
+  add_prop(&conn_res, connector, Connector, drm[index].monitor_connector->connector_id,
+           "CRTC_ID", drm[index].monitor_crtc->crtc_id, index);
+  int ret = 0;
+  for (uint32_t i = 0; i < number_of_lms && !ret; ++i) {
+    if (drmModeAtomicAddProperty(atomic_req, plane_res[i].plane->plane_id,
+          fb_prop_id, drm[index].GRSurfaceDrms[drm[index].current_buffer]->fb_id) < 0) ret = -EINVAL;
+  }
+  if (!ret) ret = drmModeAtomicCommit(drm_fd, atomic_req, flags, user_data);
+  drmModeAtomicFree(atomic_req);
+  return ret;
 }
 
-static GRSurface* drm_init(minui_backend* backend __unused) {
+GRSurface* MinuiBackendDrm::Init() {
+  int ret = 0;
   drmModeRes* res = nullptr;
+  drm_fd = -1;
 
-  spr_enabled = android::base::GetIntProperty("vendor.display.enable_spr", 0);
-  spr_bypass = android::base::GetIntProperty("vendor.display.enable_spr_bypass", 0);
+  // TWRP: per-connector initialization; CLO atomic/topology support stays the baseline.
+  for (auto& output : drm) {
+    output.spr_enabled = android::base::GetIntProperty("vendor.display.enable_spr", 0);
+  }
   /* Consider DRM devices in order. */
   for (int i = 0; i < DRM_MAX_MINOR; i++) {
-    char* dev_name;
-    int ret = asprintf(&dev_name, DRM_DEV_NAME, DRM_DIR_NAME, i);
-    if (ret < 0) continue;
+    auto dev_name = android::base::StringPrintf(DRM_DEV_NAME, DRM_DIR_NAME, i);
+    android::base::unique_fd fd(open(dev_name.c_str(), O_RDWR | O_CLOEXEC));
+    if (fd == -1) continue;
 
-    drm_fd = open(dev_name, O_RDWR, 0);
-    free(dev_name);
-    if (drm_fd < 0) continue;
-
-    uint64_t cap = 0;
     /* We need dumb buffers. */
-    ret = drmGetCap(drm_fd, DRM_CAP_DUMB_BUFFER, &cap);
-    if (ret || cap == 0) {
-      close(drm_fd);
+    if (uint64_t cap = 0; drmGetCap(fd.get(), DRM_CAP_DUMB_BUFFER, &cap) != 0 || cap == 0) {
       continue;
-
     }
-    res = drmModeGetResources(drm_fd);
+
+    res = drmModeGetResources(fd.get());
     if (!res) {
-      close(drm_fd);
       continue;
     }
 
     /* Use this device if it has at least one connected monitor. */
     if (res->count_crtcs > 0 && res->count_connectors > 0) {
-      if (find_first_connected_connector(drm_fd, res)) break;
+      if (auto* connector = find_first_connected_connector(fd.get(), res)) {
+        drmModeFreeConnector(connector); // TWRP: discovery probe is not the selected connector.
+        drm_fd = fd.release();
+        break;
+      }
     }
 
     drmModeFreeResources(res);
-    close(drm_fd);
     res = nullptr;
   }
 
-  if (drm_fd < 0 || res == nullptr) {
-    perror("cannot find/open a drm device");
+  if (drm_fd == -1 || res == nullptr) {
+    perror("Failed to find/open a drm device");
     return nullptr;
   }
 
-  legacy_modeset = false;
-  drmVersionPtr drm_version = drmGetVersion(drm_fd);
-  if (drm_version) {
-    printf("DRM driver: %s\n", drm_version->name ? drm_version->name : "unknown");
-    legacy_modeset = drm_version->name && !strcmp(drm_version->name, "virtio_gpu");
-    drmFreeVersion(drm_version);
+  // TWRP: virtio uses legacy KMS rather than SDE atomic properties (862d597b).
+  if (auto* version = drmGetVersion(drm_fd)) {
+    legacy_modeset = version->name && !strcmp(version->name, "virtio_gpu");
+    drmFreeVersion(version);
   }
-
-  uint32_t selected_mode;
-  main_monitor_connector = find_main_monitor(drm_fd, res, &selected_mode);
-
-  if (!main_monitor_connector) {
-    printf("main_monitor_connector not found\n");
+  if (!FindAndSetMonitor(drm_fd, res)) {
+    fprintf(stderr, "Failed to find main monitor_connector\n");
     drmModeFreeResources(res);
-    close(drm_fd);
     return nullptr;
   }
 
-  gr_set_physical_size(main_monitor_connector->mmWidth, main_monitor_connector->mmHeight);
-  main_monitor_crtc = find_crtc_for_connector(drm_fd, res, main_monitor_connector);
+  for (int i = 0; i < DRM_MAX; i++) {
+    if (drm[i].monitor_connector) {
+      drm[i].monitor_crtc = find_crtc_for_connector(drm_fd, res, drm[i].monitor_connector);
+      if (!drm[i].monitor_crtc) {
+        fprintf(stderr, "Failed to find monitor_crtc, drm index=%d\n", i);
+        drmModeFreeResources(res);
+        return nullptr;
+      }
 
-  if (!main_monitor_crtc) {
-    printf("main_monitor_crtc not found\n");
-    drmModeFreeResources(res);
-    close(drm_fd);
-    return nullptr;
-  }
-
-  disable_non_main_crtcs(drm_fd, res, main_monitor_crtc);
-
-  main_monitor_crtc->mode = main_monitor_connector->modes[selected_mode];
-
-  int width = main_monitor_crtc->mode.hdisplay;
-  int height = main_monitor_crtc->mode.vdisplay;
-
-  fast_mode = {};
-  uint32_t fastest = selected_mode;
-  if (!legacy_modeset && android::base::GetBoolProperty("twrp.drm.fast_mode", false) &&
-      pick_fastest_mode(main_monitor_connector, width, height, &fastest) &&
-      main_monitor_connector->modes[fastest].vrefresh > main_monitor_crtc->mode.vrefresh)
-    fast_mode = main_monitor_connector->modes[fastest];
-
+      for (int crtc = 0; crtc < res->count_crtcs; ++crtc)
+        if (res->crtcs[crtc] == drm[i].monitor_crtc->crtc_id) drm[i].crtc_index = crtc;
+      drm[i].monitor_crtc->mode = drm[i].monitor_connector->modes[drm[i].selected_mode];
+      // TWRP: high refresh is opt-in and must keep the takeover resolution.
+      uint32_t fastest = drm[i].selected_mode;
+      const auto& mode = drm[i].monitor_crtc->mode;
+      if (!legacy_modeset && android::base::GetBoolProperty("twrp.drm.fast_mode", false) &&
+          pick_fastest_mode(drm[i].monitor_connector, mode.hdisplay, mode.vdisplay, &fastest) &&
+          drm[i].monitor_connector->modes[fastest].vrefresh > mode.vrefresh) {
+        drm[i].fast_mode = drm[i].monitor_connector->modes[fastest];
 #ifndef TW_DRM_TWO_STAGE_MODESET
-  if (fast_mode.vrefresh != 0) {
-    main_monitor_crtc->mode = fast_mode;
-    fast_mode = {};
-  }
+        // TWRP: one-stage modeset is the default; two-stage is a BoardConfig option.
+        drm[i].monitor_crtc->mode = drm[i].fast_mode;
+        drm[i].fast_mode = {};
 #endif
+      }
 
-  printf("width: %d, height: %d, enabling at %u Hz\n", width, height,
-         main_monitor_crtc->mode.vrefresh);
+      int width = drm[i].monitor_crtc->mode.hdisplay;
+      int height = drm[i].monitor_crtc->mode.vdisplay;
+
+      drm[i].GRSurfaceDrms[0] = GRSurfaceDrm::Create(drm_fd, width, height);
+      drm[i].GRSurfaceDrms[1] = GRSurfaceDrm::Create(drm_fd, width, height);
+      if (!drm[i].GRSurfaceDrms[0] || !drm[i].GRSurfaceDrms[1]) {
+        fprintf(stderr, "Failed to create GRSurfaceDrm, drm index=%d\n", i);
+        drmModeFreeResources(res);
+        return nullptr;
+      }
+
+      // TWRP: optional RAM staging, or damage synchronization after direct scanout.
+      drm[i].direct_scanout = legacy_modeset ||
+          android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
+      if (!drm[i].direct_scanout) {
+        drm[i].draw_buf = GRSurface::Create(width, height, drm[i].GRSurfaceDrms[0]->row_bytes,
+                                           drm[i].GRSurfaceDrms[0]->pixel_bytes);
+        if (!drm[i].draw_buf) { drmModeFreeResources(res); return nullptr; }
+        memset(drm[i].draw_buf->data(), 0, drm[i].draw_buf->row_bytes * height);
+      }
+      drm[i].pending_damage[0] = drm[i].pending_damage[1] = {0, 0, width, height};
+      drm[i].direct_pending_damage = {0, 0, width, height};
+      drm[i].current_buffer = 0;
+    }
+  }
+
+  DisableNonMainCrtcs(drm_fd, res, drm[DRM_MAIN].monitor_crtc);
 
   drmModeFreeResources(res);
-
-  drm_surfaces[0] = drm_create_surface(width, height);
-  drm_surfaces[1] = drm_create_surface(width, height);
-  if (!drm_surfaces[0] || !drm_surfaces[1]) {
-    drm_destroy_surface(drm_surfaces[0]);
-    drm_destroy_surface(drm_surfaces[1]);
-    drmModeFreeResources(res);
-    close(drm_fd);
-    return nullptr;
-  }
-
-  current_buffer = 0;
-  displayed_buffer = -1;
-  legacy_page_flip = true;
-  atomic_page_flip = true;
-  atomic_page_flip_failures = 0;
-  direct_scanout = legacy_modeset ||
-      android::base::GetBoolProperty("twrp.drm.direct_scanout", true);
-  warned_empty_damage = false;
-  draw_buf = nullptr;
-
-  if (direct_scanout) {
-    memset(drm_surfaces[0]->base.data, 0,
-           drm_surfaces[0]->base.height * drm_surfaces[0]->base.row_bytes);
-    memset(drm_surfaces[1]->base.data, 0,
-           drm_surfaces[1]->base.height * drm_surfaces[1]->base.row_bytes);
-  } else {
-    draw_buf = static_cast<GRSurface*>(malloc(sizeof(GRSurface)));
-    if (!draw_buf) {
-      printf("failed to alloc draw_buf\n");
-      drm_destroy_surface(drm_surfaces[0]);
-      drm_destroy_surface(drm_surfaces[1]);
-      close(drm_fd);
-      return nullptr;
-    }
-
-    memcpy(draw_buf, &drm_surfaces[0]->base, sizeof(GRSurface));
-    draw_buf->data = static_cast<unsigned char*>(
-        calloc(draw_buf->height * draw_buf->row_bytes, 1));
-    if (!draw_buf->data) {
-      printf("failed to alloc draw_buf surface\n");
-      free(draw_buf);
-      draw_buf = nullptr;
-      drm_destroy_surface(drm_surfaces[0]);
-      drm_destroy_surface(drm_surfaces[1]);
-      close(drm_fd);
-      return nullptr;
-    }
-  }
-
-  const GRRect full_damage = { 0, 0, width, height };
-  staging_pending_damage[0] = full_damage;
-  staging_pending_damage[1] = full_damage;
-  direct_pending_damage = full_damage;
-  stats_frames = 0;
-  stats_copied_bytes = 0;
-  stats_full_bytes = 0;
 
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_ATOMIC, 1);
 
-  /* Get possible plane_ids */
-  drmModePlaneRes *plane_options = drmModeGetPlaneResources(drm_fd);
-  if (!plane_options || !plane_options->planes)
-    return NULL;
-
-  if (legacy_modeset) {
-    if (plane_options->count_planes == 0)
-      return NULL;
-    number_of_lms = 1;
-  } else if (plane_options->count_planes < number_of_lms) {
+  ret = legacy_modeset ? 0 : Initdisplay(DRM_MAIN);
+  if (ret) {
+    printf("Failed to init display\n");
     return NULL;
   }
 
-  if (number_of_lms == 0)
-    return NULL;
+  current_blank_state[DRM_MAIN] = true;
+  current_blank_state[DRM_SEC] = true;
 
-  /* Set crtc resources */
-  crtc_res.props = drmModeObjectGetProperties(drm_fd,
-                      main_monitor_crtc->crtc_id,
-                      DRM_MODE_OBJECT_CRTC);
+  Blank(false);
 
-  if (!crtc_res.props)
-    return NULL;
-
-  crtc_res.props_info = static_cast<drmModePropertyRes **>
-                           (calloc(crtc_res.props->count_props,
-                           sizeof(crtc_res.props_info)));
-  if (!crtc_res.props_info)
-    return NULL;
-  else
-    for (int j = 0; j < (int)crtc_res.props->count_props; ++j) {
-      crtc_res.props_info[j] = drmModeGetProperty(drm_fd,
-                                   crtc_res.props->props[j]);
-      /* Get spr property name */
-      if (!strcmp(crtc_res.props_info[j]->name, "SDE_SPR_INIT_CFG_V1") ||
-          !strcmp(crtc_res.props_info[j]->name, "SDE_SPR_INIT_CFG_V2")) {
-        spr_prop_name = crtc_res.props_info[j]->name;
-      }
-    }
-
-  /* Set connector resources */
-  conn_res.props = drmModeObjectGetProperties(drm_fd,
-                     main_monitor_connector->connector_id,
-                     DRM_MODE_OBJECT_CONNECTOR);
-  if (!conn_res.props)
-    return NULL;
-
-  conn_res.props_info = static_cast<drmModePropertyRes **>
-                         (calloc(conn_res.props->count_props,
-                         sizeof(conn_res.props_info)));
-  if (!conn_res.props_info)
-    return NULL;
-  else {
-    for (int j = 0; j < (int)conn_res.props->count_props; ++j) {
-      conn_res.props_info[j] = drmModeGetProperty(drm_fd,
-                                 conn_res.props->props[j]);
-
-      /* Get preferred mode information and extract the
-       * number of layer mixers needed from the topology name.
-       */
-      if (!strcmp(conn_res.props_info[j]->name, "mode_properties")) {
-        number_of_lms = get_topology_lm_number(drm_fd, conn_res.props->prop_values[j]);
-        printf("number of lms in topology %d\n", number_of_lms);
-      }
-    }
-  }
-
-  if (legacy_modeset)
-    number_of_lms = 1;
-
-  /* Set plane resources */
-  for(uint32_t i = 0; i < number_of_lms; ++i) {
-    plane_res[i].plane = drmModeGetPlane(drm_fd, plane_options->planes[i]);
-    if (!plane_res[i].plane)
-      return NULL;
-  }
-
-  for (uint32_t i = 0; i < number_of_lms; ++i) {
-    struct Plane *obj = &plane_res[i];
-    unsigned int j;
-    obj->props = drmModeObjectGetProperties(drm_fd, obj->plane->plane_id,
-                    DRM_MODE_OBJECT_PLANE);
-    if (!obj->props)
-      continue;
-    obj->props_info = static_cast<drmModePropertyRes **>
-                         (calloc(obj->props->count_props, sizeof(*obj->props_info)));
-    if (!obj->props_info)
-      continue;
-    for (j = 0; j < obj->props->count_props; ++j)
-      obj->props_info[j] = drmModeGetProperty(drm_fd, obj->props->props[j]);
-  }
-
-  drmModeFreePlaneResources(plane_options);
-  plane_options = NULL;
-
-  /* Setup spr blob id if enabled */
-  if (spr_enabled && spr_prop_name.empty()) {
-    /* Nothing to program the block through, which is no reason to give up the
-     * whole drm backend. */
-    printf("spr is enabled but the crtc carries no spr property\n");
-    spr_enabled = 0;
-  }
-  if (spr_enabled) {
-    printf("setting up %s, bypass %u\n", spr_prop_name.c_str(), spr_bypass);
-    if (SetupSprBlob(drm_fd, spr_prop_name, &crtc_res.spr_blob_id)) {
-      return NULL;
-    }
-  }
-
-  /* Setup pipe and blob_id */
-  if (drmModeCreatePropertyBlob(drm_fd, &main_monitor_crtc->mode, sizeof(drmModeModeInfo),
-      &crtc_res.mode_blob_id)) {
-    printf("failed to create mode blob\n");
-    return NULL;
-  }
-
-  if (fast_mode.vrefresh != 0 &&
-      drmModeCreatePropertyBlob(drm_fd, &fast_mode, sizeof(fast_mode), &fast_mode_blob_id)) {
-    printf("failed to create the %u Hz mode blob\n", fast_mode.vrefresh);
-    fast_mode_blob_id = 0;
-  }
-
-  /* Save fb_prop_id*/
-  uint32_t prop_id;
-  prop_id = find_plane_prop_id(plane_res[0].plane->plane_id, "FB_ID", plane_res);
-  fb_prop_id = prop_id;
-
-  drm_blank(nullptr, false);
-
-  if (displayed_buffer == current_buffer)
-    current_buffer = 1 - current_buffer;
-
-  return direct_scanout
-      ? &drm_surfaces[current_buffer]->base : draw_buf;
+  if (current_blank_state[DRM_MAIN]) return nullptr; // TWRP: do not accept failed takeover.
+  gr_set_physical_size(drm[DRM_MAIN].monitor_connector->mmWidth,
+                       drm[DRM_MAIN].monitor_connector->mmHeight);
+  drm[DRM_MAIN].current_buffer = 1 - drm[DRM_MAIN].displayed_buffer;
+  return drm[DRM_MAIN].direct_scanout
+      ? drm[DRM_MAIN].GRSurfaceDrms[drm[DRM_MAIN].current_buffer].get()
+      : drm[DRM_MAIN].draw_buf.get();
 }
 
-static GRSurface* drm_flip(minui_backend* backend __unused) {
-    if (direct_scanout) {
-        const GRRect frame_damage = gr_get_damage();
-        union_damage(&direct_pending_damage, frame_damage);
-        if (rect_empty(direct_pending_damage)) {
-            direct_pending_damage = {
-                0, 0, drm_surfaces[current_buffer]->base.width,
-                drm_surfaces[current_buffer]->base.height };
-            if (!warned_empty_damage) {
-                printf("DRM flip had no recorded damage; synchronizing full frame\n");
-                warned_empty_damage = true;
-            }
-        }
+// TWRP BEGIN: partial presentation and virtio fallback (bf39691b, aff6ddb2, 862d597b).
+namespace {
+bool empty_damage(const GRRect& rect) {
+  return rect.left >= rect.right || rect.top >= rect.bottom;
+}
+void merge_damage(GRRect* destination, const GRRect& damage) {
+  if (empty_damage(damage)) return;
+  if (empty_damage(*destination)) { *destination = damage; return; }
+  destination->left = std::min(destination->left, damage.left);
+  destination->top = std::min(destination->top, damage.top);
+  destination->right = std::max(destination->right, damage.right);
+  destination->bottom = std::max(destination->bottom, damage.bottom);
+}
+size_t copy_damage(const GRSurface* source, GRSurface* destination, GRRect damage) {
+  const int width = std::min(source->width, destination->width);
+  const int height = std::min(source->height, destination->height);
+  damage.left = std::clamp(damage.left, 0, width);
+  damage.right = std::clamp(damage.right, 0, width);
+  damage.top = std::clamp(damage.top, 0, height);
+  damage.bottom = std::clamp(damage.bottom, 0, height);
+  if (empty_damage(damage) || source->pixel_bytes != destination->pixel_bytes) return 0;
+  const size_t bytes = (damage.right - damage.left) * source->pixel_bytes;
+  // TWRP: retain the contiguous full-row copy optimization from bf39691b.
+  if (damage.left == 0 && bytes == source->row_bytes &&
+      source->row_bytes == destination->row_bytes) {
+    memcpy(destination->data() + damage.top * destination->row_bytes,
+           source->data() + damage.top * source->row_bytes,
+           bytes * (damage.bottom - damage.top));
+    return bytes * (damage.bottom - damage.top);
+  }
+  for (int y = damage.top; y < damage.bottom; ++y) {
+    memcpy(destination->data() + y * destination->row_bytes + damage.left * destination->pixel_bytes,
+           source->data() + y * source->row_bytes + damage.left * source->pixel_bytes, bytes);
+  }
+  return bytes * (damage.bottom - damage.top);
+}
+void page_flip_handler(int, unsigned int, unsigned int, unsigned int, void* pending) {
+  *static_cast<bool*>(pending) = false;
+}
+int wait_for_page_flip(int fd, bool* waiting) {
+  drmEventContext context{};
+  context.version = DRM_EVENT_CONTEXT_VERSION;
+  context.page_flip_handler = page_flip_handler;
+  while (*waiting) {
+    pollfd event{fd, POLLIN, 0};
+    int ret = TEMP_FAILURE_RETRY(poll(&event, 1, 1000));
+    if (ret <= 0) return ret ? -errno : -ETIMEDOUT;
+    if (!(event.revents & POLLIN)) return -EIO;
+    if (drmHandleEvent(fd, &context)) return -errno;
+  }
+  return 0;
+}
+}  // namespace
 
-        const int presenting_buffer = current_buffer;
-        int released_buffer = displayed_buffer;
-        const int ret = update_plane_fb(presenting_buffer);
-        if (ret) {
-            printf("DRM present failed ret=%d\n", ret);
-            return &drm_surfaces[current_buffer]->base;
-        }
-
-        if (released_buffer < 0 || released_buffer == presenting_buffer)
-            released_buffer = 1 - presenting_buffer;
-
-        // The completed flip releases the old scanout. Copy damage forward so
-        // the next draw buffer matches the displayed frame.
-        const size_t copied_bytes = copy_damage(
-            &drm_surfaces[presenting_buffer]->base,
-            &drm_surfaces[released_buffer]->base, direct_pending_damage);
-        log_copy_stats(copied_bytes, &drm_surfaces[presenting_buffer]->base,
-                       "direct");
-        direct_pending_damage = { 0, 0, 0, 0 };
-        current_buffer = released_buffer;
-        return &drm_surfaces[current_buffer]->base;
-    }
-
-    const GRRect frame_damage = gr_get_damage();
-    union_damage(&staging_pending_damage[0], frame_damage);
-    union_damage(&staging_pending_damage[1], frame_damage);
-    const size_t copied_bytes = copy_damage(
-        draw_buf, &drm_surfaces[current_buffer]->base,
-        staging_pending_damage[current_buffer]);
-    staging_pending_damage[current_buffer] = { 0, 0, 0, 0 };
-    log_copy_stats(copied_bytes, draw_buf, "staging");
-    const int ret = update_plane_fb(current_buffer);
-    if (ret)
-        printf("DRM present failed ret=%d\n", ret);
-    else
-        current_buffer = 1 - current_buffer;
-    return draw_buf;
+int MinuiBackendDrm::SetLegacyCrtc(DrmConnector index, uint32_t fb_id) {
+  auto& output = drm[index];
+  uint32_t connector = output.monitor_connector->connector_id;
+  return drmModeSetCrtc(drm_fd, output.monitor_crtc->crtc_id, fb_id, 0, 0,
+                        fb_id ? &connector : nullptr, fb_id ? 1 : 0,
+                        fb_id ? &output.monitor_crtc->mode : nullptr);
 }
 
-static void drm_exit(minui_backend* backend __unused) {
-    if (drm_fd < 0) return;
-
-    // The recovery UI can initialize minui more than once: the legacy UI is
-    // used for early pages and GUI2 owns a later instance. Release every DRM
-    // object before closing the fd; otherwise the next drm_init() can use
-    // property metadata belonging to the previous fd and its first atomic
-    // commit fails with EPERM (-13).
-    drm_blank(nullptr, true);
-    if (crtc_res.mode_blob_id != 0)
-        drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
-    if (fast_mode_blob_id != 0)
-        drmModeDestroyPropertyBlob(drm_fd, fast_mode_blob_id);
-    fast_mode_blob_id = 0;
-    if (crtc_res.spr_blob_id != 0)
-        drmModeDestroyPropertyBlob(drm_fd, crtc_res.spr_blob_id);
-
-    for (uint32_t i = 0; i < NUM_PLANES; ++i) {
-        free_object_properties(&plane_res[i].props, &plane_res[i].props_info);
-        if (plane_res[i].plane != nullptr) {
-            drmModeFreePlane(plane_res[i].plane);
-            plane_res[i].plane = nullptr;
-        }
+int MinuiBackendDrm::Present(DrmConnector index) {
+  auto& output = drm[index];
+  if (output.displayed_buffer == output.current_buffer) return 0;
+  const uint32_t fb_id = output.GRSurfaceDrms[output.current_buffer]->fb_id;
+  int ret = -EINVAL;
+  if (output.page_flip) {
+    // Event userdata lives with the backend, including after a timeout.
+    output.waiting_for_flip = true;
+    ret = legacy_modeset
+        ? drmModePageFlip(drm_fd, output.monitor_crtc->crtc_id, fb_id,
+                           DRM_MODE_PAGE_FLIP_EVENT, &output.waiting_for_flip)
+        : UpdatePlaneFB(index, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT,
+                         &output.waiting_for_flip);
+    const bool submitted = ret == 0;
+    if (submitted) ret = wait_for_page_flip(drm_fd, &output.waiting_for_flip);
+    if (!ret) {
+      output.page_flip_failures = 0;
+    } else if (legacy_modeset || submitted || ++output.page_flip_failures >= 8) {
+      // TWRP: keep the historical atomic retry tolerance, but never reuse event
+      // userdata after an accepted flip timed out or failed to complete.
+      output.page_flip = false;
+      printf("TWRP: page flip failed rc=%d, using blocking presentation\n", ret);
     }
-    free_object_properties(&conn_res.props, &conn_res.props_info);
-    free_object_properties(&crtc_res.props, &crtc_res.props_info);
-
-    if (main_monitor_crtc != nullptr) {
-        drmModeFreeCrtc(main_monitor_crtc);
-        main_monitor_crtc = nullptr;
-    }
-    if (main_monitor_connector != nullptr) {
-        drmModeFreeConnector(main_monitor_connector);
-        main_monitor_connector = nullptr;
-    }
-
-    drm_destroy_surface(drm_surfaces[0]);
-    drm_destroy_surface(drm_surfaces[1]);
-    drm_surfaces[0] = nullptr;
-    drm_surfaces[1] = nullptr;
-    if (draw_buf) {
-        free(draw_buf->data);
-        free(draw_buf);
-    }
-    draw_buf = nullptr;
-    direct_scanout = false;
-    displayed_buffer = -1;
-    current_buffer = 0;
-    current_blank_state = true;
-    fb_prop_id = 0;
-    number_of_lms = DEFAULT_NUM_LMS;
-    legacy_modeset = false;
-    legacy_page_flip = true;
-    atomic_page_flip = true;
-    atomic_page_flip_failures = 0;
-    spr_enabled = 0;
-    spr_bypass = 0;
-    spr_prop_name.clear();
-    close(drm_fd);
-    drm_fd = -1;
+  }
+  if (ret) ret = legacy_modeset ? SetLegacyCrtc(index, fb_id) : UpdatePlaneFB(index);
+  if (!ret) output.displayed_buffer = output.current_buffer;
+  return ret;
 }
 
-static minui_backend drm_backend = {
-    .init = drm_init,
-    .flip = drm_flip,
-    .blank = drm_blank,
-    .exit = drm_exit,
-};
-
-minui_backend* open_drm() {
-    return &drm_backend;
+void MinuiBackendDrm::SwitchToFastMode(DrmConnector index) {
+  auto& output = drm[index];
+  auto* request = drmModeAtomicAlloc();
+  if (!request) return;
+  // TWRP: preserve CLO's conn-crtc association and the displayed FB during modeset.
+  for (uint32_t i = 0; i < output.conn_res.props->count_props; ++i) {
+    auto* property = output.conn_res.props_info[i];
+    if (!strcmp(property->name, "CRTC_ID"))
+      drmModeAtomicAddProperty(request, output.monitor_connector->connector_id,
+                                property->prop_id, output.monitor_crtc->crtc_id);
+  }
+  for (uint32_t i = 0; i < output.number_of_lms; ++i)
+    drmModeAtomicAddProperty(request, output.plane_res[i].plane->plane_id, output.fb_prop_id,
+                              output.GRSurfaceDrms[output.displayed_buffer]->fb_id);
+  int ret = -EINVAL;
+  for (uint32_t i = 0; i < output.crtc_res.props->count_props; ++i) {
+    auto* property = output.crtc_res.props_info[i];
+    if (!strcmp(property->name, "MODE_ID")) {
+      ret = drmModeAtomicAddProperty(request, output.monitor_crtc->crtc_id,
+                                     property->prop_id, output.fast_mode_blob_id);
+      break;
+    }
+  }
+  if (ret >= 0) ret = drmModeAtomicCommit(drm_fd, request, DRM_MODE_ATOMIC_ALLOW_MODESET, nullptr);
+  drmModeAtomicFree(request);
+  if (ret) {
+    printf("TWRP: high refresh modeset failed rc=%d, retaining takeover mode\n", ret);
+    drmModeDestroyPropertyBlob(drm_fd, output.fast_mode_blob_id);
+    output.fast_mode_blob_id = 0;
+  }
 }
+
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+GRSurface* MinuiBackendDrm::Flip() {
+  UpdatePlaneFB(active_display);
+
+  drm[active_display].current_buffer = 1 - drm[active_display].current_buffer;
+  return drm[active_display].GRSurfaceDrms[drm[active_display].current_buffer].get();
+}
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+GRSurface* MinuiBackendDrm::Flip() {
+  auto& output = drm[active_display];
+  const GRRect damage = gr_get_damage();
+  auto* drawing = output.direct_scanout
+      ? output.GRSurfaceDrms[output.current_buffer].get() : output.draw_buf.get();
+  size_t copied_bytes = 0;
+  if (output.direct_scanout) {
+    merge_damage(&output.direct_pending_damage, damage);
+    if (empty_damage(output.direct_pending_damage))
+      output.direct_pending_damage = {0, 0, static_cast<int>(drawing->width),
+                                           static_cast<int>(drawing->height)};
+    const int presented = output.current_buffer;
+    int released = output.displayed_buffer;
+    if (Present(active_display)) return drawing;
+    if (released < 0 || released == presented) released = 1 - presented;
+    copied_bytes = copy_damage(drawing, output.GRSurfaceDrms[released].get(),
+                               output.direct_pending_damage);
+    output.direct_pending_damage = {};
+    output.current_buffer = released;
+    drawing = output.GRSurfaceDrms[released].get();
+  } else {
+    merge_damage(&output.pending_damage[0], damage);
+    merge_damage(&output.pending_damage[1], damage);
+    copied_bytes = copy_damage(drawing, output.GRSurfaceDrms[output.current_buffer].get(),
+                               output.pending_damage[output.current_buffer]);
+    if (!Present(active_display)) {
+      output.pending_damage[output.current_buffer] = {};
+      output.current_buffer = 1 - output.current_buffer;
+    }
+  }
+  ++output.stats_frames;
+  output.stats_copied_bytes += copied_bytes;
+  output.stats_full_bytes += drawing->height * drawing->row_bytes;
+  if (output.stats_frames == 120) {
+    if (android::base::GetBoolProperty("twrp.drm.stats", false))
+      printf("TWRP DRM copy stats: direct=%d copied=%" PRIu64 "/%" PRIu64 " bytes\n",
+             output.direct_scanout, output.stats_copied_bytes, output.stats_full_bytes);
+    output.stats_frames = output.stats_copied_bytes = output.stats_full_bytes = 0;
+  }
+  return drawing;
+}
+#endif // TWRP
+
+// TWRP END
+
+// TWRP BEGIN: release every CLO pipeline object while its DRM fd is still open (b7457030).
+void MinuiBackendDrm::ReleasePipeline(DrmConnector index) {
+  auto& output = drm[index];
+  output.pipeline_ready = false;
+  auto free_properties = [](auto* object) {
+    if (object->props_info) {
+      for (uint32_t i = 0; i < object->props->count_props; ++i)
+        if (object->props_info[i]) drmModeFreeProperty(object->props_info[i]);
+      free(object->props_info);
+      object->props_info = nullptr;
+    }
+    if (object->props) drmModeFreeObjectProperties(object->props);
+    object->props = nullptr;
+  };
+  for (auto& plane : output.plane_res) {
+    free_properties(&plane);
+    if (plane.plane) drmModeFreePlane(plane.plane);
+    plane.plane = nullptr;
+  }
+  free_properties(&output.conn_res);
+  free_properties(&output.crtc_res);
+  if (output.crtc_res.mode_blob_id) drmModeDestroyPropertyBlob(drm_fd, output.crtc_res.mode_blob_id);
+  if (output.crtc_res.spr_blob_id) drmModeDestroyPropertyBlob(drm_fd, output.crtc_res.spr_blob_id);
+  if (output.fast_mode_blob_id) drmModeDestroyPropertyBlob(drm_fd, output.fast_mode_blob_id);
+  output.crtc_res.mode_blob_id = output.crtc_res.spr_blob_id = output.fast_mode_blob_id = 0;
+}
+
+#if 0 // TWRP: unmodified minui reference; retained for future resyncs.
+MinuiBackendDrm::~MinuiBackendDrm() {
+  for (int i = 0; i < DRM_MAX; i++) {
+    if (drm[i].monitor_connector) {
+      drmModeFreeCrtc(drm[i].monitor_crtc);
+      drmModeFreeConnector(drm[i].monitor_connector);
+    }
+  }
+  Blank(true);
+  drmModeDestroyPropertyBlob(drm_fd, crtc_res.mode_blob_id);
+  close(drm_fd);
+  drm_fd = -1;
+}
+#else // TWRP: active implementation below preserves GUI2/device requirements.
+MinuiBackendDrm::~MinuiBackendDrm() {
+  if (drm_fd < 0) return;
+  for (int i = DRM_MAIN; i < DRM_MAX; ++i) {
+    auto index = static_cast<DrmConnector>(i);
+    if (drm[i].monitor_connector) Blank(true, index);
+    ReleasePipeline(index);
+    for (auto& surface : drm[i].GRSurfaceDrms) surface.reset();
+    drm[i].draw_buf.reset();
+    if (drm[i].monitor_crtc) drmModeFreeCrtc(drm[i].monitor_crtc);
+    if (drm[i].monitor_connector) drmModeFreeConnector(drm[i].monitor_connector);
+    drm[i].monitor_crtc = nullptr;
+    drm[i].monitor_connector = nullptr;
+  }
+  close(drm_fd);
+  drm_fd = -1;
+}
+#endif // TWRP
+
+// TWRP END

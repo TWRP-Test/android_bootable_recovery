@@ -1,4 +1,6 @@
+// TWRP-only: legacy TSPDRV haptics (4ef96a6f).
 #include <stdio.h>
+#include <cstring> // TWRP: declare memset without depending on other headers.
 #include <fcntl.h>
 #include <unistd.h>
 #include <cinttypes>

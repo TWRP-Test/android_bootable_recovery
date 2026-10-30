@@ -1,9 +1,9 @@
+// TWRP-only: BoardConfig options layered on the current minui backend implementation.
 package twrp
 
 import (
 	"android/soong/android"
 	"android/soong/cc"
-	"path/filepath"
 )
 
 func globalFlags(ctx android.BaseContext) []string {
@@ -11,12 +11,6 @@ func globalFlags(ctx android.BaseContext) []string {
 
 	if getMakeBool(ctx, "TW_DRM_TWO_STAGE_MODESET") {
 		cflags = append(cflags, "-DTW_DRM_TWO_STAGE_MODESET")
-	}
-
-	matches, err := filepath.Glob("external/libdrm/Android.*")
-	_ = matches
-	if err == nil {
-		cflags = append(cflags, "-DHAS_DRM")
 	}
 
 	var forcedPixelFormat = getMakeScalar(ctx, "TARGET_RECOVERY_FORCE_PIXEL_FORMAT")
@@ -76,58 +70,10 @@ func globalFlags(ctx android.BaseContext) []string {
 func globalSrcs(ctx android.BaseContext) []string {
 	var srcs []string
 
-	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") {
-		srcs = append(srcs, "graphics_overlay.cpp")
-	}
-
-	matches, err := filepath.Glob("external/libdrm/Android.*")
-	_ = matches
-	if err == nil {
-		srcs = append(srcs, "graphics_drm.cpp")
-	}
-
 	if getMakeBool(ctx, "TW_HAPTICS_TSPDRV") {
 		srcs = append(srcs, "tspdrv.cpp")
 	}
 	return srcs
-}
-
-func globalIncludes(ctx android.BaseContext) []string {
-	includes := []string{"bootable/recovery/twrpminui"}
-	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") {
-		if headers := getMakeValue(ctx, "TARGET_CUSTOM_KERNEL_HEADERS"); headers != "" {
-			includes = append(includes, headers)
-		}
-	}
-	if getMakeBool(ctx, "TW_INCLUDE_JPEG") {
-		includes = append(includes, "external/jpeg")
-	}
-	return includes
-}
-
-func globalHeaderLibs(ctx android.BaseContext) []string {
-	if getMakeBool(ctx, "TW_TARGET_USES_QCOM_BSP") &&
-		getMakeValue(ctx, "TARGET_CUSTOM_KERNEL_HEADERS") == "" {
-		return []string{"generated_kernel_headers"}
-	}
-	return nil
-}
-
-func globalStaticLibs(ctx android.BaseContext) []string {
-	var staticLibs []string
-
-	matches, err := filepath.Glob("external/libdrm/Android.*")
-	_ = matches
-	if err == nil {
-		matches, err = filepath.Glob("external/libdrm/Android.common.mk")
-		if err != nil {
-			staticLibs = append(staticLibs, "libdrm_platform")
-		} else {
-			staticLibs = append(staticLibs, "libdrm")
-		}
-	}
-
-	return staticLibs
 }
 
 func globalSharedLibs(ctx android.BaseContext) []string {
@@ -143,28 +89,19 @@ func globalSharedLibs(ctx android.BaseContext) []string {
 		sharedLibs = append(sharedLibs, "android.hardware.vibrator-V2-cpp")
 	}
 
-	if getMakeBool(ctx, "TW_INCLUDE_JPEG") {
-		sharedLibs = append(sharedLibs, "libjpeg")
-	}
 	return sharedLibs
 }
 
 func libTwrpMinuiDefaults(ctx android.LoadHookContext) {
 	type props struct {
-		Cflags       []string
-		Srcs         []string
-		Include_dirs []string
-		Static_libs  []string
-		Shared_libs  []string
-		Header_libs  []string
+		Cflags      []string
+		Srcs        []string
+		Shared_libs []string
 	}
 	ctx.AppendProperties(&props{
-		Cflags:       globalFlags(ctx),
-		Srcs:         globalSrcs(ctx),
-		Include_dirs: globalIncludes(ctx),
-		Static_libs:  globalStaticLibs(ctx),
-		Shared_libs:  globalSharedLibs(ctx),
-		Header_libs:  globalHeaderLibs(ctx),
+		Cflags:      globalFlags(ctx),
+		Srcs:        globalSrcs(ctx),
+		Shared_libs: globalSharedLibs(ctx),
 	})
 }
 

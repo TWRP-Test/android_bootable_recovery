@@ -21,10 +21,12 @@
 #include <limits>
 #include <vector>
 #include <png.h>
+#include <linux/fb.h>
+#include "graphics.h"
 
 #include "twrpminui/minui.h"
 
-extern unsigned int gr_rotation;
+// TWRP: PNG capture and hardware panel rotation (02827311).
 
 int gr_save_screenshot(const char* dest)
 {
@@ -44,7 +46,7 @@ int gr_save_screenshot(const char* dest)
     std::vector<uint8_t> frame(static_cast<size_t>(height) * row_bytes);
     if (gr_copy_frame(frame.data(), frame.size(), &width, &height, &row_bytes, &format) != 0)
         return -1;
-    const unsigned int rotation = gr_rotation;
+    const unsigned int rotation = static_cast<unsigned int>(gr_get_rotation()) * 90;
     const bool sideways = rotation == 90 || rotation == 270;
     const int output_width = sideways ? height : width;
     const int output_height = sideways ? width : height;
@@ -126,15 +128,41 @@ int gr_save_screenshot(const char* dest)
 }
 
 int ROTATION_X_DISP(int x, int y, int w) {
-    return ((gr_rotation ==   0) ? (x) :
-            (gr_rotation ==  90) ? (w - (y) - 1) :
-            (gr_rotation == 180) ? (w - (x) - 1) :
-            (gr_rotation == 270) ? (y) : -1);
+    return ((static_cast<unsigned int>(gr_get_rotation()) * 90 ==   0) ? (x) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 ==  90) ? (w - (y) - 1) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 == 180) ? (w - (x) - 1) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 == 270) ? (y) : -1);
 }
 
 int ROTATION_Y_DISP(int x, int y, int h) {
-    return ((gr_rotation ==   0) ? (y) :
-            (gr_rotation ==  90) ? (x) :
-            (gr_rotation == 180) ? (h - (y) - 1) :
-            (gr_rotation == 270) ? (h - (x) - 1) : -1);
+    return ((static_cast<unsigned int>(gr_get_rotation()) * 90 ==   0) ? (y) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 ==  90) ? (x) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 == 180) ? (h - (y) - 1) :
+            (static_cast<unsigned int>(gr_get_rotation()) * 90 == 270) ? (h - (x) - 1) : -1);
+}
+
+// TWRP: actual mmap byte order, used by fbdev (b7457030).
+GRPixelFormat gr_framebuffer_format(const fb_var_screeninfo& vi, GRPixelFormat fallback)
+{
+    if (vi.bits_per_pixel == 16)
+        return GRPixelFormat::RGB565;
+
+    if (vi.bits_per_pixel != 32 || vi.red.length != 8 ||
+        vi.green.length != 8 || vi.blue.length != 8)
+        return fallback;
+
+    // fb_var_screeninfo offsets describe the bit layout of the actual
+    // mmap()ed bytes. Do not infer this from red.offset alone: ARGB and
+    // BGRA, for example, overlap on one channel offset.
+    if (vi.red.offset == 0 && vi.green.offset == 8 && vi.blue.offset == 16)
+        return vi.transp.length == 8 ? GRPixelFormat::RGBA8888
+                                     : GRPixelFormat::RGBX8888;
+    if (vi.blue.offset == 0 && vi.green.offset == 8 && vi.red.offset == 16)
+        return GRPixelFormat::BGRA8888;
+    if (vi.red.offset == 24 && vi.green.offset == 16 && vi.blue.offset == 8)
+        return vi.transp.length == 8 && vi.transp.offset == 0
+                ? GRPixelFormat::ABGR8888 : GRPixelFormat::XRGB8888;
+    if (vi.blue.offset == 24 && vi.green.offset == 16 && vi.red.offset == 8)
+        return GRPixelFormat::ARGB8888;
+    return fallback;
 }

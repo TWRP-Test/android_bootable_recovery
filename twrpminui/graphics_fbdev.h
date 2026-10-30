@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Baseline: current minui/graphics_fbdev.h; local differences are marked TWRP.
+
 #pragma once
 
 #include <linux/fb.h>
@@ -51,11 +53,13 @@ class GRSurfaceFbdev : public GRSurface {
 class MinuiBackendFbdev : public MinuiBackend {
  public:
   MinuiBackendFbdev() = default;
-  ~MinuiBackendFbdev() override = default;
+  ~MinuiBackendFbdev() override; // TWRP: unmap the framebuffer on failed init and exit.
 
   GRSurface* Init() override;
   GRSurface* Flip() override;
   void Blank(bool) override;
+  void Blank(bool blank, DrmConnector index) override;
+  bool HasMultipleConnectors() override;
 
  private:
   void SetDisplayedFramebuffer(size_t n);
@@ -63,7 +67,11 @@ class MinuiBackendFbdev : public MinuiBackend {
   std::unique_ptr<GRSurfaceFbdev> gr_framebuffer[2];
   // Points to the current surface (i.e. one of the two gr_framebuffer's).
   GRSurfaceFbdev* gr_draw{ nullptr };
-  bool double_buffered;
+  bool double_buffered = false;
+  // TWRP: stable RAM drawing buffer for LVGL partial flushes (506fc803).
+  std::unique_ptr<GRSurface> staging_buffer;
+  void* mapping = nullptr;
+  size_t mapping_size = 0;
   std::vector<uint8_t> memory_buffer;
   size_t displayed_buffer{ 0 };
   fb_var_screeninfo vi;

@@ -1,3 +1,4 @@
+// TWRP-only: Linux force-feedback haptics (65cbd6ad).
 #include "force_feedback.h"
 #include <algorithm>
 #include <mutex>

@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
+// Baseline: current minui/graphics.h; local differences are marked TWRP.
+
 #ifndef _GRAPHICS_H_
 #define _GRAPHICS_H_
 
 #include "twrpminui/minui.h"
 
+// TWRP: physical damage bounds for LVGL partial presentation.
 struct GRRect {
     int left;
     int top;
@@ -26,36 +29,43 @@ struct GRRect {
     int bottom;
 };
 
-// TODO: lose the function pointers.
-struct minui_backend {
-    // Initializes the backend and returns a GRSurface* to draw into.
-    GRSurface* (*init)(minui_backend*);
 
-    // Causes the current drawing surface (returned by the most recent
-    // call to flip() or init()) to be displayed, and returns a new
-    // drawing surface.
-    GRSurface* (*flip)(minui_backend*);
+class MinuiBackend {
+ public:
+  enum DrmConnector {
+    DRM_MAIN = 0,
+    DRM_SEC,
+    DRM_MAX,
+  };
 
-    // Blank (or unblank) the screen.
-    void (*blank)(minui_backend*, bool);
+  // Initializes the backend and returns a GRSurface* to draw into.
+  virtual GRSurface* Init() = 0;
 
-    // Device cleanup when drawing is done.
-    void (*exit)(minui_backend*);
+  // Causes the current drawing surface (returned by the most recent call to Flip() or Init()) to
+  // be displayed, and returns a new drawing surface.
+  virtual GRSurface* Flip() = 0;
+
+  // Blank (or unblank) the default screen.
+  virtual void Blank(bool) = 0;
+
+  // Blank (or unblank) the specific screen.
+  virtual void Blank(bool blank, DrmConnector index) = 0;
+
+  // Return true if the device supports multiple connectors.
+  virtual bool HasMultipleConnectors() = 0;
+
+  // Device cleanup when drawing is done.
+  virtual ~MinuiBackend() = default;
 };
 
-minui_backend* open_fbdev();
-minui_backend* open_drm();
-minui_backend* open_overlay();
-
-// Drawing damage is expressed in physical display coordinates with right and
-// bottom excluded. Backends may use it to avoid copying an entire frame.
+// TWRP: backend metadata and damage tracking (aff6ddb2, b7457030).
 void gr_damage(int left, int top, int right, int bottom);
 GRRect gr_get_damage();
 void gr_reset_damage();
-
-// Backends report the actual byte order of their scanout buffer.
 void gr_set_pixel_format(GRPixelFormat format);
-// Panel size in millimetres before rotation; non-positive values mean unknown.
 void gr_set_physical_size(int width_mm, int height_mm);
+struct fb_var_screeninfo;
+GRPixelFormat gr_framebuffer_format(const fb_var_screeninfo& info, GRPixelFormat fallback);
+std::unique_ptr<MinuiBackend> create_backend(GraphicsBackend backend);
 
-#endif
+#endif  // _GRAPHICS_H_

@@ -21,23 +21,29 @@ libtwrpminui_defaults {
 cc_library_shared {
     name: "libtwrpminui",
     defaults: ["libtwrpminui_defaults", "twrp_defaults", "twrp_cflags_defaults"],
-    cflags: [
-        "-DTWRES=\"/twres/\""
-    ],
+    // Match current minui: DRM is a required backend on this Android branch.
+    // TWRP: haptics/BoardConfig options are handled by the load hook.
     export_include_dirs: [
         "include",
     ],
     include_dirs: [
         "bootable/recovery",
+        "bootable/recovery/twrpminui",
         "bootable/recovery/twrpinstall/include",
     ],
     srcs: [
         "graphics.cpp",
         "graphics_fbdev.cpp",
+        "graphics_drm.cpp",
         "graphics_utils.cpp",
         "events.cpp",
+        // TWRP: touch conversion and vibrator support layered on minui events.
+        "twrp_input.cpp",
+        "haptics.cpp",
+        "resources.cpp",
         "force_feedback.cpp"
     ],
+    whole_static_libs: ["libdrm"],
     shared_libs: [
         "libz",
         "libc",

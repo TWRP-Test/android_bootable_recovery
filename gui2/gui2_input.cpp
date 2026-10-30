@@ -367,7 +367,7 @@ static void read_cb(lv_indev_t* indev __unused, lv_indev_data_t* data) {
     goto finish;
   }
   for (; within_input_budget(); ++input_batch_steps) {
-    const int result = ev_get(&event, 0);
+    const int result = twrp_input_get(&event, 0);
     if (consume_touch_frame()) break;
     if (result == -2) break;
     if (result != 0) continue;

@@ -5777,7 +5777,6 @@ static std::string splash_device;
 static bool shell_ready = false;
 static bool startup_language_known = false;
 static bool startup_failed = false;
-static bool startup_input_rescanned = false;
 static uint64_t startup_last_poll_ms = 0;
 static uint64_t splash_started_ms = 0;
 static bool splash_dismiss_pending = false;
@@ -5924,13 +5923,7 @@ static void poll_startup(uint64_t now_ms) {
     return;
   }
 
-  // Touch comes from a vendor module loaded with the fstab; minui would take up
-  // to two seconds to notice it.
-  if (!startup_input_rescanned && status.step > gui2_backend::startup_step::PARTITIONS) {
-    ev_exit();
-    ev_init();
-    startup_input_rescanned = true;
-  }
+  // TWRP: minui inotify discovers vendor input nodes without restarting input.
 
   if (!startup_language_known && status.step > gui2_backend::startup_step::SETTINGS) {
     current_language = language_from_code(settings->get_string("tw_language", "en"));
@@ -6448,7 +6441,6 @@ int gui2_start(const gui2_context* context) {
   pending_language = current_language;
   startup_language_known = startup == nullptr;
   gui2_console::set_language(current_language);
-  startup_input_rescanned = startup == nullptr;
   startup_failed = false;
   shell_ready = false;
   reboot_requested = false;

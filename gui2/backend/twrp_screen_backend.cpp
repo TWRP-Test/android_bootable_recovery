@@ -95,7 +95,13 @@ std::string twrp_screen_backend::make_media_path(const char* directory, const ch
   // Use /tmp when storage is unavailable.
   std::string folder = mounted ? root + "/" + directory : root;
   while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
-  if (!TWFunc::CreateDirRecursive(folder, 0775, kMediaUid, kMediaGid)) return {};
+  if (!TWFunc::CreateDirRecursive(folder, 0775, kMediaUid, kMediaGid)) {
+    // TWRP: mounted FBE storage can still lack the user's encryption key.
+    // Keep screenshots/recordings available on the decrypt page via RAM storage.
+    if (folder == "/tmp") return {};
+    folder = "/tmp";
+    if (!TWFunc::CreateDirRecursive(folder, 0775, kMediaUid, kMediaGid)) return {};
+  }
 
   const std::string base = folder + "/" + timestamped_name(prefix, extension);
   if (access(base.c_str(), F_OK) != 0) return base;
@@ -109,33 +115,13 @@ std::string twrp_screen_backend::make_media_path(const char* directory, const ch
 
 // GUIAction::screenshot; gui2 draws its own flash once the file is written.
 capture_result twrp_screen_backend::save_screenshot() {
-  time_t tm;
-  char path[256];
-  int path_len;
-  uid_t uid = AID_MEDIA_RW;
-  gid_t gid = AID_MEDIA_RW;
+  const std::string path = make_media_path("Pictures/Screenshots/", "Screenshot_", ".png");
+  if (path.empty()) return { false, {}, "Unable to create screenshot directory" };
 
-  const std::string storage = DataManager::GetCurrentStoragePath();
-  if (PartitionManager.IsMountedByPath(storage)) {
-    snprintf(path, sizeof(path), "%s/Pictures/Screenshots/", storage.c_str());
-  } else {
-    strcpy(path, "/tmp/");
-  }
-
-  if (!TWFunc::CreateDirRecursive(path, 0775, uid, gid))
-    return { false, {}, "Unable to create screenshot directory" };
-
-  tm = time(NULL);
-  path_len = strlen(path);
-
-  // Screenshot_2014-01-01-18-21-38.png
-  strftime(path + path_len, sizeof(path) - path_len, "Screenshot_%Y-%m-%d-%H-%M-%S.png",
-           localtime(&tm));
-
-  int res = gr_save_screenshot(path);
+  const int res = gr_save_screenshot(path.c_str());
   if (res == 0) {
-    chmod(path, 0666);
-    chown(path, uid, gid);
+    chmod(path.c_str(), 0666);
+    chown(path.c_str(), kMediaUid, kMediaGid);
 
     gui2_console::info("screenshot_saved", path);
     return { true, path, {} };
@@ -311,13 +297,15 @@ capture_result twrp_screen_backend::start_recording() {
   if (!has_recording()) return { false, {}, "Recording is unavailable" };
   if (recorder_.is_recording()) return { false, {}, "Recording is already active" };
 
-  int width = 0;
-  int height = 0;
-  int row_bytes = 0;
-  GRPixelFormat format = GRPixelFormat::UNKNOWN;
-  if (gr_copy_frame(nullptr, 0, &width, &height, &row_bytes, &format) != -2)
+  // TWRP: GUI2 submits its logical LVGL shadow frame, not physical DRM scanout.
+  // Physical dimensions reject every submitted frame at 90/270 degree rotation
+  // (or with overscan), because the recorder requires an exact size match.
+  if (gr_fb_pixel_bytes() <= 0)
     return { false, {}, "Unable to capture framebuffer" };
-  (void)format;
+  const int width = gr_fb_width();
+  const int height = gr_fb_height();
+  if (width <= 0 || height <= 0)
+    return { false, {}, "Unable to capture framebuffer" };
 
   const std::string path = make_media_path("Pictures/Screen recordings/", "Screenrecord_", ".webm");
   capture_result result =

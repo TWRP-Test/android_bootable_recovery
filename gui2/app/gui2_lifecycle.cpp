@@ -16,11 +16,18 @@ bool initialize_graphics(const gui2_context* context, graphics_state* state,
   if (context == nullptr || state == nullptr || tick_callback == nullptr) return false;
   state->should_exit_display = context->display_initialized;
   if (!context->display_initialized) {
-    if (gr_init() < 0) return false;
+    if (gr_init() < 0) {
+      fprintf(stderr, "gui2: minui display initialization failed\n");
+      return false;
+    }
     state->should_exit_display = true;
   }
 
-  ev_init();
+  if (twrp_input_init() < 0) {
+    fprintf(stderr, "gui2: minui input initialization failed\n");
+    shutdown_graphics(state);
+    return false;
+  }
   state->events_initialized = true;
   lv_init();
   state->lv_initialized = true;
@@ -74,7 +81,7 @@ void shutdown_graphics(graphics_state* state) {
   for (lv_font_t*& font : state->console_fonts) font = nullptr;
   state->pointer_indev = nullptr;
   if (state->events_initialized) {
-    ev_exit();
+    twrp_input_exit();
     state->events_initialized = false;
   }
   if (state->should_exit_display) {
