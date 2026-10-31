@@ -27,7 +27,8 @@ genrule {
 cc_library_shared {
     name: "libgui2",
     recovery: true,
-    defaults: ["twrp_defaults", "gui2_resources_defaults"],
+    defaults: ["twrp_defaults"],
+    required: ["gui2_fonts"],
     cflags: [
         "-DLV_CONF_INCLUDE_SIMPLE",
         "-DLV_LVGL_H_INCLUDE_SIMPLE",

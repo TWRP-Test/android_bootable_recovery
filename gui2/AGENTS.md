@@ -19,7 +19,7 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - **响应式优先**：尺寸、间距和字体根据 framebuffer 短边（大屏按面板物理尺寸）动态计算，不针对单一设备写死坐标。
 - **触摸优先**：交互区域应覆盖完整控件；按下后移出控件再释放视为取消点击。
 - **组件复用**：卡片、导航按钮、页面标题、滚动容器和语言选项应通过公共创建函数生成。
-- **资源运行时加载**：主题字体等资源从 `/twres` 加载，避免将设备相关资源硬编码到页面逻辑中。
+- **资源运行时加载**：主题字体等资源从 `/res` 加载，避免将设备相关资源硬编码到页面逻辑中。
 
 ## 设计路线
 
@@ -122,10 +122,12 @@ GUI2 是基于 LVGL 的 TWRP 新一代触摸界面，目标是提供适合现代
 - 导航外形使用明确的半高圆角（控件高度的一半），不能只依赖主题默认的 `LV_RADIUS_CIRCLE`；右侧三按钮必须由父级胶囊统一绘制描边，子按钮设置透明背景、零圆角和零边框。
 - 可复用的自制 LVGL 组件统一放在 `gui2/components/`，当前包括 icon、choice card、setting card、slider card、swipe slider、quick action button、section label 和 apply button；交互组件使用单一自定义 widget 同时处理状态、绘制、命中和事件，禁止用透明原生控件叠加视觉层；页面只负责组合组件和绑定业务事件。`swipe_slider` 始终绘制箭头，并提供 `detach()` 释放已删除 LVGL 对象引用的能力。
 - 页面标题统一使用 `ui.brand_font`；修改标题字号时必须同步检查主页、二级页和三级页。
-- GUI2 使用 `/twres` 中的运行时字体资源和 backend，不针对单一设备硬编码分辨率、圆角安全区或字号。
+- GUI2 使用 `/res` 中的运行时字体资源和 backend，不针对单一设备硬编码分辨率、圆角安全区或字号。
 - 全局尺寸统一使用 `gui2_core::ui_metrics::scale` 和 `gui2_core::ui_px()`；手机缩放基准为短边 1200px，最小/最大比例仅作保护，不能给高分辨率布局保留未缩放的固定上限。新增 shell、卡片或组件尺寸必须接入这套缩放。
 - 大屏（`gr_fb_physical_size()` 报告的面板短边 ≥ 100 mm，平板、折叠屏内屏）按物理密度缩放，`ui.large_screen` 为真；面板尺寸未知时一律按手机处理。大屏内容区限宽居中：横向定位用 `ui.content_left`，`outer_margin` 只作间距；卡片列表容器调用 `set_card_grid()`，卡片宽度取 `card_width_in(parent)`，同行卡片由 `page_host::settle()` 统一等高。手机横屏不做专门适配。
-- GUI2 不支持旧 XML 主题导入、`ui.xml` 自定义主题和主题重载；安装器将旧主题 ZIP 视为无效安装包。字体由 `gui2/resources/fonts/` 安装到 `/twres/fonts`。消息译文使用现有 `language_pack` 的对应消息字段，统一维护在 `en.cpp`、`zh_cn.cpp`、`zh_tw.cpp`、`ru.cpp`，不读取 XML 语言包，不受 `TW_EXTRA_LANGUAGES` 控制。`gui2/console` 负责类型化消息、格式化和历史记录；原始 printf/标签查询适配位于 `gui2/console/stdio_adapter.*`，PTY 引擎位于 `gui2/backend/terminal_engine.*`，通用 XML 工具位于 `gui2/backend/xml/`，RapidXML 位于 `gui2/third_party/`。字体安装 Soong 插件位于 `gui2/resources/`。
+- GUI2 不支持旧 XML 主题导入、`ui.xml` 自定义主题和主题重载；安装器将旧主题 ZIP 视为无效安装包。消息译文使用现有 `language_pack` 的对应消息字段，统一维护在 `en.cpp`、`zh_cn.cpp`、`zh_tw.cpp`、`ru.cpp`，不读取 XML 语言包，不受 `TW_EXTRA_LANGUAGES` 控制。`gui2/console` 负责类型化消息、格式化和历史记录；原始 printf/标签查询适配位于 `gui2/console/stdio_adapter.*`，PTY 引擎位于 `gui2/backend/terminal_engine.*`，通用 XML 工具位于 `gui2/backend/xml/`，RapidXML 位于 `gui2/third_party/`。
+- 字体模块 `gui2_fonts` 定义于 `gui2/resources/Android.bp`，使用 `prebuilt_res` 将 `gui2/resources/fonts/` 安装到 recovery 根目录的 `/res/fonts`（`recovery: true`、`install_in_root: true`、`relative_install_path: "fonts"`）。安装依赖由 `libgui2` 的 `required: ["gui2_fonts"]` 声明，recovery 通过链接 `libgui2` 间接带入字体，无需在 recovery 中重复声明。`required` 是安装依赖，不用于编译期读取字体。
+- 字体模块不得设置 `no_full_install: true`；资源复制必须声明为构建规则，不得在 LoadHook 中直接写安装目录。recovery 打包阶段必须保留模块已安装到 `/res` 的文件，不能再次清空整个目录；旧资源由 `installclean` 清理。
 - `gui2/` 内源文件不添加许可证文件头；构建系统中的模块许可证声明仍按 Android.bp 规范保留。
 
 ### 页面与交互
