@@ -3296,6 +3296,7 @@ void TWPartitionManager::ResyncUeventDevices() {
 void TWPartitionManager::ReadUevent(bool force_resync) {
   uevent_overrun_ |= force_resync;
   bool drained = false;
+  bool block_event = false;
   for (int count = 0; count < 64; ++count) {
     char buf[4096];
     const auto len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT | MSG_TRUNC);
@@ -3314,8 +3315,17 @@ void TWPartitionManager::ReadUevent(bool force_resync) {
       continue;
     }
     const UeventBlockData data = GetEventBlockValues(buf, static_cast<int>(len));
-    if (data.subsystem == "block" && (data.type == "disk" || data.type == "partition"))
+    if (data.subsystem == "block" && (data.type == "disk" || data.type == "partition")) {
       HandleUevent(data);
+      block_event = true;
+    }
+  }
+  // Partition nodes are published alongside their parent disk event. Rescan the
+  // final state after a batch so a wildcard storage device can be rebuilt even
+  // when its child node was not ready while handling the parent event.
+  if (drained && block_event) {
+    usleep(250000);
+    ResyncUeventDevices();
   }
   // Coalesce overflow within a burst, but sustained input cannot postpone a
   // correction forever: at most four bounded batches precede a resync.
