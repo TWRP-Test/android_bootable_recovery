@@ -888,10 +888,14 @@ public:
   // Drains hotplug events; GUI2 calls this from its storage worker.
   void ReadUevent(bool force_resync = false);
 
+  // Checks only devices whose sysfs entry precedes their block node.
+  void ProcessPendingUeventDevices();
+  void ResetPendingUeventDevices();
+
   // Reconciles removable devices with sysfs after dropped hotplug events.
   void ResyncUeventDevices();
 
-  // Close only after the hotplug worker stops; GUI2 hands this socket to the legacy GUI.
+  // Close only after the hotplug worker stops.
   void CloseUevent();
 
   // Adds a new partition to the partitions_ vector
@@ -1011,6 +1015,9 @@ private:
   mutable std::map<std::string, std::vector<PartitionList>> list_snapshots_;
   mutable std::map<std::string, uint64_t> list_revisions_;
   mutable std::set<std::string> list_subscriptions_;
+  // Hotplug worker owns these paths; no partition pointers survive a scan.
+  std::map<std::string, std::string> pending_uevent_nodes_;
+  bool uevent_resync_pending_ = false;
   // Set when the netlink queue dropped an event: removable children may be stale.
   bool uevent_overrun_ = false;
   unsigned uevent_dirty_batches_ = 0;
