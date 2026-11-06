@@ -163,6 +163,7 @@ void twrp_background_backend::uevent_loop() {
   while (!uevent_stop_.load()) {
     const auto now = std::chrono::steady_clock::now();
     if (now >= next_snapshot) {
+      PartitionManager.ProcessPendingUeventDevices();
       PartitionManager.RefreshPartitionListSnapshots();
       next_snapshot = now + std::chrono::milliseconds(250);
     }
@@ -193,6 +194,7 @@ void twrp_background_backend::uevent_loop() {
     // Avoid spinning on a persistent error with nothing left to drain.
     if (!(uevent.revents & POLLIN) && (uevent.revents & POLLERR)) usleep(1000);
   }
+  PartitionManager.ResetPendingUeventDevices();
 }
 
 uint64_t twrp_background_backend::partition_list_revision(const std::string& type) {

@@ -3239,20 +3239,52 @@ UeventBlockData TWPartitionManager::GetEventBlockValues(char* buf, const int len
   return ret;
 }
 
+void TWPartitionManager::ProcessPendingUeventDevices() {
+  if (uevent_resync_pending_) {
+    ResyncUeventDevices();
+    return;
+  }
+  if (pending_uevent_nodes_.empty()) return;
+  for (const auto& [sysfs_path, block] : pending_uevent_nodes_) {
+    std::error_code ec;
+    const bool present = fs::exists(sysfs_path, ec);
+    struct stat st{};
+    if ((!ec && !present) || (stat(block.c_str(), &st) == 0 && S_ISBLK(st.st_mode))) {
+      ResyncUeventDevices();
+      return;
+    }
+  }
+}
+
+void TWPartitionManager::ResetPendingUeventDevices() {
+  pending_uevent_nodes_.clear();
+  uevent_resync_pending_ = false;
+  uevent_overrun_ = false;
+  uevent_dirty_batches_ = 0;
+}
+
 void TWPartitionManager::ResyncUeventDevices() {
   twrp_operation_executor::guard transaction(twrp_operation_executor::instance().mutex());
   // Discover disks from sysfs, including a new disk name whose add was lost.
   // Only fstab parents explicitly managed by uevent participate.
+  // Keep failed scans pending even when no individual node was recorded yet.
+  uevent_resync_pending_ = true;
   std::vector<std::pair<std::string, std::string>> disks;
   std::error_code ec;
-  for (const auto& entry : fs::directory_iterator("/sys/block", ec)) {
-    const auto resolved = fs::canonical(entry.path(), ec);
-    if (ec) { ec.clear(); continue; }
+  for (fs::directory_iterator it("/sys/block", ec), end; !ec && it != end; it.increment(ec)) {
+    const auto resolved = fs::canonical(it->path(), ec);
+    if (ec) return;
     auto path = resolved.string();
     if (path.starts_with("/sys/")) path.erase(0, 4);
-    disks.emplace_back(path, (fs::path("/dev/block") / entry.path().filename()).string());
+    disks.emplace_back(path, (fs::path("/dev/block") / it->path().filename()).string());
   }
   if (ec) return; // An unreadable sysfs view is not evidence of device removal.
+  std::map<std::string, std::string> pending;
+  const auto remember_unready = [&](const fs::path& path, const std::string& block) {
+    struct stat st{};
+    if (stat(block.c_str(), &st) != 0 || !S_ISBLK(st.st_mode))
+      pending.emplace(path.string(), block);
+  };
   std::vector<TWPartition*> parents;
   for (TWPartition* part : partitions_)
     if (part->removable_ && !part->is_sub_partition_ && !part->sysfs_entry_.empty())
@@ -3260,8 +3292,18 @@ void TWPartitionManager::ResyncUeventDevices() {
   for (TWPartition* parent : parents) {
     const auto prefix = parent->sysfs_entry_.substr(0, parent->sysfs_entry_.find('*'));
     std::vector<std::string> matches;
-    for (const auto& [path, block] : disks)
-      if (path.starts_with(prefix)) matches.push_back(block);
+    for (const auto& [path, block] : disks) {
+      if (!path.starts_with(prefix)) continue;
+      matches.push_back(block);
+      const auto disk = fs::path("/sys" + path);
+      remember_unready(disk, block);
+      for (fs::directory_iterator it(disk, ec), end; !ec && it != end; it.increment(ec)) {
+        if (fs::exists(it->path() / "partition", ec))
+          remember_unready(it->path(), (fs::path("/dev/block") / it->path().filename()).string());
+        if (ec) return;
+      }
+      if (ec) return;
+    }
     const bool current_present = std::ranges::find(matches, parent->primary_block_device_) != matches.end();
     // Remove old children before discovery, even if a stale /dev node remains.
     for (auto it = partitions_.begin(); it != partitions_.end();) {
@@ -3291,11 +3333,14 @@ void TWPartitionManager::ResyncUeventDevices() {
       parent->FindActualBlockDevice();
     }
   }
+  pending_uevent_nodes_ = std::move(pending);
+  uevent_resync_pending_ = false;
 }
 
 void TWPartitionManager::ReadUevent(bool force_resync) {
   uevent_overrun_ |= force_resync;
   bool drained = false;
+  bool block_event = false;
   for (int count = 0; count < 64; ++count) {
     char buf[4096];
     const auto len = recv(uevent_pfd.fd, buf, sizeof(buf), MSG_DONTWAIT | MSG_TRUNC);
@@ -3314,12 +3359,14 @@ void TWPartitionManager::ReadUevent(bool force_resync) {
       continue;
     }
     const UeventBlockData data = GetEventBlockValues(buf, static_cast<int>(len));
-    if (data.subsystem == "block" && (data.type == "disk" || data.type == "partition"))
+    if (data.subsystem == "block" && (data.type == "disk" || data.type == "partition")) {
       HandleUevent(data);
+      block_event = true;
+    }
   }
-  // Coalesce overflow within a burst, but sustained input cannot postpone a
-  // correction forever: at most four bounded batches precede a resync.
-  if (uevent_overrun_ && (drained || ++uevent_dirty_batches_ >= 4)) {
+  // Keep the overflow bound, and reconcile each block batch only once.
+  const bool recover_overrun = uevent_overrun_ && (drained || ++uevent_dirty_batches_ >= 4);
+  if (block_event || recover_overrun) {
     uevent_overrun_ = false;
     uevent_dirty_batches_ = 0;
     ResyncUeventDevices();
@@ -3329,6 +3376,7 @@ void TWPartitionManager::ReadUevent(bool force_resync) {
 void TWPartitionManager::CloseUevent() {
   if (uevent_pfd.fd >= 0) close(uevent_pfd.fd);
   uevent_pfd.fd = -1;
+  ResetPendingUeventDevices();
 }
 
 void TWPartitionManager::AddPartition(TWPartition* part) {
