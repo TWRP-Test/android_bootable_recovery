@@ -30,8 +30,8 @@ class mount_backend {
 
   virtual std::vector<mount_target> targets() = 0;
 
-  // Mount and unmount are quick enough to run on the UI thread; both report
-  // whether the partition ended up in the requested state.
+  // May wait on filesystem helpers. Call from a worker; reports whether the
+  // partition ended up in the requested state.
   virtual bool set_mounted(const std::string& mount_point, bool mounted) = 0;
 
   // System is remounted read-only after every boot unless the user asks

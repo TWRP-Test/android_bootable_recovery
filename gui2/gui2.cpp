@@ -14,6 +14,7 @@
 #include "app/gui2_loop.h"
 #include "app/gui2_runtime.h"
 #include "app/screen_actions.h"
+#include "app/storage_task.h"
 #include "backend/hardware_settings.h"
 #include "backend/screen_backend.h"
 #include "components/apply_button.h"
@@ -4080,6 +4081,28 @@ static bool mount_pending = false;
 static std::string pending_mount_path;
 static std::string pending_mount_name;
 static bool pending_mount_wanted = false;
+static gui2_app::storage_task mount_task;
+static bool storage_select_pending = false;
+static std::string storage_error;
+static lv_obj_t* storage_busy_overlay = nullptr;
+
+static void show_storage_busy(const std::string& message) {
+  storage_busy_overlay = lv_obj_create(lv_layer_top());
+  lv_obj_set_size(storage_busy_overlay, ui.width, ui.height);
+  lv_obj_set_pos(storage_busy_overlay, 0, 0);
+  lv_obj_set_style_bg_color(storage_busy_overlay, ui.scrim, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(storage_busy_overlay, LV_OPA_70, LV_PART_MAIN);
+  lv_obj_set_style_border_width(storage_busy_overlay, 0, LV_PART_MAIN);
+  gui2_core::disable_scrolling(storage_busy_overlay);
+  lv_obj_set_clickable(storage_busy_overlay, true);
+  lv_obj_t* label = lv_label_create(storage_busy_overlay);
+  lv_label_set_text(label, message.c_str());
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(label, ui.content_width);
+  lv_obj_set_style_text_font(label, ui.text_font, LV_PART_MAIN);
+  lv_obj_set_style_text_color(label, ui.primary_text, LV_PART_MAIN);
+  lv_obj_center(label);
+}
 
 static void refresh_mount_rows() {
   if (page_router.current() != page_kind::MOUNT) return;
@@ -4110,21 +4133,33 @@ static void refresh_mount_rows() {
   lv_obj_scroll_to_y(main_content, scroll, LV_ANIM_OFF);
 }
 
-static void complete_mount_request(lv_timer_t* timer) {
-  lv_timer_delete(timer);
-  const bool ok = mount != nullptr && mount->set_mounted(pending_mount_path, pending_mount_wanted);
+static void complete_mount_request() {
+  bool ok = false;
+  if (!mount_pending || !mount_task.take_result(&ok)) return;
+  if (storage_busy_overlay != nullptr) lv_obj_delete(storage_busy_overlay);
+  storage_busy_overlay = nullptr;
+  mount_pending = false;
+  if (storage_select_pending) {
+    storage_select_pending = false;
+    storage_error = ok ? std::string() : strings().fm_failed;
+    navigate_to(ok ? page_state.select_storage_back : page_kind::SELECT_STORAGE,
+                nullptr, ok ? page_transition::POP : page_transition::REPLACE);
+    return;
+  }
   mount_feedback = std::string(pending_mount_wanted
                                   ? (ok ? strings().mount_done : strings().mount_failed)
                                   : (ok ? strings().unmount_done : strings().unmount_failed)) +
                    ": " + pending_mount_name;
   mount_feedback_failed = !ok;
   mount_feedback_finished_ms = lv_tick_get();
-  mount_pending = false;
-  // Even a failed unmount may have changed child mounts; use the backend's
-  // actual state instead of keeping the pre-operation checkbox snapshot.
-  if (mount != nullptr) mount_targets = mount->targets();
-  refresh_mount_rows();
-  storage_snapshot = current_storage_snapshot();
+  // Hotplug may have changed the target count or order while the worker ran.
+  // Rebuild rows and their indices together from the published snapshot.
+  if (page_router.current() == page_kind::MOUNT) {
+    const int scroll = lv_obj_get_scroll_y(main_content);
+    navigate_to(page_kind::MOUNT, nullptr, page_transition::REPLACE);
+    lv_obj_update_layout(main_content);
+    lv_obj_scroll_to_y(main_content, scroll, LV_ANIM_OFF);
+  }
   if (ok && pending_mount_wanted && pending_mount_path == "/data" && data_locked()) {
     decrypt->select_user();
     page_state.decrypt_failed = false;
@@ -4167,11 +4202,10 @@ static void mount_event_cb(lv_event_t* event) {
                    ": " + pending_mount_name;
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
   refresh_mount_rows();
-  // Paint the notice before running the synchronous partition manager. Keep
-  // partition operations on the GUI thread, alongside hotplug processing.
-  lv_refr_now(nullptr);
-  lv_timer_t* timer = lv_timer_create(complete_mount_request, 50, nullptr);
-  lv_timer_set_repeat_count(timer, 1);
+  show_storage_busy(mount_feedback);
+  mount_task.start([backend = mount, path = pending_mount_path, wanted] {
+    return backend->set_mounted(path, wanted);
+  });
 }
 
 static gui2_pages::backup_page_options backup_partition_options() {
@@ -5052,7 +5086,6 @@ static constexpr int kMountUsbStorageTarget = -5;
 static std::vector<gui2_backend::storage_device> storage_devices;
 static std::string mount_storage_name;
 static std::string mount_storage_free;
-static std::string storage_error;
 static uint64_t storage_last_poll_ms = 0;
 
 static std::string current_storage_snapshot() {
@@ -5160,13 +5193,13 @@ static void storage_select_event_cb(lv_event_t* event) {
   const auto* index = static_cast<const int*>(lv_event_get_user_data(event));
   if (index == nullptr || *index < 0 || static_cast<size_t>(*index) >= storage_devices.size())
     return;
-  if (!mount->select_storage(storage_devices[*index].path)) {
-    storage_error = strings().fm_failed;
-    navigate_to(page_kind::SELECT_STORAGE, nullptr, page_transition::REPLACE);
-    return;
-  }
-  storage_error.clear();
-  navigate_to(page_state.select_storage_back, nullptr, page_transition::POP);
+  if (mount_pending) return;
+  mount_pending = true;
+  storage_select_pending = true;
+  show_storage_busy(std::string(strings().mount_running) + ": " + storage_devices[*index].name);
+  mount_task.start([backend = mount, path = storage_devices[*index].path] {
+    return backend->select_storage(path);
+  });
 }
 
 static void show_select_storage_page(page_transition transition) {
@@ -6121,6 +6154,11 @@ static void show_system_read_only_page(page_transition transition) {
 }
 
 static void shutdown_gui2() {
+  mount_task.join();
+  mount_pending = false;
+  storage_select_pending = false;
+  if (storage_busy_overlay != nullptr) lv_obj_delete(storage_busy_overlay);
+  storage_busy_overlay = nullptr;
   if (background != nullptr) background->stop();
   flush_hardware_settings();
   if (hardware != nullptr) {
@@ -6236,7 +6274,8 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
   // The legacy page loop runs whenever a page is up, which during startup is
   // only while it waits on one.
   if (background != nullptr) background->poll();
-  refresh_partition_list();
+  complete_mount_request();
+  if (!mount_pending) refresh_partition_list();
   const auto storage_page = page_router.current();
   if (!mount_pending && !mount_feedback.empty() &&
       lv_tick_elaps(mount_feedback_finished_ms) >= 3000) {
@@ -6254,7 +6293,7 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
       lv_obj_scroll_to_y(main_content, scroll, LV_ANIM_OFF);
     }
   }
-  poll_cli_command();
+  if (!mount_pending) poll_cli_command();
   advance_wheel_scroll(now_ms);
   screen_feedback.update(now_ms);
   if (page_state.console.body != nullptr && now_ms - page_state.console_last_poll_ms >= 100) {
@@ -6330,7 +6369,7 @@ static bool input_locked(void) {
 static void gui2_loop_key_action(void*, gui2_key_action key_action) {
   if (!shell_ready) return;
   if ((key_action == gui2_key_action::BACK || key_action == gui2_key_action::HOME) &&
-      input_locked())
+      (input_locked() || mount_pending))
     return;
   if (key_action == gui2_key_action::SCREENSHOT) {
     close_quick_menu();
@@ -6361,7 +6400,7 @@ static bool terminal_has_focus(void) {
 // Route character input to the terminal or the active field
 // the on-screen keyboard is typing into.
 static void gui2_loop_char(void*, int ch) {
-  if (!shell_ready || input_locked()) return;
+  if (!shell_ready || input_locked() || mount_pending) return;
   if (terminal_has_focus()) {
     terminal->send_char(ch);
     return;
@@ -6370,7 +6409,7 @@ static void gui2_loop_char(void*, int ch) {
 }
 
 static void gui2_loop_key(void*, int key_code) {
-  if (!shell_ready || input_locked()) return;
+  if (!shell_ready || input_locked() || mount_pending) return;
   if (terminal_has_focus()) {
     terminal->send_key(key_code);
     return;
@@ -6382,7 +6421,7 @@ static void gui2_loop_key(void*, int key_code) {
 }
 
 static void gui2_loop_wheel(void*, int wheel) {
-  if (!shell_ready || main_content == nullptr || quick_menu_input_active() ||
+  if (!shell_ready || mount_pending || main_content == nullptr || quick_menu_input_active() ||
       pointer_indev == nullptr)
     return;
   lv_point_t point;

@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 
 #include "data.hpp"
 #include "partitions.hpp"
@@ -68,6 +69,14 @@ int mountsystemtoggle(const std::string& arg) {
 // built, so one page build does not re-snapshot the list for every entry.
 static std::string otg_name(const std::string& path, const std::vector<PartitionList>& list) {
   if (!is_otg_path(path)) return {};
+  const auto number = path.rfind('-');
+  if (number != std::string::npos && number + 1 < path.size() &&
+      path.find_first_not_of("0123456789", number + 1) == std::string::npos) {
+    const auto disk = path.rfind('-', number - 1);
+    if (disk != std::string::npos)
+      return "OTG " + path.substr(disk + 1, number - disk - 1) + " " + path.substr(number + 1);
+    return "OTG " + path.substr(number + 1);
+  }
   std::vector<std::string> paths;
   for (const auto& item : list)
     if (is_otg_path(item.mount_point)) paths.push_back(item.mount_point);
@@ -78,9 +87,31 @@ static std::string otg_name(const std::string& path, const std::vector<Partition
       "OTG " + std::to_string(std::distance(paths.begin(), found) + 1);
 }
 
+// Numeric partition order within each disk; identities do not depend on which
+// other partitions are currently present in the published snapshot.
+static void sort_otg_partitions(std::vector<PartitionList>& list) {
+  std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) {
+    const bool a_otg = is_otg_path(a.mount_point), b_otg = is_otg_path(b.mount_point);
+    if (a_otg != b_otg) return !a_otg;
+    if (!a_otg) return false;
+    const auto split_a = a.mount_point.rfind('-'), split_b = b.mount_point.rfind('-');
+    if (split_a != std::string::npos && split_b != std::string::npos) {
+      const auto prefix_a = a.mount_point.substr(0, split_a);
+      const auto prefix_b = b.mount_point.substr(0, split_b);
+      if (prefix_a != prefix_b) return prefix_a < prefix_b;
+      const auto suffix_a = a.mount_point.substr(split_a + 1);
+      const auto suffix_b = b.mount_point.substr(split_b + 1);
+      if (suffix_a.size() != suffix_b.size()) return suffix_a.size() < suffix_b.size();
+      return suffix_a < suffix_b;
+    }
+    return a.mount_point < b.mount_point;
+  });
+}
+
 std::vector<mount_target> twrp_mount_backend::targets() {
   std::vector<PartitionList> list;
   PartitionManager.TryGetPartitionList("mount", &list);
+  sort_otg_partitions(list);
 
   std::vector<mount_target> result;
   result.reserve(list.size());
@@ -93,6 +124,10 @@ std::vector<mount_target> twrp_mount_backend::targets() {
 // GUIPartitionList::NotifySelect for the "mount" list.
 bool twrp_mount_backend::set_mounted(const std::string& mount_point, bool mounted) {
   twrp_operation_executor::guard transaction(twrp_operation_executor::instance().mutex());
+  // Publish the actual state before the GUI consumes the worker result.
+  const auto publish = android::base::make_scope_guard([] {
+    PartitionManager.RefreshPartitionListSnapshots();
+  });
   if (mounted) {
     if (mount_point == "/data") {
       if (!PartitionManager.PrepareDataForDe(true)) return false;
@@ -146,6 +181,7 @@ bool twrp_mount_backend::system_needs_warning() {
 std::vector<storage_device> twrp_mount_backend::storages() {
   std::vector<PartitionList> list;
   PartitionManager.TryGetPartitionList("storage", &list);
+  sort_otg_partitions(list);
 
   std::vector<storage_device> result;
   result.reserve(list.size());
@@ -161,6 +197,9 @@ std::vector<storage_device> twrp_mount_backend::storages() {
 bool twrp_mount_backend::select_storage(const std::string& path) {
   // Keep the target alive across lookup, mount and size refresh.
   twrp_operation_executor::guard transaction(twrp_operation_executor::instance().mutex());
+  const auto publish = android::base::make_scope_guard([] {
+    PartitionManager.RefreshPartitionListSnapshots();
+  });
   TWPartition* Part = PartitionManager.FindPartitionByPath(path);
   if (Part == nullptr) {
     LOGERR("Unable to locate partition for '%s'\n", path.c_str());

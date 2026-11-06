@@ -2768,22 +2768,29 @@ bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
     LOGINFO("Error opening '%s': %s\n", path.c_str(), strerror(errno));
     return false;
   }
+  std::vector<std::pair<unsigned int, std::string>> devices;
   struct dirent* de;
   while ((de = readdir(d))) {
-    std::string_view name(de->d_name);
-    if (de->d_type != DT_BLK || name.size() <= wildcard_index || name.substr(0, wildcard_index) !=
-        Dev) continue;
-
+    const std::string_view name(de->d_name);
+    if (name.size() <= wildcard_index || !name.starts_with(Dev)) continue;
+    unsigned int number = 0;
+    const auto suffix = name.substr(wildcard_index);
+    const auto parsed = std::from_chars(suffix.data(), suffix.data() + suffix.size(), number);
+    if (parsed.ec != std::errc{} || parsed.ptr != suffix.data() + suffix.size()) continue;
+    struct stat st{};
+    if (stat((path + std::string(name)).c_str(), &st) != 0 || !S_ISBLK(st.st_mode)) continue;
+    devices.emplace_back(number, name);
+  }
+  closedir(d);
+  std::sort(devices.begin(), devices.end());
+  for (const auto& [number, name] : devices) {
     // GetPath() keeps the trailing slash, so do not add another one.
-    std::string item = path + de->d_name;
-    if (PartitionManager.FindPartitionByBlockDevice(item)) {
-      ++mount_point_index;
-      continue;
-    }
-    std::string child_mount;
-    do {
-      child_mount = std::format("{}-{}", mount_point_, ++mount_point_index);
-    } while (PartitionManager.FindPartitionByPath(child_mount));
+    std::string item = path + name;
+    mount_point_index = std::max(mount_point_index, static_cast<int>(number));
+    if (PartitionManager.FindPartitionByBlockDevice(item)) continue;
+    const std::string child_mount = std::format("{}-{}-{}", mount_point_, Dev, number);
+    // A late-arriving partition must not take another partition's identity.
+    if (PartitionManager.FindPartitionByPath(child_mount)) continue;
     auto* part = new TWPartition;
     std::string buffer = std::format("{} {} auto defaults defaults", item, child_mount);
     if (!part->ProcessFstabLine(buffer.c_str(), false, nullptr)) {
@@ -2793,7 +2800,7 @@ bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
     // Discovery must not probe or mount a slow or damaged filesystem on the GUI thread.
     std::string display = storage_name_;
     if (PartitionManager.
-      StorageNameInUse(display)) display += " " + std::to_string(mount_point_index);
+      StorageNameInUse(display)) display += " " + std::to_string(number);
     part->storage_name_ = display;
     part->display_name_ = display;
     part->primary_block_device_ = item;
@@ -2811,7 +2818,6 @@ bool TWPartition::FindWildcardBlockDevices(const std::string& device) {
     TWPartitionManager::OutputPartition(part);
     PartitionManager.AddPartition(part);
   }
-  closedir(d);
   return mount_point_index > 0;
 }
 
