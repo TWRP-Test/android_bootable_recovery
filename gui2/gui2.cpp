@@ -1143,6 +1143,7 @@ static void create_page_scaffold(page_kind page, bool is_home, const char* title
   // means deleting the page leaves them behind. dismiss() takes the objects
   // with it; detach() only forgets the pointers.
   page_state.decrypt_keyboard_widget.dismiss();
+  page_state.decrypt_keyboard_closing_ms = 0;
   page_state.format_data_keyboard_widget.dismiss();
   page_state.backup_keyboard_widget.dismiss();
   page_state.restore_keyboard_widget.dismiss();
@@ -3756,6 +3757,8 @@ static void format_data_slide_confirmed(void*) {
 static void decrypt_attempt(const std::string& password) {
   if (decrypt == nullptr || password.empty() || !decrypt->start(password)) return;
   page_state.decrypt_refreshing = false;
+  if (decrypt->kind() == gui2_backend::lock_kind::PIN && page_state.decrypt_input != nullptr)
+    lv_obj_add_state(page_state.decrypt_input, LV_STATE_DISABLED);
   if (page_state.decrypt_status != nullptr) {
     lv_label_set_text(page_state.decrypt_status, strings().decrypting);
     lv_obj_set_style_text_color(page_state.decrypt_status, ui.primary_text, LV_PART_MAIN);
@@ -3772,6 +3775,29 @@ static void poll_decrypt_console(void) {
 static void refresh_decrypt_progress(void) {
   if (decrypt == nullptr || page_state.decrypt_during_startup) return;
   const auto state = decrypt->state();
+  if (page_router.current() == page_kind::DECRYPT &&
+      decrypt->kind() == gui2_backend::lock_kind::PIN) {
+    if (state == gui2_backend::decrypt_state::DONE) {
+      if (page_state.decrypt_keyboard_closing_ms == 0) {
+        page_state.decrypt_keyboard_closing_ms = std::max<uint64_t>(1, monotonic_ms());
+        lv_label_set_text(page_state.decrypt_status, strings().decrypt_complete);
+        page_state.decrypt_keyboard_widget.hide(true);
+        return;
+      }
+      if (monotonic_ms() - page_state.decrypt_keyboard_closing_ms < 180) return;
+    } else if (state == gui2_backend::decrypt_state::FAILED) {
+      decrypt->acknowledge();
+      page_state.decrypt_prompt_ms = 0;
+      page_state.decrypt_failed = true;
+      if (page_state.decrypt_input != nullptr) {
+        lv_obj_remove_state(page_state.decrypt_input, LV_STATE_DISABLED);
+        lv_textarea_set_text(page_state.decrypt_input, "");
+      }
+      lv_label_set_text(page_state.decrypt_status, strings().decrypt_failed);
+      lv_obj_set_style_text_color(page_state.decrypt_status, ui.danger, LV_PART_MAIN);
+      return;
+    }
+  }
 
   gui2_pages::operation_status progress;
   progress.total = 0;  // the attempt cannot report how far along it is
@@ -3858,13 +3884,12 @@ static void decrypt_pattern_dot(void*) {
   if (hardware != nullptr) hardware->vibrate(gui2_backend::haptic_channel::BUTTON);
 }
 
-// The keyboard goes away before the attempt starts, so the progress the page
-// switches to is not left sitting behind it.
 static void decrypt_accept_cb(void*) {
   lv_obj_t* input = page_state.decrypt_input;
   if (input == nullptr) return;
   const char* text = lv_textarea_get_text(input);
-  page_state.decrypt_keyboard_widget.hide();
+  if (decrypt == nullptr || decrypt->kind() != gui2_backend::lock_kind::PIN)
+    page_state.decrypt_keyboard_widget.hide();
   decrypt_attempt(text == nullptr ? std::string() : std::string(text));
 }
 
@@ -6292,7 +6317,6 @@ static void gui2_loop_tick(void*, uint64_t now_ms) {
       page_router.current() == page_kind::DECRYPT) {
     const auto state = decrypt == nullptr ? gui2_backend::decrypt_state::IDLE : decrypt->state();
     if (state != gui2_backend::decrypt_state::RUNNING) {
-      page_state.decrypt_prompt_ms = 0;
       refresh_decrypt_progress();
     }
   }

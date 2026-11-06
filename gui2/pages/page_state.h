@@ -181,6 +181,7 @@ struct page_state {
   bool decrypt_console_armed = false;
   uint64_t decrypt_last_poll_ms = 0;
   uint64_t decrypt_prompt_ms = 0;
+  uint64_t decrypt_keyboard_closing_ms = 0;
   bool decrypt_refreshing = false;
   // The attempt ran during startup's decrypt pause; the page stays until
   // startup finishes.

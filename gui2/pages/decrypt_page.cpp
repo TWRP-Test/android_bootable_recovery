@@ -96,6 +96,7 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
     lv_obj_set_style_text_align(view.input, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
     if (options.keyboard != nullptr) {
+      const bool keep_navigation = gui2_components::keyboard_keep_navigation();
       const gui2_components::keyboard_layout layout =
           options.kind == gui2_backend::lock_kind::PIN ? gui2_components::keyboard_layout::NUMBER
                                                        : gui2_components::keyboard_layout::LETTERS;
@@ -105,14 +106,18 @@ decrypt_page_view build_decrypt_page(const decrypt_page_options& options) {
       keyboard.strings = &strings;
       keyboard.textarea = view.input;
       keyboard.layout = layout;
+      keyboard.pin_entry = options.kind == gui2_backend::lock_kind::PIN;
+      keyboard.show_hide_key = !keep_navigation;
       keyboard.accept_callback = options.accept_callback;
       keyboard.key_callback = options.key_callback;
       keyboard.user_data = options.keyboard_user_data;
       view.keyboard = options.keyboard->create(keyboard);
       if (view.keyboard != nullptr && options.overlay_layer != nullptr) {
         lv_obj_set_align(view.keyboard, LV_ALIGN_TOP_LEFT);
+        lv_obj_update_layout(view.keyboard);
         lv_obj_set_pos(view.keyboard, 0,
-                       metrics.height - gui2_components::keyboard_reserved_height(metrics, layout));
+                       metrics.height - lv_obj_get_height(view.keyboard) -
+                           (keep_navigation ? metrics.nav_height : 0));
         options.keyboard->bind(view.input);
       }
     }

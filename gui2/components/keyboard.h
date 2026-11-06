@@ -45,6 +45,8 @@ struct keyboard_options {
   keyboard_layout layout = keyboard_layout::LETTERS;
   // Pages that type into a field the user has to tap first start hidden.
   bool start_hidden = false;
+  bool pin_entry = false;
+  bool show_hide_key = true;
   // An extra row of the punctuation a shell needs, which is otherwise two
   // layout switches away.
   bool shell_row = false;
@@ -89,7 +91,7 @@ class keyboard {
   void detach();
 
   void show();
-  void hide();
+  void hide(bool force = false);
   // Deletes the objects. detach() only forgets them, which leaves a keyboard
   // parented to the top layer on screen after its page is gone.
   void dismiss();
@@ -175,6 +177,8 @@ class keyboard {
   bool ctrl_pending_ = false;
   lv_obj_t* ctrl_button_ = nullptr;
   bool shell_row_ = false;
+  bool pin_entry_ = false;
+  bool show_hide_key_ = true;
   keyboard_callback accept_callback_ = nullptr;
   keyboard_callback hidden_callback_ = nullptr;
   keyboard_callback shown_callback_ = nullptr;

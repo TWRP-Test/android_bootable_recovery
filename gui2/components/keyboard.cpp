@@ -190,6 +190,12 @@ std::vector<keyboard::key> keyboard::shell_row() const {
 }
 
 std::vector<keyboard::key> keyboard::function_row() const {
+  if (pin_entry_ && layout_ == keyboard_layout::NUMBER) {
+    if (!show_hide_key_) return {};
+    return {{key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.0f,
+             true, false, true, 0}};
+  }
+
   const char* copy = strings_ != nullptr ? strings_->keyboard_copy : "Copy";
   const char* paste = strings_ != nullptr ? strings_->keyboard_paste : "Paste";
 
@@ -202,7 +208,8 @@ std::vector<keyboard::key> keyboard::function_row() const {
     row.push_back({key_kind::CURSOR_RIGHT, LV_SYMBOL_RIGHT, "", 1.0f, true, false, true, 0});
     row.push_back({key_kind::CTRL, "Ctrl", "", 1.5f, false, false, true, 0});
     row.push_back({key_kind::TAB, "Tab", "", 1.3f, false, false, true, 0});
-    row.push_back({key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.3f, true, false, true, 0});
+    if (show_hide_key_)
+      row.push_back({key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.3f, true, false, true, 0});
     return row;
   }
   // The cursor pad is one control: the caret in the middle only marks where the
@@ -220,8 +227,9 @@ std::vector<keyboard::key> keyboard::function_row() const {
     row.push_back({key_kind::CHARACTER, "\"", "\"", 1.0f, false, false, true, 0});
     row.push_back({key_kind::CHARACTER, "'", "'", 1.0f, false, false, true, 0});
   }
-  row.push_back({key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.3f, true, false,
-                 true, 0});
+  if (show_hide_key_)
+    row.push_back({key_kind::HIDE, LV_SYMBOL_KEYBOARD "\n" LV_SYMBOL_DOWN, "", 1.3f, true, false,
+                   true, 0});
   return row;
 }
 
@@ -319,6 +327,8 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
   textarea_ = options.textarea;
   layout_ = options.layout;
   shell_row_ = options.shell_row;
+  pin_entry_ = options.pin_entry;
+  show_hide_key_ = options.show_hide_key;
   // Start lowercase: a field that is not a sentence is the common case here.
   shifted_ = false;
   ctrl_pending_ = false;
@@ -337,7 +347,10 @@ lv_obj_t* keyboard::create(const keyboard_options& options) {
   root_ = lv_obj_create(options.parent);
   lv_obj_remove_style_all(root_);
   lv_obj_add_event_cb(root_, root_delete_cb, LV_EVENT_DELETE, this);
-  lv_obj_set_size(root_, metrics_->width, keyboard_height(*metrics_, layout_, shell_row_));
+  int height = keyboard_height(*metrics_, layout_, shell_row_);
+  if (pin_entry_ && layout_ == keyboard_layout::NUMBER && !show_hide_key_)
+    height -= g.function_height + g.gap;
+  lv_obj_set_size(root_, metrics_->width, height);
   lv_obj_set_clickable(root_, false);
   lv_obj_set_overflow_visible(root_, false);
   gui2_core::disable_scrolling(root_);
@@ -481,7 +494,10 @@ void keyboard::build_rows() {
 
   const geometry g = measure(*metrics_, layout_, shell_row_);
   std::vector<std::vector<key>> rows;
-  rows.push_back(function_row());
+  const bool compact_pin = pin_entry_ && layout_ == keyboard_layout::NUMBER;
+  auto function_keys = function_row();
+  const bool has_function_row = !function_keys.empty();
+  if (has_function_row) rows.push_back(function_keys);
   if (shell_row_) rows.push_back(shell_row());
   for (auto& row : layout_ == keyboard_layout::LETTERS   ? letter_rows()
                    : layout_ == keyboard_layout::SYMBOLS ? symbol_rows()
@@ -502,11 +518,15 @@ void keyboard::build_rows() {
 
   size_t index = 0;
   for (size_t r = 0; r < rows.size(); ++r) {
-    const int height = r == 0 ? g.function_height : g.key_height;
-    const int radius = r == 0 ? height / 2 : height * 22 / 100;
+    const bool is_function_row = r == 0 && has_function_row;
+    const int height = is_function_row ? g.function_height : g.key_height;
+    const int radius = is_function_row ? height / 2 : height * 22 / 100;
     // The shell row pushes the letter rows down by one.
     const int inset = r == (shell_row_ ? 3u : 2u) ? home_row_inset : 0;
-    lv_obj_t* row_object = add_row(usable_width, height, g.gap);
+    const int row_width = compact_pin && is_function_row ? height * 2 : usable_width;
+    lv_obj_t* row_object = add_row(row_width, height, g.gap);
+    if (compact_pin && is_function_row)
+      lv_obj_set_style_translate_x(row_object, (usable_width - row_width) / 2, LV_PART_MAIN);
     if (inset > 0) {
       lv_obj_set_style_pad_left(row_object, inset, LV_PART_MAIN);
       lv_obj_set_style_pad_right(row_object, inset, LV_PART_MAIN);
@@ -520,7 +540,7 @@ void keyboard::build_rows() {
       const bool merged = i > 0 && rows[r][i].group != 0 && rows[r][i].group == rows[r][i - 1].group;
       if (!merged) ++gaps;
     }
-    const int available = usable_width - gaps * g.gap - inset * 2;
+    const int available = row_width - gaps * g.gap - inset * 2;
 
     for (size_t i = 0; i < rows[r].size();) {
       const int group = rows[r][i].group;
@@ -584,6 +604,8 @@ void keyboard::key_event_cb(lv_event_t* event) {
 }
 
 void keyboard::handle(const key& definition) {
+  if (pin_entry_ && textarea_ != nullptr && lv_obj_has_state(textarea_, LV_STATE_DISABLED))
+    return;
   if (key_callback_ != nullptr) key_callback_(user_data_);
   // Any key restarts the blink lit, so the caret is never mid-blink-off at the
   // moment it moves.
@@ -695,7 +717,9 @@ keyboard* keyboard::current() {
 }
 
 void keyboard::notify_hardware_keyboard_input() {
-  if (auto* value = current(); value != nullptr && value->visible()) value->hide_internal();
+  if (auto* value = current(); value != nullptr && value->visible() &&
+      (!value->pin_entry_ || value->show_hide_key_))
+    value->hide_internal();
 }
 
 void keyboard::type(int ch) {
@@ -813,7 +837,8 @@ void keyboard::show() {
   lv_anim_start(&anim);
 }
 
-void keyboard::hide() {
+void keyboard::hide(bool force) {
+  if (pin_entry_ && !show_hide_key_ && !force) return;
   manually_hidden_ = true;
   hide_internal();
 }
