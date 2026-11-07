@@ -12,6 +12,10 @@ recovery = Path(__file__).resolve().parents[2]
 android = recovery.parents[1]
 with tempfile.TemporaryDirectory(prefix="twrp-graphics-test-") as directory:
     temporary = Path(directory)
+    (temporary / "host_compat.h").write_text(
+        '#include <pthread.h>\n#include <sys/stat.h>\n'
+        '#ifndef __unused\n#define __unused __attribute__((unused))\n#endif\n'
+    )
     (temporary / "android-base").mkdir()
     (temporary / "android-base/properties.h").write_text(
         '#pragma once\n#include <string>\nnamespace android::base {\n'
@@ -28,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="twrp-graphics-test-") as directory:
     binary = temporary / "graphics_test"
     subprocess.run([
         os.environ.get("CXX", "g++"), "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-sign-compare", "-Wno-attributes", "-Wno-ignored-attributes",
-        "-D__unused=__attribute__((unused))",
+        "-include", str(temporary / "host_compat.h"),
         "-DOVERSCAN_PERCENT=0", "-DTW_ROTATION=0",
         "-I" + str(temporary), "-I" + str(recovery / "twrpminui/include"),
         "-I" + str(recovery / "twrpminui"),
@@ -54,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="twrp-graphics-test-") as directory:
             os.environ.get("CXX", "g++"), "-std=c++17", "-Wall", "-Wextra",
             "-Wno-sign-compare", "-Wno-attributes", "-Wno-ignored-attributes",
             "-Wno-unused-function", "-Wno-unused-parameter",
-            "-D__unused=__attribute__((unused))",
+            "-include", str(temporary / "host_compat.h"),
             "-I" + str(temporary), "-I" + str(recovery),
             "-I" + str(recovery / "twrpminui/include"),
             "-I" + str(recovery / "twrpinstall/include"),
@@ -68,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="twrp-graphics-test-") as directory:
     binary = temporary / "drm_damage_test"
     subprocess.run([
         os.environ.get("CXX", "g++"), "-std=c++17", "-ffunction-sections", "-fdata-sections",
-        "-Wno-attributes", "-Wno-ignored-attributes", "-D__unused=__attribute__((unused))",
+        "-Wno-attributes", "-Wno-ignored-attributes", "-include", str(temporary / "host_compat.h"),
         "-I" + str(temporary), "-I" + str(recovery / "twrpminui/include"),
         "-I" + str(android / "system/libbase/include"),
         "-I" + str(android / "external/libdrm"),
@@ -89,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix="twrp-graphics-test-") as directory:
     ]
     command = [os.environ.get("CXX", "g++"), "-std=c++20", "-fsyntax-only",
                "-Wno-attributes", "-Wno-ignored-attributes",
-               "-D__unused=__attribute__((unused))"]
+               "-include", str(temporary / "host_compat.h")]
     command += ["-I" + str(path) for path in production_includes]
     subprocess.run(command + [str(recovery / "twrpminui" / filename) for filename in (
         "graphics.cpp", "graphics_fbdev.cpp", "graphics_drm.cpp", "events.cpp",

@@ -136,6 +136,21 @@ static bool should_add_input_device(int fd, bool allow_touch_inputs) {
   return true;
 }
 
+static bool scan_input_devices(DIR* dir, const ev_callback& cb, bool allow_touch_inputs) {
+  bool failed = false;
+  rewinddir(dir);
+  dirent* de;
+  while ((de = readdir(dir)) != nullptr) {
+    if (strncmp(de->d_name, "event", 5)) continue;
+    android::base::unique_fd fd(openat(dirfd(dir), de->d_name,
+                                     O_RDONLY | O_NONBLOCK | O_CLOEXEC));
+    if (fd == -1 || !should_add_input_device(fd, allow_touch_inputs)) continue;
+    if (add_fd(std::move(fd), cb, true)) failed = true;
+    if (g_ev_dev_count == MAX_DEVICES) break;
+  }
+  return !failed;
+}
+
 static int inotify_cb(int fd, __unused uint32_t epevents) {
   if (g_saved_input_cb == nullptr) return -1;
 
@@ -161,22 +176,29 @@ static int inotify_cb(int fd, __unused uint32_t epevents) {
 
   size_t offset = 0;
   while (offset < event_len) {
-    struct inotify_event* pevent = reinterpret_cast<struct inotify_event*>(buf.data() + offset);
-    if (offset + sizeof(inotify_event) + pevent->len > event_len) {
-      // The pevent->len is too large and buffer will over flow.
-      // In general, should not happen, just make more stable.
-      return -1;
-    }
-    offset += sizeof(inotify_event) + pevent->len;
+    if (event_len - offset < sizeof(inotify_event)) return -1;
+    inotify_event event{};
+    memcpy(&event, buf.data() + offset, sizeof(event));
+    if (event.len > event_len - offset - sizeof(event)) return -1;
+    const char* name = reinterpret_cast<const char*>(buf.data() + offset + sizeof(event));
+    offset += sizeof(event) + event.len;
 
-    std::string event_name(pevent->name); // TWRP: inotify len includes NUL padding.
+    if (event.mask & IN_Q_OVERFLOW) {
+      // Lost creation notifications are recovered through the initial discovery path.
+      scan_input_devices(dir.get(), g_saved_input_cb, g_allow_touch_inputs);
+      continue;
+    }
+    if (!(event.mask & (IN_CREATE | IN_MOVED_TO | IN_ATTRIB)) || event.len == 0) continue;
+    const size_t name_length = strnlen(name, event.len);
+    if (name_length == event.len) return -1;
+    const std::string event_name(name, name_length);
     if (!android::base::StartsWith(event_name, "event")) {
       continue;
     }
 
     android::base::unique_fd dfd(openat(dirfd(dir.get()), event_name.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC));
     if (dfd == -1) {
-      break;
+      continue;
     }
 
     if (!should_add_input_device(dfd, g_allow_touch_inputs)) {
@@ -203,7 +225,7 @@ int ev_init(ev_callback input_cb, bool allow_touch_inputs) {
     return -1;
   }
 
-  if (inotify_add_watch(inotify_fd, INPUT_DEV_DIR, IN_CREATE) < 0) {
+  if (inotify_add_watch(inotify_fd, INPUT_DEV_DIR, IN_CREATE | IN_MOVED_TO | IN_ATTRIB) < 0) {
     return -1;
   }
 
@@ -213,20 +235,7 @@ int ev_init(ev_callback input_cb, bool allow_touch_inputs) {
   }
 
   g_epoll_fd = std::move(epoll_fd); // TWRP: shared registration path for discovery/hotplug.
-  bool epoll_ctl_failed = false;
-  dirent* de;
-  while ((de = readdir(dir.get())) != nullptr) {
-    if (strncmp(de->d_name, "event", 5)) continue;
-    android::base::unique_fd fd(openat(dirfd(dir.get()), de->d_name, O_RDONLY | O_NONBLOCK | O_CLOEXEC));
-    if (fd == -1) continue;
-
-    if (!should_add_input_device(fd, allow_touch_inputs)) {
-      continue;
-    }
-
-    if (add_fd(std::move(fd), input_cb, true)) epoll_ctl_failed = true;
-    if (g_ev_dev_count == MAX_DEVICES) break;
-  }
+  const bool epoll_ctl_failed = !scan_input_devices(dir.get(), input_cb, allow_touch_inputs);
 
   if (epoll_ctl_failed && !g_ev_count) {
     return -1;
