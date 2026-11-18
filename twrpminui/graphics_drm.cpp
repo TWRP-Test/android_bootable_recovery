@@ -747,10 +747,15 @@ int MinuiBackendDrm::Initdisplay(DrmConnector index) {
     if (name == "SDE_DEMURA_INIT_CFG_V1" || name == "SDE_DEMURA_INIT_CFG_V3") demura_prop_name = name;
   }
   // CLO: extract topology and select pipes in reverse population order.
+  bool has_sde_topology = false;
   for (uint32_t i = 0; i < conn_res.props->count_props; ++i) {
-    if (!strcmp(conn_res.props_info[i]->name, "mode_properties"))
+    if (!strcmp(conn_res.props_info[i]->name, "mode_properties")) {
+      has_sde_topology = true;
       number_of_lms = get_topology_lm_number(drm_fd, conn_res.props->prop_values[i]);
+    }
   }
+  // TWRP: standard DRM uses one primary plane without SDE mixer topology.
+  if (!has_sde_topology) number_of_lms = 1;
   if (number_of_lms == 0 || number_of_lms > NUM_PLANES) {
     fprintf(stderr, "TWRP DRM: invalid mixer count %u on display %d\n", number_of_lms, index);
     return -1;
@@ -771,8 +776,10 @@ int MinuiBackendDrm::Initdisplay(DrmConnector index) {
     bool primary = false;
     if (load_properties(candidate.plane->plane_id, DRM_MODE_OBJECT_PLANE, &candidate)) {
       for (uint32_t j = 0; j < candidate.props->count_props; ++j) {
-        if (!strcmp(candidate.props_info[j]->name, "capabilities"))
+        if (has_sde_topology && !strcmp(candidate.props_info[j]->name, "capabilities"))
           primary = is_primary_plane(drm_fd, candidate.props->prop_values[j]);
+        else if (!has_sde_topology && !strcmp(candidate.props_info[j]->name, "type"))
+          primary = candidate.props->prop_values[j] == DRM_PLANE_TYPE_PRIMARY;
       }
     }
     if (primary) {
